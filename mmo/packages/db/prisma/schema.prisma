@@ -1,0 +1,805 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  LOCKED
+  BANNED
+}
+
+enum ActivityStatus {
+  ACTIVE
+  COMPLETED
+  CLAIMED
+  CANCELLED
+  FAILED
+}
+
+enum Currency {
+  LINH_THACH
+  TIEN_NGOC
+}
+
+enum WalletTxType {
+  CREDIT
+  DEBIT
+  ESCROW
+  RELEASE
+  TAX
+  ADMIN
+  PAYMENT
+  REWARD
+  MARKET
+  AUCTION
+  CRAFT
+  SECT
+}
+
+enum ItemCategory {
+  MATERIAL
+  CONSUMABLE
+  EQUIPMENT
+  TECHNIQUE
+  COSMETIC
+  QUEST
+}
+
+enum Rarity {
+  PHAM
+  HA
+  TRUNG
+  THUONG
+  CUC
+  HOANG
+  HUYEN
+  DIA
+  THIEN
+  TIEN
+}
+
+enum EquipmentSlot {
+  WEAPON
+  ARMOR
+  HELMET
+  BOOTS
+  RING
+  TALISMAN
+  ARTIFACT
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+enum AuctionStatus {
+  ACTIVE
+  SETTLED
+  CANCELLED
+}
+
+enum SectRoleName {
+  LEADER
+  VICE_LEADER
+  ELDER
+  OFFICER
+  INNER
+  OUTER
+}
+
+enum RelationType {
+  ALLIANCE
+  NEUTRAL
+  ENEMY
+  WAR
+  NAP
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+}
+
+enum RouteSecurityLevel {
+  HIGH
+  MEDIUM
+  LOW
+  NONE
+}
+
+model User {
+  id            String        @id @default(cuid())
+  username      String        @unique
+  email         String        @unique
+  passwordHash  String
+  role          Role          @default(USER)
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  sessions      Session[]
+  character     Character?
+  auditLogs     AdminAuditLog[] @relation("AdminActor")
+  reportsMade   Report[] @relation("Reporter")
+  reportsGot    Report[] @relation("Reported")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Character {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  title           String   @default("Tán Tu")
+  avatar          String?
+  gender          String   @default("Ẩn")
+  age             Int      @default(16)
+  lifespan        Int      @default(100)
+  cultivation     BigInt   @default(0)
+  hp              Int      @default(120)
+  maxHp           Int      @default(120)
+  qi              Int      @default(80)
+  maxQi           Int      @default(80)
+  spirit          Int      @default(40)
+  body            Int      @default(10)
+  attack          Int      @default(15)
+  defense         Int      @default(8)
+  speed           Int      @default(10)
+  luck            Int      @default(5)
+  reputation      Int      @default(0)
+  karma           Int      @default(0)
+  energyStored    Int      @default(30)
+  energyMax       Int      @default(30)
+  energyUpdatedAt DateTime @default(now())
+  realmStageId    String
+  realmStage      RealmStage @relation(fields: [realmStageId], references: [id])
+  spiritualRootId String
+  spiritualRoot   SpiritualRoot @relation(fields: [spiritualRootId], references: [id])
+  locationId      String?
+  location        Zone? @relation(fields: [locationId], references: [id])
+  currentLocationId String?
+  currentLocation   Location? @relation(fields: [currentLocationId], references: [id])
+  sectId          String?
+  sect            Sect? @relation(fields: [sectId], references: [id])
+  linhThach       BigInt @default(1000)
+  tienNgoc        BigInt @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  talents         CharacterTalent[]
+  techniques      CharacterTechnique[]
+  items           ItemInstance[]
+  cultivationJobs CultivationActivity[]
+  explorations    ExplorationActivity[]
+  travels         Travel[]
+  craftJobs       CraftJob[]
+  listings        MarketListing[]
+  bids            AuctionBid[]
+  walletTxs       WalletTransaction[]
+  sectMember      SectMember?
+  notifications   Notification[]
+  messagesSent    PrivateMessage[] @relation("SentMessages")
+  messagesRecv    PrivateMessage[] @relation("RecvMessages")
+  chatMessages    ChatMessage[]
+  logs            GameLog[]
+  @@index([realmStageId])
+  @@index([sectId])
+  @@index([locationId])
+  @@index([currentLocationId])
+  @@index([cultivation])
+}
+
+model Realm {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  order       Int    @unique
+  description String
+  stages      RealmStage[]
+}
+
+model RealmStage {
+  id                    String @id @default(cuid())
+  realmId               String
+  realm                 Realm  @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  name                  String
+  order                 Int
+  requiredCultivation   BigInt
+  baseHp                Int
+  baseQi                Int
+  baseAttack            Int
+  baseDefense           Int
+  baseSpeed             Int
+  lifespanBonus         Int
+  breakthroughChanceBps Int
+  tribulationRequired   Boolean @default(false)
+  characters            Character[]
+  @@unique([realmId, order])
+  @@index([requiredCultivation])
+}
+
+model SpiritualRoot {
+  id          String @id @default(cuid())
+  name        String @unique
+  elements    String[]
+  quality     String
+  multiplierBps Int
+  description String
+  characters  Character[]
+}
+
+model Talent {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  polarity    String
+  description String
+  effects     Json
+  characters  CharacterTalent[]
+}
+
+model CharacterTalent {
+  characterId String
+  talentId    String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  talent      Talent    @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  @@id([characterId, talentId])
+}
+
+model Technique {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  type        String
+  rarity      Rarity
+  element     String?
+  realmOrder  Int
+  cultivationModifierBps Int @default(10000)
+  effects     Json
+  description String
+  learners    CharacterTechnique[]
+}
+
+model CharacterTechnique {
+  id          String @id @default(cuid())
+  characterId String
+  techniqueId String
+  level       Int @default(1)
+  experience  Int @default(0)
+  equipped    Boolean @default(false)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  technique   Technique @relation(fields: [techniqueId], references: [id])
+  @@unique([characterId, techniqueId])
+  @@index([characterId, equipped])
+}
+
+model ItemTemplate {
+  id            String @id @default(cuid())
+  key           String @unique
+  name          String
+  category      ItemCategory
+  rarity        Rarity
+  description   String
+  stackable     Boolean @default(false)
+  maxStack      Int @default(1)
+  tradeable     Boolean @default(true)
+  equipSlot     EquipmentSlot?
+  baseModifiers Json
+  bindRules     Json?
+  items         ItemInstance[]
+  recipesOut    Recipe[] @relation("RecipeOutput")
+}
+
+model ItemInstance {
+  id             String @id @default(cuid())
+  ownerId        String?
+  owner          Character? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  templateId     String
+  template       ItemTemplate @relation(fields: [templateId], references: [id])
+  quantity       Int @default(1)
+  quality        Int @default(1)
+  durability     Int?
+  enhancement    Int @default(0)
+  customModifiers Json?
+  bound          Boolean @default(false)
+  equippedSlot   EquipmentSlot?
+  createdAt      DateTime @default(now())
+  listings       MarketListing[]
+  @@index([ownerId])
+  @@index([templateId])
+}
+
+model World {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  description String
+  calendar    Json?
+  createdAt   DateTime @default(now())
+  regions     Region[]
+}
+
+model Region {
+  id          String @id @default(cuid())
+  key         String @unique
+  worldId     String
+  world       World  @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  order       Int
+  climate     String?
+  lawLevel    RouteSecurityLevel @default(MEDIUM)
+  zones       Zone[]
+  @@index([worldId, order])
+}
+
+model Zone {
+  id           String @id @default(cuid())
+  key          String @unique
+  regionId     String?
+  region       Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  name         String
+  description  String
+  minimumRealmOrder Int @default(0)
+  dangerLevel  Int
+  travelCost   BigInt @default(0)
+  travelMinutes Int @default(5)
+  resourceTable Json
+  monsterTable  Json
+  characters    Character[]
+  locations     Location[]
+  @@index([regionId])
+}
+
+model Location {
+  id           String @id @default(cuid())
+  key          String @unique
+  zoneId       String
+  zone         Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  name         String
+  kind         String
+  description  String
+  securityLevel RouteSecurityLevel @default(MEDIUM)
+  services     String[]
+  minimumRealmOrder Int @default(0)
+  encounterTable Json
+  active       Boolean @default(true)
+  createdAt    DateTime @default(now())
+  routesFrom   Route[] @relation("RouteOrigin")
+  routesTo     Route[] @relation("RouteDestination")
+  characters   Character[]
+  @@index([zoneId])
+  @@index([securityLevel])
+}
+
+model Route {
+  id              String @id @default(cuid())
+  key             String @unique
+  name            String
+  originId        String
+  destinationId   String
+  origin          Location @relation("RouteOrigin", fields: [originId], references: [id], onDelete: Cascade)
+  destination     Location @relation("RouteDestination", fields: [destinationId], references: [id], onDelete: Cascade)
+  description     String
+  travelMinutes   Int
+  travelCost      BigInt @default(0)
+  dangerLevel     Int
+  securityLevel   RouteSecurityLevel @default(MEDIUM)
+  ambushAllowed   Boolean @default(false)
+  caravanAllowed  Boolean @default(false)
+  minimumRealmOrder Int @default(0)
+  encounterTable  Json
+  weatherModifiers Json?
+  eventModifiers  Json?
+  active          Boolean @default(true)
+  createdAt       DateTime @default(now())
+  travels         Travel[]
+  @@index([originId, active])
+  @@index([destinationId, active])
+  @@index([securityLevel])
+}
+
+model Travel {
+  id              String @id @default(cuid())
+  characterId     String
+  character       Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  routeId         String
+  route           Route @relation(fields: [routeId], references: [id])
+  originId        String
+  destinationId   String
+  startedAt       DateTime @default(now())
+  endsAt          DateTime
+  status          ActivityStatus @default(ACTIVE)
+  travelCost      BigInt @default(0)
+  dangerSnapshot  Int
+  securitySnapshot RouteSecurityLevel
+  encounterSnapshot Json
+  encounterKey     String?
+  encounterResult  Json?
+  claimedAt       DateTime?
+  @@index([characterId, status])
+  @@index([endsAt, status])
+  @@index([routeId])
+}
+
+model CultivationActivity {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  startedAt   DateTime @default(now())
+  endsAt      DateTime
+  status      ActivityStatus @default(ACTIVE)
+  baseReward  BigInt
+  multiplierBps Int
+  claimedAt   DateTime?
+  metadata    Json?
+  @@index([characterId, status])
+  @@index([endsAt, status])
+}
+
+model ExplorationActivity {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  zoneId      String
+  startedAt   DateTime @default(now())
+  endsAt      DateTime
+  status      ActivityStatus @default(ACTIVE)
+  eventKey    String?
+  reward      Json?
+  claimedAt   DateTime?
+  @@index([characterId, status])
+  @@index([endsAt, status])
+}
+
+model Profession {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  description String
+  characters  CharacterProfession[]
+  recipes     Recipe[]
+}
+
+model CharacterProfession {
+  id           String @id @default(cuid())
+  characterId  String
+  professionId String
+  level        Int @default(1)
+  experience   Int @default(0)
+  specialization String?
+  profession   Profession @relation(fields: [professionId], references: [id])
+  @@unique([characterId, professionId])
+}
+
+model Recipe {
+  id           String @id @default(cuid())
+  key          String @unique
+  name         String
+  professionId String
+  profession   Profession @relation(fields: [professionId], references: [id])
+  outputTemplateId String
+  outputTemplate ItemTemplate @relation("RecipeOutput", fields: [outputTemplateId], references: [id])
+  ingredients  Json
+  craftMinutes Int
+  fee          BigInt @default(0)
+  requiredLevel Int @default(1)
+  jobs         CraftJob[]
+}
+
+model CraftJob {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  recipeId    String
+  recipe      Recipe @relation(fields: [recipeId], references: [id])
+  startedAt   DateTime @default(now())
+  endsAt      DateTime
+  status      ActivityStatus @default(ACTIVE)
+  claimedAt   DateTime?
+  @@index([characterId, status])
+}
+
+model Monster {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  realmOrder  Int
+  hp          Int
+  attack      Int
+  defense     Int
+  speed       Int
+  lootTable   Json
+  locationKey String
+}
+
+model Combat {
+  id          String @id @default(cuid())
+  characterId String
+  monsterKey  String
+  winner      String
+  log         Json
+  reward      Json
+  createdAt   DateTime @default(now())
+  @@index([characterId, createdAt])
+}
+
+model MarketListing {
+  id          String @id @default(cuid())
+  sellerId    String
+  seller      Character @relation(fields: [sellerId], references: [id])
+  itemId      String
+  item        ItemInstance @relation(fields: [itemId], references: [id])
+  quantity    Int
+  price       BigInt
+  status      ListingStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  @@index([sellerId, status])
+  @@index([status, expiresAt])
+}
+
+model MarketTransaction {
+  id        String @id @default(cuid())
+  listingId String
+  buyerId   String
+  sellerId  String
+  itemTemplateId String
+  quantity  Int
+  price     BigInt
+  tax       BigInt
+  createdAt DateTime @default(now())
+}
+
+model Auction {
+  id          String @id @default(cuid())
+  sellerId    String
+  itemId      String
+  startingPrice BigInt
+  currentBid  BigInt @default(0)
+  highestBidderId String?
+  status      AuctionStatus @default(ACTIVE)
+  startsAt    DateTime @default(now())
+  endsAt      DateTime
+  bids        AuctionBid[]
+  @@index([status, endsAt])
+}
+
+model AuctionBid {
+  id          String @id @default(cuid())
+  auctionId   String
+  auction     Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  bidderId    String
+  bidder      Character @relation(fields: [bidderId], references: [id])
+  amount      BigInt
+  createdAt   DateTime @default(now())
+  @@index([auctionId, amount])
+}
+
+model WalletTransaction {
+  id              String @id @default(cuid())
+  characterId     String
+  character       Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  currency        Currency
+  type            WalletTxType
+  amount          BigInt
+  balanceBefore   BigInt
+  balanceAfter    BigInt
+  referenceType   String?
+  referenceId     String?
+  metadata        Json?
+  idempotencyKey  String?
+  createdAt       DateTime @default(now())
+  @@unique([characterId, currency, idempotencyKey])
+  @@index([characterId, createdAt])
+}
+
+model Sect {
+  id          String @id @default(cuid())
+  name        String @unique
+  tag         String @unique
+  description String
+  level       Int @default(1)
+  experience  Int @default(0)
+  treasury    BigInt @default(0)
+  reputation  Int @default(0)
+  memberLimit Int @default(30)
+  leaderId    String
+  createdAt   DateTime @default(now())
+  members     SectMember[]
+  characters  Character[]
+  buildings   SectBuilding[]
+  relationsA  SectRelation[] @relation("SectA")
+  relationsB  SectRelation[] @relation("SectB")
+}
+
+model SectMember {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  characterId String @unique
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  role        SectRoleName @default(OUTER)
+  joinedAt    DateTime @default(now())
+  @@index([sectId, role])
+}
+
+model SectBuilding {
+  id        String @id @default(cuid())
+  sectId    String
+  sect      Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  key       String
+  name      String
+  level     Int @default(1)
+  bonus     Json
+  @@unique([sectId, key])
+}
+
+model SectRelation {
+  id        String @id @default(cuid())
+  sectAId   String
+  sectBId   String
+  sectA     Sect @relation("SectA", fields: [sectAId], references: [id], onDelete: Cascade)
+  sectB     Sect @relation("SectB", fields: [sectBId], references: [id], onDelete: Cascade)
+  type      RelationType
+  createdAt DateTime @default(now())
+  @@unique([sectAId, sectBId])
+}
+
+model WorldEvent {
+  id        String @id @default(cuid())
+  key       String
+  title     String
+  kind      String
+  startsAt  DateTime
+  endsAt    DateTime
+  modifiers Json
+  createdAt DateTime @default(now())
+  @@index([startsAt, endsAt])
+}
+
+model WorldNews {
+  id        String @id @default(cuid())
+  title     String
+  body      String
+  category  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  permanent Boolean @default(false)
+  @@index([createdAt])
+}
+
+model Notification {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model PrivateMessage {
+  id        String @id @default(cuid())
+  senderId  String
+  receiverId String
+  sender    Character @relation("SentMessages", fields: [senderId], references: [id])
+  receiver  Character @relation("RecvMessages", fields: [receiverId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  channel     String
+  body        String
+  createdAt   DateTime @default(now())
+  @@index([channel, createdAt])
+}
+
+model TopupPackage {
+  id        String @id @default(cuid())
+  key       String @unique
+  name      String
+  amountVnd Int
+  tienNgoc  Int
+  active    Boolean @default(true)
+}
+
+model TopupOrder {
+  id          String @id @default(cuid())
+  orderCode   String @unique
+  characterId String
+  packageId   String
+  provider    String
+  amountVnd   Int
+  rewardTienNgoc Int
+  status      PaymentStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  paidAt      DateTime?
+  transactions PaymentTransaction[]
+}
+
+model PaymentTransaction {
+  id                    String @id @default(cuid())
+  orderId               String
+  order                 TopupOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider              String
+  providerTransactionId String @unique
+  amountVnd             Int
+  raw                   Json
+  createdAt             DateTime @default(now())
+}
+
+model Report {
+  id             String @id @default(cuid())
+  reporterId     String
+  reportedUserId String
+  reporter       User @relation("Reporter", fields: [reporterId], references: [id])
+  reportedUser   User @relation("Reported", fields: [reportedUserId], references: [id])
+  reason         String
+  description    String
+  status         ReportStatus @default(OPEN)
+  resolution     String?
+  createdAt      DateTime @default(now())
+}
+
+model AdminAuditLog {
+  id        String @id @default(cuid())
+  actorId   String
+  actor     User @relation("AdminActor", fields: [actorId], references: [id])
+  action    String
+  target    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model GameConfig {
+  key       String @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model GameLog {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  type        String
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  @@index([characterId, createdAt])
+}

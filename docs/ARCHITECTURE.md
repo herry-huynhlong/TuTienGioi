@@ -52,6 +52,12 @@ The authenticated game UI uses `apps/web/components/Shell.tsx` as the shared gam
 
 The shell may read already-derived character/account state for display, but it should not become a gameplay service. New player actions should still flow through server actions/API boundaries into `packages/game`.
 
+# Onboarding And Feature Unlocks
+
+The current onboarding foundation uses `OnboardingProgress` as the persisted source of truth. UI components do not mark quests complete directly. Server actions, game services, and server-rendered page visits record verified events through `recordOnboardingEvent()`.
+
+Feature lock state is returned by `getFeatureUnlockState()` in `packages/game/src/onboarding.ts`. Navigation should display those backend-provided lock reasons instead of developer placeholders. Future full quest work should extend this service or replace it with a richer quest engine, but should not introduce a second source of truth for the same onboarding progress.
+
 # Wallet Architecture
 
 Current balances live on `Character.linhThach` and `Character.tienNgoc`. Every important currency mutation should go through:
@@ -77,6 +83,8 @@ Future inventory work should add explicit ownership/location state for market es
 Current combat is a deterministic-capable turn simulation in `simulateCombat()`, called by `fightMonster()`. Combat records are written to `Combat` with JSON log/reward.
 
 Future combat work should extend the existing engine instead of adding a separate one. Add participants, skills, status effects, loot tables, and battle-log persistence around the existing service boundary.
+
+Monster access should flow through travel, exploration, events, bí cảnh, or quest hooks. The Yêu Thú Đồ Giám route is a discovery/read model based on actual combat history, not a direct monster spawn menu.
 
 # World Architecture
 

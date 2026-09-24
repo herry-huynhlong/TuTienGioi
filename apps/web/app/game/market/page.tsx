@@ -1,6 +1,11 @@
 import { prisma } from "@ttg/db";
+import { getUser } from "@/lib/auth";
+import { recordOnboardingEvent } from "@ttg/game";
 
 export default async function MarketPage() {
+  const user = await getUser();
+  const character = await prisma.character.findUnique({ where: { userId: user!.id }, select: { id: true } });
+  if (character) await recordOnboardingEvent(prisma, character.id, "VIEW_MARKET");
   const listings = await prisma.marketListing.findMany({ where: { status: "ACTIVE" }, take: 30, include: { item: { include: { template: true } }, seller: true }, orderBy: { createdAt: "desc" } });
   return (
     <div className="p-5 lg:p-8">

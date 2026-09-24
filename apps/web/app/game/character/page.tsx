@@ -1,5 +1,6 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { recordOnboardingEvent } from "@ttg/game";
 
 export default async function CharacterPage() {
   const user = await getUser();
@@ -7,6 +8,7 @@ export default async function CharacterPage() {
     where: { userId: user!.id },
     include: { realmStage: { include: { realm: true } }, spiritualRoot: true, talents: { include: { talent: true } }, techniques: { include: { technique: true } }, items: { include: { template: true } } }
   });
+  await recordOnboardingEvent(prisma, c.id, "VIEW_CHARACTER");
   return (
     <div className="p-5 lg:p-8">
       <h1 className="text-3xl font-black">Nhân Vật</h1>

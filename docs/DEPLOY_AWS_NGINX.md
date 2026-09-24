@@ -4,8 +4,8 @@ This project can run on an existing AWS EC2 host behind Nginx. The recommended s
 
 - Nginx on the host terminates HTTP/HTTPS.
 - Docker Compose runs `web`, `worker`, `postgres`, and `redis`.
-- `web` only binds to `127.0.0.1:3000`, so it is not public except through Nginx.
-- Nginx reverse-proxies the game domain to `127.0.0.1:3000`.
+- `web` only binds to `127.0.0.1:3020`, so it is not public except through Nginx and does not collide with other local web services.
+- Nginx reverse-proxies the game domain to `127.0.0.1:3020`.
 
 For heavier production, replace local Postgres/Redis with AWS RDS and ElastiCache, then update `DATABASE_URL` and `REDIS_URL`.
 
@@ -83,8 +83,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production logs -f web
 Local health check on the server:
 
 ```bash
-curl -I http://127.0.0.1:3000
-curl http://127.0.0.1:3000/api/health
+curl -I http://127.0.0.1:3020
+curl http://127.0.0.1:3020/api/health
 ```
 
 ## 6. Wire Existing Nginx

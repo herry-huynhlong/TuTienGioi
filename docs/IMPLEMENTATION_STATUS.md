@@ -36,6 +36,9 @@ PostgreSQL is the durable source of truth. Redis is currently used by the worker
 - Travel encounter resolution on claim using route encounter snapshots.
 - Travel claim persists `encounterKey` and `encounterResult`, applies lightweight outcomes, and writes travel game logs.
 - Dense game shell UI with Torn-inspired clarity: left status sidebar, grouped navigation, resource bars, wallet/location summary, notification count, mobile bottom navigation, and disabled placeholders for unfinished modules.
+- Onboarding foundation with `OnboardingProgress`, server-side objective progress, dashboard tracker, and feature lock reasons.
+- Yêu Thú entry point changed to `Yêu Thú Đồ Giám`; direct monster spawning from world menu was removed from the UI.
+- Production compose and Nginx samples bind the web app to `127.0.0.1:3020` to avoid colliding with other host services.
 
 # Partially Completed Systems
 
@@ -44,6 +47,7 @@ PostgreSQL is the durable source of truth. Redis is currently used by the worker
 - Marketplace: purchase service exists, but UI buy/list/cancel flows are incomplete and item escrow/locking is not modeled.
 - Auction: schema and worker expiration marker exist, but bid/escrow/settlement services are incomplete.
 - Crafting: profession, recipe, and craft job schema exist, but start/claim crafting services and UI are incomplete.
+- Onboarding/quest loop: core dẫn đạo tracker exists, but full quest reward flow, starter equipment, NPC talk, sell/craft objectives, and robust encounter choice UI are still incomplete.
 - World: graph foundation exists, but route modifiers are still shallow and only basic encounter keys are resolved.
 - Travel: route-based travel and basic encounters exist, but ambush, caravan incidents, weather modifiers, and interrupted travel states are not implemented yet.
 - Combat: basic PvE service exists, but combat participant/log tables, skills, status effects, loot tables, and battle-log UI are still shallow.
@@ -55,9 +59,18 @@ PostgreSQL is the durable source of truth. Redis is currently used by the worker
 
 # Current Work Unit
 
-No active work unit after the claim race safety pass.
+No active work unit after the game loop/onboarding foundation pass.
 
 Last completed work units:
+
+- Added `OnboardingProgress` and migration `20260924193000_onboarding_progress`.
+- Added server-side onboarding objective progression and feature unlock state in `packages/game/src/onboarding.ts`.
+- Connected real domain events from cultivation, travel, exploration, combat, and server-rendered page visits.
+- Added compact Dẫn Đạo tracker and "Việc nên làm tiếp" on the dashboard.
+- Reworked sidebar navigation groups, feature locks, and icon usage; removed developer-style "Sau" placeholders.
+- Added `/game/bestiary` as the Yêu Thú Đồ Giám view based on actual combat history.
+- Changed world page Yêu Thú panel into contextual guidance instead of direct monster spawning.
+- Updated production port docs/config to `127.0.0.1:3020`.
 
 - Added conditional claim updates to cultivation and exploration rewards.
 - Prevented cultivation reward/item creation side effects when a concurrent claim already settled the activity.
@@ -99,7 +112,7 @@ Current Prisma models include:
 - Professions/crafting: `Profession`, `CharacterProfession`, `Recipe`
 - World/combat: `World`, `Region`, `Zone`, `Location`, `Route`, `Monster`, `Combat`
 - Sect/social: `Sect`, `SectMember`, `SectBuilding`, `SectRelation`, `PrivateMessage`, `ChatMessage`, `Notification`
-- World state/history: `WorldEvent`, `WorldNews`, `GameLog`, `GameConfig`
+- World state/history: `WorldEvent`, `WorldNews`, `GameLog`, `GameConfig`, `OnboardingProgress`
 - Payment: `TopupPackage`, `TopupOrder`, `PaymentTransaction`
 - Moderation/admin: `Report`, `AdminAuditLog`
 
@@ -126,6 +139,11 @@ Important schema gap: route-based `Travel` now exists and resolves basic encount
   - `purchaseMarketListing()`
 - `packages/game/src/payment.ts`
   - `handlePaymentWebhook()`
+- `packages/game/src/onboarding.ts`
+  - `ensureOnboardingProgress()`
+  - `recordOnboardingEvent()`
+  - `getOnboardingState()`
+  - `getFeatureUnlockState()`
 - `apps/web/lib/auth.ts`
   - `createSession()`
   - `destroySession()`
@@ -156,8 +174,8 @@ See `docs/TECH_DEBT.md` for the active list. Highest-priority items are missing 
 
 Recommended order:
 
-1. Implement inventory/equipment services: equip, unequip, use consumable, destroy item, and server-side derived stat recalculation.
-2. Complete marketplace item escrow/list/cancel/buy UI and tests.
-3. Add route weather/event modifiers and richer encounter outcomes.
-4. Complete crafting start/claim using recipes, inventory consumption, ledger fee, output item, and double-claim protection.
-5. Complete auction bid escrow and settlement.
+1. Implement inventory/equipment services and starter gear rewards so onboarding can cover equip/use objectives.
+2. Add pending encounter choice UI so exploration can offer fight/observe/retreat before combat.
+3. Complete marketplace item escrow/list/cancel/buy UI and tests.
+4. Add route weather/event modifiers and richer encounter outcomes.
+5. Complete crafting start/claim using recipes, inventory consumption, ledger fee, output item, and double-claim protection.

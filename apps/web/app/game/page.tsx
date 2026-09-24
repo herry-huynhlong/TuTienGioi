@@ -1,8 +1,9 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { breakthroughAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
-import { currentEnergy } from "@ttg/game";
+import { currentEnergy, getOnboardingState } from "@ttg/game";
 import Link from "next/link";
+import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 
 export default async function Dashboard() {
   const user = await getUser();
@@ -20,13 +21,14 @@ export default async function Dashboard() {
       items: { take: 5, include: { template: true }, orderBy: { createdAt: "desc" } }
     }
   });
-  const [news, logs, next] = await Promise.all([
+  const [news, logs, next, onboarding] = await Promise.all([
     prisma.worldNews.findMany({ take: 7, orderBy: { createdAt: "desc" } }),
     prisma.gameLog.findMany({ where: { characterId: c.id }, take: 6, orderBy: { createdAt: "desc" } }),
     prisma.realmStage.findFirst({
       where: { requiredCultivation: { gt: c.realmStage.requiredCultivation } },
       orderBy: { requiredCultivation: "asc" }
-    })
+    }),
+    getOnboardingState(prisma, c.id)
   ]);
   const energy = currentEnergy(c);
   const nextRequirement = next?.requiredCultivation ?? c.realmStage.requiredCultivation;
@@ -49,6 +51,42 @@ export default async function Dashboard() {
       </header>
 
       <section className="dashboard-grid">
+        <Panel title="Dẫn Đạo" className="lg:col-span-2">
+          <div className="quest-tracker">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-gold">{onboarding.currentChapter.title}</p>
+                <p className="muted mt-1 text-sm">{onboarding.currentChapter.summary}</p>
+              </div>
+              <span className="status-pill">{onboarding.completedCount}/{onboarding.totalCount}</span>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {onboarding.currentChapter.objectives.map((objective) => (
+                <div key={objective.key} className="objective-row">
+                  {objective.completed ? <Check size={16} aria-hidden /> : <Circle size={16} aria-hidden />}
+                  <span>{objective.label}</span>
+                </div>
+              ))}
+            </div>
+            <Link href={onboarding.nextObjective.href} className="btn mt-4 w-full sm:w-auto">
+              <Compass size={16} aria-hidden /> {onboarding.nextObjective.cta}
+            </Link>
+          </div>
+        </Panel>
+
+        <Panel title="Việc nên làm tiếp" className="lg:col-span-2">
+          <div className="activity-list">
+            <Link href={onboarding.nextObjective.href} className="activity-row">
+              <span><b>{onboarding.nextObjective.cta}</b><small>{onboarding.nextObjective.label}</small></span>
+              <ScrollText size={17} aria-hidden />
+            </Link>
+            <Link href="/game/world" className="activity-row">
+              <span><b>Kiểm tra vị trí</b><small>{locationName} · {regionName}</small></span>
+              <MapPin size={17} aria-hidden />
+            </Link>
+          </div>
+        </Panel>
+
         <Panel title="Tổng quan" className="lg:col-span-2">
           <div className="info-table">
             <Info label="Tên" value={c.name} />

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Currency, prisma, WalletTxType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { attemptBreakthrough, claimCultivation, claimExploration, claimTravel, debitWallet, fightMonster, startCultivation, startExploration, startTravel } from "@ttg/game";
+import { attemptBreakthrough, claimCultivation, claimExploration, claimTravel, debitWallet, ensureOnboardingProgress, fightMonster, startCultivation, startExploration, startTravel } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -21,7 +21,7 @@ export async function registerAction(formData: FormData) {
   const zone = await prisma.zone.findUniqueOrThrow({ where: { key: "thanh-van-thanh" } });
   const location = await prisma.location.findUnique({ where: { key: "thanh-van-dong-thanh" } });
   try {
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         username: parsed.data.username,
         email: parsed.data.email,
@@ -38,8 +38,10 @@ export async function registerAction(formData: FormData) {
             }
           }
         }
-      }
+      },
+      include: { character: true }
     });
+    if (user.character) await ensureOnboardingProgress(prisma, user.character.id);
   } catch {
     redirect("/?error=exists");
   }

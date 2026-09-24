@@ -6,6 +6,8 @@ import {
   BookOpen,
   BriefcaseBusiness,
   ChevronRight,
+  Compass,
+  Gavel,
   Hammer,
   Home,
   Landmark,
@@ -21,6 +23,7 @@ import {
   Trophy,
   User,
   Users,
+  Lock,
   type LucideIcon
 } from "lucide-react";
 
@@ -28,7 +31,7 @@ type NavLink = {
   href: string;
   label: string;
   icon: LucideIcon;
-  enabled: boolean;
+  featureKey?: keyof FeatureUnlocks;
 };
 
 type NavGroup = {
@@ -36,48 +39,57 @@ type NavGroup = {
   links: NavLink[];
 };
 
+type FeatureUnlocks = Record<string, { unlocked: boolean; reason: string }>;
+
 const navGroups: NavGroup[] = [
   {
     title: "Tổng quan",
     links: [
-      { href: "/game", label: "Tổng Quan", icon: Home, enabled: true },
-      { href: "/game/character", label: "Nhân Vật", icon: User, enabled: true },
-      { href: "/game/world", label: "Thế Giới", icon: Mountain, enabled: true },
-      { href: "/game/leaderboard", label: "Xếp Hạng", icon: Trophy, enabled: true }
+      { href: "/game", label: "Tổng Quan", icon: Home }
     ]
   },
   {
-    title: "Tu luyện",
+    title: "Nhân vật",
     links: [
-      { href: "/game/character", label: "Túi Đồ", icon: Backpack, enabled: true },
-      { href: "/game/character", label: "Công Pháp", icon: BookOpen, enabled: true },
-      { href: "/game/world", label: "Yêu Thú", icon: Swords, enabled: true },
-      { href: "/game/world", label: "Bí Cảnh", icon: Map, enabled: false }
+      { href: "/game/character", label: "Nhân Vật", icon: User, featureKey: "character" },
+      { href: "/game", label: "Tu Luyện", icon: Compass, featureKey: "cultivation" },
+      { href: "/game/character", label: "Công Pháp", icon: BookOpen, featureKey: "character" },
+      { href: "/game/character", label: "Túi Đồ", icon: Backpack, featureKey: "character" }
+    ]
+  },
+  {
+    title: "Thế giới",
+    links: [
+      { href: "/game/world", label: "Thế Giới", icon: Mountain, featureKey: "world" },
+      { href: "/game/world", label: "Lịch Luyện", icon: Compass, featureKey: "exploration" },
+      { href: "/game/bestiary", label: "Yêu Thú Đồ Giám", icon: Swords, featureKey: "bestiary" },
+      { href: "/game/world", label: "Bí Cảnh", icon: Map, featureKey: "secretRealm" }
     ]
   },
   {
     title: "Kinh tế",
     links: [
-      { href: "/game/market", label: "Chợ", icon: ShoppingBag, enabled: true },
-      { href: "/game/market", label: "Đấu Giá", icon: Hammer, enabled: false },
-      { href: "/game/market", label: "Nghề Nghiệp", icon: BriefcaseBusiness, enabled: false }
+      { href: "/game/market", label: "Chợ", icon: ShoppingBag, featureKey: "market" },
+      { href: "/game/market", label: "Đấu Giá", icon: Gavel, featureKey: "auction" },
+      { href: "/game/market", label: "Nghề Nghiệp", icon: BriefcaseBusiness, featureKey: "profession" }
     ]
   },
   {
     title: "Cộng đồng",
     links: [
-      { href: "/game/sect", label: "Tông Môn", icon: Shield, enabled: true },
-      { href: "/game/sect", label: "Bạn Bè", icon: Users, enabled: false },
-      { href: "/game/sect", label: "Tin Nhắn", icon: Mail, enabled: false },
-      { href: "/game/sect", label: "Chat", icon: MessageSquare, enabled: false }
+      { href: "/game/sect", label: "Tông Môn", icon: Shield, featureKey: "sect" },
+      { href: "/game/sect", label: "Bạn Bè", icon: Users },
+      { href: "/game/sect", label: "Tin Nhắn", icon: Mail },
+      { href: "/game/sect", label: "Chat", icon: MessageSquare }
     ]
   },
   {
-    title: "Hệ thống",
+    title: "Thành tựu",
     links: [
-      { href: "/admin", label: "Admin", icon: Landmark, enabled: true },
-      { href: "/game", label: "Nhật Ký", icon: ScrollText, enabled: false },
-      { href: "/game", label: "Cài Đặt", icon: Settings, enabled: false }
+      { href: "/game/leaderboard", label: "Xếp Hạng", icon: Trophy },
+      { href: "/game", label: "Thiên Cơ Các", icon: ScrollText },
+      { href: "/admin", label: "Admin", icon: Landmark },
+      { href: "/game", label: "Cài Đặt", icon: Settings }
     ]
   }
 ] satisfies NavGroup[];
@@ -103,10 +115,11 @@ type ShellCharacter = {
   notifications: unknown[];
 } | null;
 
-export function Shell({ children, user, character }: { children: React.ReactNode; user: { username: string; role: string }; character: ShellCharacter }) {
+export function Shell({ children, user, character, featureUnlocks }: { children: React.ReactNode; user: { username: string; role: string }; character: ShellCharacter; featureUnlocks: FeatureUnlocks | null }) {
   const energy = character ? currentEnergy(character) : 0;
   const cultivationProgress = character ? Number(character.cultivation % 1000n) / 10 : 0;
-  const mobileNav = navGroups.flatMap((group) => group.links).filter((link) => link.enabled).slice(0, 5);
+  const isUnlocked = (link: NavLink) => !link.featureKey || featureUnlocks?.[link.featureKey]?.unlocked !== false;
+  const mobileNav = navGroups.flatMap((group) => group.links).filter(isUnlocked).slice(0, 5);
   return (
     <div className="game-frame min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
       <aside className="game-sidebar hidden lg:block">
@@ -155,21 +168,24 @@ export function Shell({ children, user, character }: { children: React.ReactNode
             <section key={group.title} className="nav-group">
               <h2>{group.title}</h2>
               <div className="space-y-1">
-                {group.links.map(({ href, label, icon: Icon, enabled }) => (
-                  enabled ? (
+                {group.links.map((link) => {
+                  const { href, label, icon: Icon } = link;
+                  const unlocked = isUnlocked(link);
+                  const reason = link.featureKey ? featureUnlocks?.[link.featureKey]?.reason : "";
+                  return unlocked ? (
                     <Link key={label} href={href} className="nav-row">
                       <Icon size={15} />
                       <span>{label}</span>
                       <ChevronRight size={13} className="ml-auto text-paper/35" />
                     </Link>
                   ) : (
-                    <div key={label} className="nav-row nav-row-disabled">
-                      <Icon size={15} />
+                    <div key={label} className="nav-row nav-row-disabled" title={reason}>
+                      <Lock size={14} />
                       <span>{label}</span>
-                      <small>Sau</small>
+                      <small>{reason}</small>
                     </div>
-                  )
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))}

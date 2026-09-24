@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus } from "@ttg/db";
 import { calculateCultivationReward, currentEnergy, parseEncounterTable, simulateCombat } from "./rules.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
+import { recordOnboardingEvent } from "./onboarding.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -50,9 +51,11 @@ export async function startCultivation(db: Db, characterId: string, minutes: num
   const baseReward = BigInt(minutes * 10);
   return db.$transaction(async (tx) => {
     await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
-    return tx.cultivationActivity.create({
+    const activity = await tx.cultivationActivity.create({
       data: { characterId, startedAt: now, endsAt: new Date(now.getTime() + minutes * 60_000), baseReward, multiplierBps: character.spiritualRoot.multiplierBps }
     });
+    await recordOnboardingEvent(tx, characterId, "CULTIVATION_STARTED");
+    return activity;
   });
 }
 
@@ -71,6 +74,7 @@ export async function claimCultivation(db: Db, characterId: string, activityId: 
     const character = await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: reward } }, include: { realmStage: { include: { realm: true } } } });
     await tx.gameLog.create({ data: { characterId, type: "cultivation", message: `Nhận ${reward.toString()} tu vi từ bế quan.` } });
     await tx.worldNews.create({ data: { title: `${character.name} hoàn thành tu luyện`, body: `${character.name} tích lũy thêm ${reward.toString()} tu vi.`, category: "cultivation" } });
+    await recordOnboardingEvent(tx, characterId, "CULTIVATION_CLAIMED");
     return { reward, cultivation: character.cultivation };
   });
 }
@@ -106,9 +110,14 @@ export async function startExploration(db: Db, characterId: string, minutes: num
   if (![10, 30, 60].includes(minutes)) throw new GameError("BAD_DURATION", "Thời gian thám hiểm không hợp lệ.");
   const character = await db.character.findUniqueOrThrow({ where: { id: characterId } });
   if (!character.locationId) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm.");
+  const zoneId = character.locationId;
   const active = await db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
   if (active) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang thám hiểm.");
-  return db.explorationActivity.create({ data: { characterId, zoneId: character.locationId, endsAt: new Date(now.getTime() + minutes * 60_000) } });
+  return db.$transaction(async (tx) => {
+    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + minutes * 60_000) } });
+    await recordOnboardingEvent(tx, characterId, "EXPLORATION_STARTED");
+    return activity;
+  });
 }
 
 export async function claimExploration(db: Db, characterId: string, activityId: string, now = new Date()) {
@@ -117,17 +126,25 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy chuyến thám hiểm.");
     if (job.status === ActivityStatus.CLAIMED) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
     if (job.endsAt > now) throw new GameError("NOT_READY", "Chuyến thám hiểm chưa hoàn thành.");
-    const resources = [{ key: "linh-thao", weight: 55 }, { key: "hac-thiet-quang", weight: 30 }, { key: "yeu-dan", weight: 15 }];
+    const resources = [{ key: "linh-thao", weight: 55 }, { key: "hac-thiet-quang", weight: 30 }, { key: "yeu-dan", weight: 15 }, { key: "monster-sign", weight: 20 }];
     const roll = pickWeighted(resources, seededRng(seedFromString(job.id)));
-    const template = await tx.itemTemplate.findUniqueOrThrow({ where: { key: roll.key } });
+    const isMonsterEncounter = roll.key === "monster-sign";
+    const template = isMonsterEncounter ? null : await tx.itemTemplate.findUniqueOrThrow({ where: { key: roll.key } });
     const updated = await tx.explorationActivity.updateMany({
       where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
-      data: { status: ActivityStatus.CLAIMED, claimedAt: now, eventKey: "found-resource", reward: { item: roll.key, quantity: 1 } }
+      data: { status: ActivityStatus.CLAIMED, claimedAt: now, eventKey: isMonsterEncounter ? "monster-sign" : "found-resource", reward: isMonsterEncounter ? { encounter: "monster-sign" } : { item: roll.key, quantity: 1 } }
     });
     if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
-    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
-    await tx.gameLog.create({ data: { characterId, type: "exploration", message: `Thám hiểm nhận được ${template.name}.` } });
-    return { itemName: template.name };
+    if (isMonsterEncounter) {
+      await tx.gameLog.create({ data: { characterId, type: "encounter", message: "Bạn phát hiện dấu vết yêu thú trong lúc lịch luyện.", metadata: { encounter: "monster-sign" } } });
+      await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
+      await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
+      return { itemName: "Dấu vết yêu thú" };
+    }
+    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template!.id, quantity: 1 } });
+    await tx.gameLog.create({ data: { characterId, type: "exploration", message: `Thám hiểm nhận được ${template!.name}.` } });
+    await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
+    return { itemName: template!.name };
   });
 }
 
@@ -168,6 +185,7 @@ export async function startTravel(db: Db, characterId: string, routeId: string, 
       }
     });
     await tx.gameLog.create({ data: { characterId, type: "travel", message: `Bắt đầu di chuyển: ${route.name}.` } });
+    await recordOnboardingEvent(tx, characterId, "TRAVEL_STARTED");
     return travel;
   });
 }
@@ -191,6 +209,7 @@ export async function claimTravel(db: Db, characterId: string, travelId: string,
       data: { currentLocationId: travel.destinationId, locationId: travel.route.destination.zoneId }
     });
     await tx.gameLog.create({ data: { characterId, type: "travel", message: `Đã tới ${travel.route.destination.name}. ${encounterResult.message}`, metadata: { encounter: encounter.key, result: encounterResult } } });
+    await recordOnboardingEvent(tx, characterId, "TRAVEL_COMPLETED");
     return { destinationName: travel.route.destination.name, encounter: encounter.key, result: encounterResult };
   });
 }
@@ -249,6 +268,8 @@ export async function fightMonster(db: Db, characterId: string, monsterKey: stri
     if (reward.cultivation) await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: BigInt(reward.cultivation) } } });
     if (reward.linhThach) await creditWallet(tx, characterId, Currency.LINH_THACH, BigInt(reward.linhThach), WalletTxType.REWARD, "Monster", monsterKey);
     await tx.combat.create({ data: { characterId, monsterKey, winner: result.winner, log: result.log, reward } });
+    await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
+    if (result.winner === "player") await recordOnboardingEvent(tx, characterId, "MONSTER_DEFEATED");
     return { ...result, reward, monsterName: monster.name };
   });
 }

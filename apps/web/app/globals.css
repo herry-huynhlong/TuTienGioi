@@ -217,6 +217,11 @@ button, input, select, textarea {
   margin-left: auto;
   color: rgba(244, 239, 227, 0.42);
   font-size: 0.65rem;
+  max-width: 7rem;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .top-strip {
@@ -368,4 +373,24 @@ button, input, select, textarea {
 .quick-links a:hover {
   border-color: rgba(214, 178, 94, 0.32);
   color: #d6b25e;
+}
+
+.quest-tracker {
+  display: grid;
+}
+
+.objective-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.14);
+  color: rgba(244, 239, 227, 0.78);
+  font-size: 0.84rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.objective-row svg {
+  color: #d6b25e;
+  flex: none;
 }

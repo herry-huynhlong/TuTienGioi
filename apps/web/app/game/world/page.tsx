@@ -1,6 +1,8 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
-import { claimExploreAction, claimTravelAction, exploreAction, fightAction, startTravelAction } from "@/lib/forms";
+import { claimExploreAction, claimTravelAction, exploreAction, startTravelAction } from "@/lib/forms";
+import { recordOnboardingEvent } from "@ttg/game";
+import Link from "next/link";
 
 export default async function WorldPage() {
   const user = await getUser();
@@ -13,7 +15,7 @@ export default async function WorldPage() {
       currentLocation: { include: { zone: { include: { region: true } } } }
     }
   });
-  const [worlds, monsters, travelLogs] = await Promise.all([
+  const [worlds, travelLogs] = await Promise.all([
     prisma.world.findMany({
       orderBy: { createdAt: "asc" },
       include: {
@@ -34,9 +36,9 @@ export default async function WorldPage() {
         }
       }
     }),
-    prisma.monster.findMany({ take: 8 }),
     prisma.gameLog.findMany({ where: { characterId: c.id, type: "travel" }, take: 5, orderBy: { createdAt: "desc" } })
   ]);
+  await recordOnboardingEvent(prisma, c.id, "VIEW_WORLD");
   return (
     <div className="p-5 lg:p-8">
       <h1 className="text-3xl font-black">Thế Giới</h1>
@@ -52,8 +54,11 @@ export default async function WorldPage() {
           </div>
         </div>
         <div className="panel rounded-lg p-6">
-          <h2 className="text-xl font-bold text-gold">Yêu thú</h2>
-          <div className="mt-4 grid gap-3">{monsters.map((m) => <form key={m.id} action={fightAction} className="flex items-center justify-between rounded-md bg-white/5 p-3"><input type="hidden" name="monster" value={m.key} /><span>{m.name}</span><button className="btn btn-secondary">Khiêu chiến</button></form>)}</div>
+          <h2 className="text-xl font-bold text-gold">Yêu Thú Đồ Giám</h2>
+          <p className="muted mt-3">
+            Yêu thú không xuất hiện tùy ý trong thành. Hãy đi lịch luyện, săn yêu hoặc gặp biến cố ngoài địa vực để mở ghi chép.
+          </p>
+          <Link href="/game/bestiary" className="btn btn-secondary mt-4">Mở Đồ Giám</Link>
         </div>
       </section>
       <section className="panel mt-6 rounded-lg p-6">

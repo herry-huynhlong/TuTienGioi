@@ -213,6 +213,7 @@ model Character {
   messagesRecv    PrivateMessage[] @relation("RecvMessages")
   chatMessages    ChatMessage[]
   logs            GameLog[]
+  onboarding      OnboardingProgress[]
   @@index([realmStageId])
   @@index([sectId])
   @@index([locationId])
@@ -708,6 +709,21 @@ model Notification {
   body        String
   readAt      DateTime?
   createdAt   DateTime @default(now())
+}
+
+model OnboardingProgress {
+  id                  String @id @default(cuid())
+  characterId         String
+  character           Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  key                 String
+  status              String @default("ACTIVE")
+  completedObjectives Json   @default("[]")
+  rewardClaimed       Boolean @default(false)
+  completedAt         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@unique([characterId, key])
+  @@index([characterId, status])
 }
 
 model PrivateMessage {

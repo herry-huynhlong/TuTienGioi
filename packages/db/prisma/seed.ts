@@ -107,10 +107,22 @@ const defaultRouteEncounterTable = [
 ];
 
 const materials = [
-  "Linh Thảo", "Hỏa Linh Thảo", "Băng Tâm Hoa", "Hắc Thiết Quặng", "Thanh Mộc", "Yêu Đan",
-  "Lôi Tinh", "Ngọc Tủy", "Huyền Thiết", "Tinh Kim", "Linh Sa", "Chu Sa", "Da Yêu Lang",
+  "Thanh Linh Thảo", "Ngưng Lộ Thảo", "Hỏa Linh Chi", "Băng Tâm Hoa", "Hắc Thiết Quặng", "Thanh Mộc", "Yêu Đan Cấp Thấp",
+  "Lang Nha", "Yêu Lang Bì", "Lôi Tinh", "Ngọc Tủy", "Huyền Thiết", "Tinh Kim", "Linh Sa", "Chu Sa",
   "Xương Linh Thú", "Hải Châu", "Huyết Tinh", "Tàn Quyển", "Trận Kỳ", "Linh Mễ", "Dược Lộ"
 ];
+
+function zoneResourceTable(zoneKey: string) {
+  if (zoneKey === "hac-son") return [{ key: "thanh-linh-thao", weight: 55 }, { key: "lang-nha", weight: 18 }, { key: "yeu-dan-cap-thap", weight: 10 }];
+  if (zoneKey === "thanh-linh-son-mach") return [{ key: "ngung-lo-thao", weight: 35 }, { key: "hac-thiet-quang", weight: 45 }, { key: "hoa-linh-chi", weight: 15 }];
+  return [{ key: "thanh-linh-thao", weight: 45 }, { key: "ngung-lo-thao", weight: 30 }, { key: "hac-thiet-quang", weight: 20 }];
+}
+
+function monsterLootTable(monsterKey: string) {
+  if (monsterKey === "yeu-lang") return [{ key: "lang-nha", weight: 65, minQuantity: 1, maxQuantity: 2 }, { key: "yeu-lang-bi", weight: 45, minQuantity: 1, maxQuantity: 1 }, { key: "yeu-dan-cap-thap", weight: 25, minQuantity: 1, maxQuantity: 1 }];
+  if (monsterKey === "xich-hoa-xa") return [{ key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }, { key: "hoa-linh-chi", weight: 30, minQuantity: 1, maxQuantity: 1 }];
+  return [{ key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }, { key: "hac-thiet-quang", weight: 20, minQuantity: 1, maxQuantity: 1 }];
+}
 
 async function main() {
   const world = await prisma.world.upsert({
@@ -188,7 +200,7 @@ async function main() {
   for (const [key, name, minRealm, danger, regionKey] of zones) {
     await prisma.zone.upsert({
       where: { key },
-      update: { regionId: regionByKey.get(regionKey) },
+      update: { regionId: regionByKey.get(regionKey), resourceTable: zoneResourceTable(key) },
       create: {
         key,
         regionId: regionByKey.get(regionKey),
@@ -198,7 +210,7 @@ async function main() {
         dangerLevel: danger,
         travelCost: BigInt(50 * (danger + 1)),
         travelMinutes: 3 + danger,
-        resourceTable: [{ key: "linh-thao", weight: 50 }, { key: "hac-thiet-quang", weight: 30 }, { key: "yeu-dan", weight: 10 }],
+        resourceTable: zoneResourceTable(key),
         monsterTable: [{ key: "yeu-lang", weight: 60 }, { key: "xich-hoa-xa", weight: 30 }]
       }
     });
@@ -265,9 +277,13 @@ async function main() {
   });
 
   const materialMeta: Record<string, { subType: string; icon: string; systemBasePrice: number; npcBuyPrice: number; usage: string }> = {
-    "linh-thao": { subType: "Linh dược", icon: "leaf", systemBasePrice: 20, npcBuyPrice: 14, usage: "Nguyên liệu luyện đan cơ bản." },
+    "thanh-linh-thao": { subType: "Linh dược", icon: "leaf", systemBasePrice: 20, npcBuyPrice: 14, usage: "Nguyên liệu luyện đan thường gặp ở nơi có linh khí mỏng." },
+    "ngung-lo-thao": { subType: "Linh dược", icon: "leaf", systemBasePrice: 24, npcBuyPrice: 17, usage: "Thảo dược hấp thu sương sớm, thường mọc gần suối." },
+    "hoa-linh-chi": { subType: "Linh dược", icon: "leaf", systemBasePrice: 48, npcBuyPrice: 34, usage: "Linh chi mang hỏa khí nhẹ, dùng cho đan dược sơ cấp." },
     "hac-thiet-quang": { subType: "Khoáng vật", icon: "ore", systemBasePrice: 35, npcBuyPrice: 25, usage: "Nguyên liệu luyện khí và rèn trang bị." },
-    "yeu-dan": { subType: "Yêu thú", icon: "core", systemBasePrice: 60, npcBuyPrice: 42, usage: "Tinh hoa yêu thú, dùng trong luyện đan và giao dịch." },
+    "yeu-dan-cap-thap": { subType: "Yêu thú", icon: "core", systemBasePrice: 60, npcBuyPrice: 42, usage: "Tinh hoa yêu thú cấp thấp, dùng trong luyện đan và giao dịch." },
+    "lang-nha": { subType: "Yêu thú", icon: "core", systemBasePrice: 32, npcBuyPrice: 22, usage: "Nanh Yêu Lang, vật liệu luyện khí sơ cấp." },
+    "yeu-lang-bi": { subType: "Yêu thú", icon: "core", systemBasePrice: 40, npcBuyPrice: 28, usage: "Da Yêu Lang có thể dùng làm giáp nhẹ hoặc phù liệu." },
     "linh-moc": { subType: "Linh mộc", icon: "wood", systemBasePrice: 28, npcBuyPrice: 19, usage: "Vật liệu chế phù, trận pháp và luyện khí nhẹ." },
     "thien-tinh-sa": { subType: "Tinh sa", icon: "ore", systemBasePrice: 45, npcBuyPrice: 32, usage: "Khoáng sa có linh tính, dùng để gia cố pháp khí." }
   };
@@ -282,9 +298,9 @@ async function main() {
   }
 
   const equipment = [
-    ["thanh-van-kiem", "Thanh Vân Kiếm", "WEAPON", { attack: 18 }],
-    ["hac-thiet-giap", "Hắc Thiết Giáp", "ARMOR", { defense: 15 }],
-    ["ngoc-boi-an-than", "Ngọc Bội An Thần", "TALISMAN", { spirit: 8 }],
+    ["huyen-thiet-kiem", "Huyền Thiết Kiếm", "WEAPON", { attack: 5 }],
+    ["thanh-van-dao-bao", "Thanh Vân Đạo Bào", "ARMOR", { defense: 3 }],
+    ["thiet-moc-ho-phu", "Thiết Mộc Hộ Phù", "TALISMAN", { spirit: 3 }],
     ["nhan-tu-linh", "Nhẫn Tụ Linh", "RING", { cultivationBps: 300 }],
     ["giay-than-hanh", "Giày Thần Hành", "BOOTS", { speed: 8 }]
   ] as const;
@@ -328,7 +344,7 @@ async function main() {
   await prisma.recipe.upsert({
     where: { key: "recipe-tu-linh-dan" },
     update: {},
-    create: { key: "recipe-tu-linh-dan", name: "Luyện Tụ Linh Đan", professionId: alchemy.id, outputTemplateId: tuLinhDan.id, ingredients: [{ key: "linh-thao", qty: 2 }], craftMinutes: 10, fee: 80n, requiredLevel: 1 }
+    create: { key: "recipe-tu-linh-dan", name: "Luyện Tụ Linh Đan", professionId: alchemy.id, outputTemplateId: tuLinhDan.id, ingredients: [{ key: "thanh-linh-thao", qty: 2 }], craftMinutes: 10, fee: 80n, requiredLevel: 1 }
   });
 
   for (const [key, name, hp, atk, def, spd] of [
@@ -343,7 +359,7 @@ async function main() {
     ["co-long-tan-hon", "Cổ Long Tàn Hồn", 500, 48, 28, 16],
     ["linh-thu-nho", "Linh Thú Nhỏ", 60, 8, 4, 8]
   ] as const) {
-    await prisma.monster.upsert({ where: { key }, update: { lootTable: [{ key: "yeu-dan", weight: 30, minQuantity: 1, maxQuantity: 1 }, { key: "linh-thao", weight: 50, minQuantity: 1, maxQuantity: 2 }, { key: "hac-thiet-quang", weight: 20, minQuantity: 1, maxQuantity: 1 }] }, create: { key, name, realmOrder: 0, hp, attack: atk, defense: def, speed: spd, lootTable: [{ key: "yeu-dan", weight: 30, minQuantity: 1, maxQuantity: 1 }, { key: "linh-thao", weight: 50, minQuantity: 1, maxQuantity: 2 }, { key: "hac-thiet-quang", weight: 20, minQuantity: 1, maxQuantity: 1 }], locationKey: "hac-son" } });
+    await prisma.monster.upsert({ where: { key }, update: { lootTable: monsterLootTable(key) }, create: { key, name, realmOrder: 0, hp, attack: atk, defense: def, speed: spd, lootTable: monsterLootTable(key), locationKey: "hac-son" } });
   }
 
   for (const [key, value] of [

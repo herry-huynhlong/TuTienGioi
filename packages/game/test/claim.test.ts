@@ -61,7 +61,7 @@ describe("claim services", () => {
         updateMany: async () => ({ count: 0 })
       },
       itemTemplate: {
-        findUniqueOrThrow: async () => ({ id: "item_1", key: "linh-thao", name: "Linh Thảo" })
+        findUniqueOrThrow: async () => ({ id: "item_1", key: "thanh-linh-thao", name: "Thanh Linh Thảo" })
       },
       itemInstance: {
         create: async () => {

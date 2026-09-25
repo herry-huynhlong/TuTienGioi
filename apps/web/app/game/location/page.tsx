@@ -1,9 +1,10 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
-import { attackEncounterAction, cancelExploreAction, claimExploreAction, exploreAction, leaveEncounterAction, startTravelAction } from "@/lib/forms";
+import { attackEncounterAction, cancelExploreAction, exploreAction, leaveEncounterAction, startTravelAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { currentEnergy, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
+import { advanceExplorationActivity, currentEnergy, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
 import { Compass, Home, Landmark, Mail, Route, ScrollText, Shield, ShoppingBag, Swords, Trees } from "lucide-react";
@@ -28,9 +29,9 @@ const activityLabels: Record<string, string> = {
 type LocationActivityMode = "explore" | "hunt" | "gather";
 
 const activityCopy: Record<LocationActivityMode, { title: string; cta: string; description: string; icon: React.ReactNode }> = {
-  explore: { title: "Khám phá", cta: "Khám phá", description: "Tìm lối mòn, dấu vết, khu vực ẩn hoặc cơ duyên phù hợp địa hình.", icon: <Compass size={18} aria-hidden /> },
-  hunt: { title: "Săn bắn", cta: "Đi săn", description: "Theo dấu sinh vật trong khu vực. Kết quả chỉ phát hiện mục tiêu, không tự động chiến đấu.", icon: <Swords size={18} aria-hidden /> },
-  gather: { title: "Thu thập", cta: "Thu thập", description: "Tìm dược liệu, linh mộc, khoáng thạch hoặc tài nguyên tự nhiên của khu vực.", icon: <Trees size={18} aria-hidden /> }
+  explore: { title: "Khám phá", cta: "Khám phá", description: "Tìm kiếm lối đi, dấu vết và những nơi chưa được biết đến.", icon: <Compass size={18} aria-hidden /> },
+  hunt: { title: "Săn bắn", cta: "Đi săn", description: "Theo dấu dã thú và yêu thú trong khu vực.", icon: <Swords size={18} aria-hidden /> },
+  gather: { title: "Thu thập", cta: "Thu thập", description: "Tìm kiếm dược liệu và tài nguyên tự nhiên.", icon: <Trees size={18} aria-hidden /> }
 };
 
 export default async function LocationPage({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
@@ -47,6 +48,11 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
     }
   });
   await recordOnboardingEvent(prisma, c.id, "VIEW_WORLD");
+  const dueActivity = c.explorations.find((activity) => activity.status === "ACTIVE" && activity.endsAt.getTime() <= Date.now());
+  if (dueActivity) {
+    await advanceExplorationActivity(prisma, c.id, dueActivity.id);
+    redirect("/game/location");
+  }
   const location = c.currentLocation;
   const services = location?.services ?? [];
   const activeExploration = c.explorations.find((activity) => activity.status === "ACTIVE");
@@ -91,7 +97,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
         <div className="location-meta">
           <span><b>Loại</b>{location ? formatLocationKind(location.kind) : "Không rõ"}</span>
           <span><b>An ninh</b>{location ? formatSecurity(location.securityLevel) : "Không rõ"}</span>
-          <span><b>Hoạt động</b>{activities.length ? activities.map((activity) => activityCopy[activity].title).join(", ") : "Không có wilderness loop"}</span>
+          <span><b>Hoạt động</b>{activities.length ? activities.map((activity) => activityCopy[activity].title).join(", ") : "Không có hoạt động"}</span>
           <span><b>Cơ sở</b>{facilities.length ? facilities.map((facility) => facility.label).join(", ") : "Chưa mở"}</span>
         </div>
       </section>
@@ -111,12 +117,18 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
               <div className="route-grid">
                 {routes.map((route) => (
                   <form key={route.id} action={startTravelAction} className="route-card">
-                      <input type="hidden" name="routeId" value={route.id} />
-                    <div>
-                      <b>{route.destination.name}</b>
-                      <small>{formatTravelDuration(route.travelMinutes)} · {route.travelCost.toString()} linh thạch · nguy hiểm {route.dangerLevel}</small>
+                    <input type="hidden" name="routeId" value={route.id} />
+                    <div className="route-card-main">
+                      <b><Route size={16} aria-hidden />{route.destination.name}</b>
+                      <small>{formatLocationKind(route.destination.kind)}</small>
                     </div>
-                  <button className="btn btn-secondary" disabled={hasBlockingActivity}>{hasBlockingActivity ? blockLabel : "Đi tới"}</button>
+                    <div className="route-card-meta">
+                      <span><b>Thời gian</b>{formatTravelDuration(route.travelMinutes)}</span>
+                      <span><b>Chi phí</b>{route.travelCost > 0n ? `${route.travelCost.toString()} Linh thạch` : "Miễn phí"}</span>
+                      <span><b>Nguy hiểm</b>{formatDanger(route.dangerLevel)}</span>
+                    </div>
+                    {hasBlockingActivity ? <p className="route-disabled-note">Hoàn thành hoặc dừng hoạt động hiện tại để di chuyển.</p> : null}
+                    <button className="btn btn-secondary" disabled={hasBlockingActivity}>{hasBlockingActivity ? "Không thể di chuyển" : "Đi tới"}</button>
                   </form>
                 ))}
               </div>
@@ -217,24 +229,19 @@ function SituationPanel({
 }) {
   if (active) {
     const mode = activityModeFromReward(active.reward);
-    const done = active.endsAt.getTime() <= Date.now();
+    const reward = parseReward(active.reward);
+    const session = parseReward(reward.session);
     return (
       <div className="situation-card">
-        <p className="text-xs font-bold uppercase text-jade">{done ? "Hoạt động hoàn thành" : "Hoạt động đang diễn ra"}</p>
+        <p className="text-xs font-bold uppercase text-jade">{mode === "hunt" ? "Đang săn bắn" : `Đang ${activityCopy[mode].title.toLowerCase()}`}</p>
         <h3>{activityCopy[mode].title}</h3>
-        <p className="muted">{done ? "Hoạt động đã kết thúc. Xem kết quả để lưu tình huống hiện tại." : activityCopy[mode].description}</p>
+        <p className="muted">{activityNarrative(mode, session)}</p>
         <ActivityCountdown startedAt={active.startedAt.toISOString()} endsAt={active.endsAt.toISOString()} />
         <div className="mt-4 flex flex-wrap gap-3">
-          <form action={claimExploreAction}>
+          <form action={cancelExploreAction}>
             <input type="hidden" name="id" value={active.id} />
-            <button className="btn" disabled={!done}>{done ? "Xem kết quả" : "Đang xử lý"}</button>
+            <button className="btn btn-secondary">{mode === "hunt" ? "Hủy chuyến săn" : "Hủy hoạt động"}</button>
           </form>
-          {!done ? (
-            <form action={cancelExploreAction}>
-              <input type="hidden" name="id" value={active.id} />
-              <button className="btn btn-secondary">Hủy hoạt động</button>
-            </form>
-          ) : null}
         </div>
       </div>
     );
@@ -245,14 +252,15 @@ function SituationPanel({
     const monster = typeof reward.monster === "string" ? monsterByKey.get(reward.monster) : null;
     return (
       <div className="situation-card">
-        <p className="text-xs font-bold uppercase text-jade">Phát hiện con mồi</p>
+        <p className="text-xs font-bold uppercase text-jade">Phát hiện</p>
         <h3>{monster?.name ?? "Dấu vết yêu thú"}</h3>
+        <p className="muted mt-2">Bạn nghe tiếng lá khô chuyển động gần đó. Một sinh vật đang quan sát bạn từ phía xa.</p>
         <div className="info-table mt-4">
           <div><span>Cảnh giới</span><b>Bậc {monster?.realmOrder ?? "?"}</b></div>
           <div><span>HP</span><b>{monster ? `${monster.hp}/${monster.hp}` : "Chưa rõ"}</b></div>
           <div><span>Nguy hiểm</span><b>Thấp</b></div>
         </div>
-        <p className="muted mt-3">Bạn muốn chủ động giao chiến hay rút lui khỏi dấu vết này?</p>
+        <p className="muted mt-3">Bạn muốn làm gì?</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <form action={attackEncounterAction}>
             <input type="hidden" name="id" value={pending.id} />
@@ -260,7 +268,7 @@ function SituationPanel({
           </form>
           <form action={leaveEncounterAction}>
             <input type="hidden" name="id" value={pending.id} />
-            <button className="btn btn-secondary">Rút lui</button>
+            <button className="btn btn-secondary">Bỏ qua</button>
           </form>
         </div>
       </div>
@@ -324,6 +332,22 @@ function getBlockLabel(activeExploration: { reward: unknown } | undefined, pendi
   if (cultivating) return "Đang bế quan";
   if (traveling) return "Đang di chuyển";
   return "Đang bận";
+}
+
+function activityNarrative(mode: LocationActivityMode, session: Record<string, unknown>) {
+  if (mode === "hunt") {
+    const log = Array.isArray(session.log) ? session.log.filter((entry) => typeof entry === "string") : [];
+    return log.at(-1) ?? "Bạn đang lần theo dấu vết trong khu vực.";
+  }
+  if (mode === "explore") return "Bạn đang men theo những lối mòn sâu hơn trong khu vực.";
+  return "Bạn đang tìm kiếm dược liệu và tài nguyên tự nhiên.";
+}
+
+function formatDanger(value: number) {
+  if (value <= 1) return "An toàn";
+  if (value <= 3) return "Thấp";
+  if (value <= 6) return "Trung bình";
+  return "Cao";
 }
 
 function formatTravelDuration(travelMinutes: number) {

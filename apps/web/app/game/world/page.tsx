@@ -272,7 +272,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
           </aside>
         </section>
       ) : (
-        <div className="panel mt-5 rounded-lg p-6 muted">Chưa có dữ liệu bản đồ. Hãy chạy seed.</div>
+        <div className="panel mt-5 rounded-lg p-6 muted">Thiên đồ hiện chưa ghi nhận địa vực nào.</div>
       )}
     </div>
   );

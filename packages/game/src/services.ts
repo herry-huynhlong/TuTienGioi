@@ -22,6 +22,76 @@ function activityModeFromReward(value: unknown): LocationActivityMode {
   return mode === "hunt" || mode === "gather" || mode === "explore" ? mode : "explore";
 }
 
+function numberFromRecord(value: Record<string, unknown>, key: string, fallback = 0) {
+  const raw = value[key];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : fallback;
+}
+
+async function nextCultivationCap(tx: Tx, character: { realmStage: { requiredCultivation: bigint; realm: { order: number }; order: number } }) {
+  const next = await tx.realmStage.findFirst({
+    where: {
+      OR: [
+        { realm: { order: character.realmStage.realm.order }, order: character.realmStage.order + 1 },
+        { realm: { order: character.realmStage.realm.order + 1 }, order: 0 }
+      ]
+    },
+    orderBy: [{ realm: { order: "asc" } }, { order: "asc" }]
+  });
+  return next?.requiredCultivation ?? character.realmStage.requiredCultivation;
+}
+
+async function addCultivationClamped(tx: Tx, characterId: string, reward: bigint) {
+  const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { realmStage: { include: { realm: true } } } });
+  const cap = await nextCultivationCap(tx, character);
+  const room = cap > character.cultivation ? cap - character.cultivation : 0n;
+  const applied = reward > room ? room : reward;
+  if (applied > 0n) await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: applied } } });
+  return { applied, cap, reachedCap: character.cultivation + applied >= cap };
+}
+
+function partialCultivationReward(job: { startedAt: Date; endsAt: Date; baseReward: bigint; multiplierBps: number }, now: Date) {
+  const totalMs = Math.max(1, job.endsAt.getTime() - job.startedAt.getTime());
+  const elapsedMs = Math.max(0, Math.min(now.getTime() - job.startedAt.getTime(), totalMs));
+  const planned = calculateCultivationReward(job.baseReward, job.multiplierBps);
+  return { reward: (planned * BigInt(elapsedMs)) / BigInt(totalMs), elapsedSeconds: Math.floor(elapsedMs / 1000), planned };
+}
+
+async function createHuntSession(tx: Tx, zoneId: string, activityId: string, durationSeconds: number) {
+  const zone = await tx.zone.findUniqueOrThrow({ where: { id: zoneId } });
+  const monsterTable = parseEncounterTable(zone.monsterTable);
+  const checkpoints = [0.2, 0.55, 0.8].map((ratio, index) => {
+    const rng = seededRng(seedFromString(`${activityId}:hunt:${index}`));
+    const hasCreature = rng() < (index === 0 ? 0.9 : 0.65);
+    const monster = hasCreature ? pickWeighted(monsterTable, rng).key : null;
+    return { id: `cp-${index + 1}`, atMs: Math.floor(durationSeconds * 1000 * ratio), type: monster ? "creature" : "trace", monster, resolved: false };
+  });
+  return { durationSeconds, activeElapsedMs: 0, checkpoints, stats: { detected: 0, defeated: 0, skipped: 0 }, log: ["Bạn bắt đầu men theo dấu vết trong khu vực."] };
+}
+
+function huntSessionFromReward(value: unknown) {
+  const reward = parseJsonRecord(value);
+  const session = parseJsonRecord(reward.session);
+  return { reward, session };
+}
+
+function nextHuntCheckpoint(session: Record<string, unknown>) {
+  const elapsed = numberFromRecord(session, "activeElapsedMs");
+  const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
+  return checkpoints.find((checkpoint) => checkpoint.resolved !== true && numberFromRecord(checkpoint, "atMs") > elapsed);
+}
+
+function huntEndsAt(now: Date, session: Record<string, unknown>) {
+  const elapsed = numberFromRecord(session, "activeElapsedMs");
+  const durationMs = numberFromRecord(session, "durationSeconds", 60) * 1000;
+  const next = nextHuntCheckpoint(session);
+  const targetMs = next ? numberFromRecord(next, "atMs") : durationMs;
+  return new Date(now.getTime() + Math.max(0, targetMs - elapsed));
+}
+
+function inputJson(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
+}
+
 function dropQuantity(row: Record<string, unknown>, rng: () => number) {
   const minQuantity = typeof row.minQuantity === "number" ? Math.max(1, Math.floor(row.minQuantity)) : 1;
   const maxQuantity = typeof row.maxQuantity === "number" ? Math.max(minQuantity, Math.floor(row.maxQuantity)) : minQuantity;
@@ -119,7 +189,7 @@ export async function debitWallet(db: Db | Tx, characterId: string, currency: Cu
 
 export async function startCultivation(db: Db, characterId: string, minutes: number, now = new Date()) {
   if (!cultivationActivityOptions.some((option) => option === minutes)) throw new GameError("BAD_DURATION", "Thời gian tu luyện không hợp lệ.");
-  const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true } });
+  const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true, realmStage: { include: { realm: true } } } });
   const [activeCultivation, activeExploration, activeTravel] = await Promise.all([
     db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
     db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
@@ -133,9 +203,14 @@ export async function startCultivation(db: Db, characterId: string, minutes: num
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
   const baseReward = cultivationBaseReward(minutes);
   return db.$transaction(async (tx) => {
+    const cap = await nextCultivationCap(tx, character);
+    if (character.cultivation >= cap) throw new GameError("CULTIVATION_CAP", "Bạn đã chạm bình cảnh. Hãy đột phá để tiếp tục tu luyện.");
+    const plannedReward = calculateCultivationReward(baseReward, character.spiritualRoot.multiplierBps);
+    const room = cap - character.cultivation;
+    const effectiveMs = plannedReward > 0n && plannedReward > room ? Math.max(1000, Number((BigInt(minutes * 60_000) * room) / plannedReward)) : minutes * 60_000;
     await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
     const activity = await tx.cultivationActivity.create({
-      data: { characterId, startedAt: now, endsAt: new Date(now.getTime() + minutes * 60_000), baseReward, multiplierBps: character.spiritualRoot.multiplierBps }
+      data: { characterId, startedAt: now, endsAt: new Date(now.getTime() + effectiveMs), baseReward, multiplierBps: character.spiritualRoot.multiplierBps }
     });
     await recordOnboardingEvent(tx, characterId, "CULTIVATION_STARTED");
     return activity;
@@ -154,23 +229,28 @@ export async function claimCultivation(db: Db, characterId: string, activityId: 
       data: { status: ActivityStatus.CLAIMED, claimedAt: now }
     });
     if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
-    const character = await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: reward } }, include: { realmStage: { include: { realm: true } } } });
-    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: `Nhận ${reward.toString()} tu vi từ bế quan.` } });
-    await tx.worldNews.create({ data: { title: `${character.name} hoàn thành tu luyện`, body: `${character.name} tích lũy thêm ${reward.toString()} tu vi.`, category: "cultivation" } });
+    const result = await addCultivationClamped(tx, characterId, reward);
+    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId } });
+    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: result.reachedCap ? `Nhận ${result.applied.toString()} Tu vi. Tu vi đã đạt ${result.cap.toString()}/${result.cap.toString()}, bạn đã chạm bình cảnh.` : `Nhận ${result.applied.toString()} Tu vi từ bế quan.` } });
+    await tx.worldNews.create({ data: { title: `${character.name} hoàn thành tu luyện`, body: `${character.name} tích lũy thêm ${result.applied.toString()} Tu vi.`, category: "cultivation" } });
     await recordOnboardingEvent(tx, characterId, "CULTIVATION_CLAIMED");
-    return { reward, cultivation: character.cultivation };
+    return { reward: result.applied, cultivation: character.cultivation };
   });
 }
 
 export async function cancelCultivation(db: Db, characterId: string, activityId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
+    const job = await tx.cultivationActivity.findUnique({ where: { id: activityId } });
+    if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy hoạt động.");
+    const partial = partialCultivationReward(job, now);
     const updated = await tx.cultivationActivity.updateMany({
       where: { id: activityId, characterId, status: ActivityStatus.ACTIVE },
       data: { status: ActivityStatus.CANCELLED, claimedAt: now }
     });
     if (updated.count !== 1) throw new GameError("CANNOT_CANCEL", "Không thể hủy hoạt động này.");
-    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: "Bạn đã kết thúc bế quan sớm, không nhận tu vi." } });
-    return { cancelled: true };
+    const result = await addCultivationClamped(tx, characterId, partial.reward);
+    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: result.reachedCap ? `Bạn kết thúc bế quan sau ${partial.elapsedSeconds} giây và nhận ${result.applied.toString()} Tu vi. Tu vi đã đạt ${result.cap.toString()}/${result.cap.toString()}, bạn đã chạm bình cảnh.` : `Bạn kết thúc bế quan sau ${partial.elapsedSeconds} giây và nhận ${result.applied.toString()} Tu vi.` } });
+    return { cancelled: true, reward: result.applied };
   });
 }
 
@@ -190,7 +270,7 @@ export async function attemptBreakthrough(db: Db, characterId: string, rng = Mat
     if (character.cultivation < next.requiredCultivation) throw new GameError("NOT_ENOUGH_CULTIVATION", "Bạn chưa đủ tu vi.");
     const chance = Math.min(9500, character.realmStage.breakthroughChanceBps + character.luck * 30);
     if (Math.floor(rng() * 10000) < chance) {
-      await tx.character.update({ where: { id: characterId }, data: { realmStageId: next.id, maxHp: next.baseHp, maxQi: next.baseQi, hp: next.baseHp, qi: next.baseQi, lifespan: { increment: next.lifespanBonus } } });
+      await tx.character.update({ where: { id: characterId }, data: { realmStageId: next.id, cultivation: 0n, maxHp: next.baseHp, maxQi: next.baseQi, hp: next.baseHp, qi: next.baseQi, lifespan: { increment: next.lifespanBonus } } });
       await tx.worldNews.create({ data: { title: `${character.name} đột phá ${next.name}`, body: `${character.name} bước sang ${next.name}, đạo tâm vang vọng.`, category: "realm", permanent: true } });
       return { success: true, stage: next.name };
     }
@@ -224,10 +304,48 @@ export async function startExploration(db: Db, characterId: string, durationSeco
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
   return db.$transaction(async (tx) => {
     await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
-    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + durationSeconds * 1000), reward: { mode, locationId: character.currentLocation?.id ?? null } } });
+    const provisionalEndsAt = new Date(now.getTime() + durationSeconds * 1000);
+    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, startedAt: now, endsAt: provisionalEndsAt, reward: { mode, locationId: character.currentLocation?.id ?? null } } });
+    if (mode === "hunt") {
+      const session = await createHuntSession(tx, zoneId, activity.id, durationSeconds);
+      await tx.explorationActivity.update({ where: { id: activity.id }, data: { endsAt: huntEndsAt(now, session), reward: { mode, locationId: character.currentLocation?.id ?? null, session } } });
+    }
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_STARTED");
     return activity;
   });
+}
+
+export async function advanceExplorationActivity(db: Db, characterId: string, activityId: string, now = new Date()) {
+  return db.$transaction(async (tx) => advanceExplorationActivityTx(tx, characterId, activityId, now));
+}
+
+async function advanceExplorationActivityTx(tx: Tx, characterId: string, activityId: string, now = new Date()) {
+  const job = await tx.explorationActivity.findUnique({ where: { id: activityId } });
+  if (!job || job.characterId !== characterId || job.status !== ActivityStatus.ACTIVE || job.endsAt > now) return job;
+  const mode = activityModeFromReward(job.reward);
+  if (mode !== "hunt") return job;
+  const { reward, session } = huntSessionFromReward(job.reward);
+  const durationMs = numberFromRecord(session, "durationSeconds", 60) * 1000;
+  const previousElapsed = numberFromRecord(session, "activeElapsedMs");
+  const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
+  const due = checkpoints.find((checkpoint) => checkpoint.resolved !== true && numberFromRecord(checkpoint, "atMs") > previousElapsed && numberFromRecord(checkpoint, "atMs") <= durationMs);
+  if (due && typeof due.monster === "string") {
+    const nextSession = { ...session, activeElapsedMs: numberFromRecord(due, "atMs"), pausedAt: now.toISOString(), pendingCheckpointId: due.id, log: [...(Array.isArray(session.log) ? session.log : []), "Bạn nghe tiếng động vang lên từ bụi cây phía trước."] };
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.COMPLETED, eventKey: "hunt-encounter", reward: inputJson({ ...reward, session: nextSession, monster: due.monster, pending: true }) } });
+    await tx.gameLog.create({ data: { characterId, type: "encounter", message: "Bạn phát hiện một sinh vật trong lúc săn.", metadata: { monster: due.monster } } });
+    await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
+    return job;
+  }
+  const nextElapsed = due ? numberFromRecord(due, "atMs") : durationMs;
+  const nextCheckpoints = checkpoints.map((checkpoint) => checkpoint.id === due?.id ? { ...checkpoint, resolved: true, outcome: "trace" } : checkpoint);
+  const nextSession = { ...session, activeElapsedMs: nextElapsed, checkpoints: nextCheckpoints, log: [...(Array.isArray(session.log) ? session.log : []), "Dấu vết mờ dần trong lớp lá mục."] };
+  if (nextElapsed >= durationMs) {
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, eventKey: "hunt-complete", reward: inputJson({ ...reward, session: nextSession, summary: true }) } });
+    await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
+    return job;
+  }
+  await tx.explorationActivity.update({ where: { id: activityId }, data: { startedAt: now, endsAt: huntEndsAt(now, nextSession), reward: inputJson({ ...reward, session: nextSession }) } });
+  return job;
 }
 
 export async function claimExploration(db: Db, characterId: string, activityId: string, now = new Date()) {
@@ -237,31 +355,27 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     if (job.status === ActivityStatus.CLAIMED) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
     if (job.endsAt > now) throw new GameError("NOT_READY", "Chuyến thám hiểm chưa hoàn thành.");
     const mode = activityModeFromReward(job.reward);
+    if (mode === "hunt") {
+      await advanceExplorationActivityTx(tx, characterId, activityId, now);
+      return { itemName: "Phiên săn" };
+    }
     const updated = await tx.explorationActivity.updateMany({
       where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
       data: {
-        status: mode === "hunt" ? ActivityStatus.COMPLETED : ActivityStatus.CLAIMED,
-        claimedAt: mode === "hunt" ? null : now,
-        eventKey: mode === "hunt" ? "hunt-found" : mode === "gather" ? "gather-resource" : "explore-result",
-        reward: { mode, resolving: true }
+        status: ActivityStatus.CLAIMED,
+        claimedAt: now,
+        eventKey: mode === "gather" ? "gather-resource" : "explore-result",
+        reward: inputJson({ mode, resolving: true })
       }
     });
     if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
     const zone = await tx.zone.findUniqueOrThrow({ where: { id: job.zoneId } });
     const rng = seededRng(seedFromString(`${job.id}:${mode}`));
     const resourceTable = parseEncounterTable(zone.resourceTable);
-    const monsterTable = parseEncounterTable(zone.monsterTable);
-    const roll = mode === "hunt" ? pickWeighted(monsterTable, rng) : pickWeighted(resourceTable, rng);
-    const template = mode === "hunt" ? null : await tx.itemTemplate.findUnique({ where: { key: roll.key } });
-    const nextReward = mode === "hunt" ? { mode, monster: roll.key, pending: true } : { mode, item: roll.key, quantity: template ? 1 : 0 };
-    await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: nextReward } });
-    if (mode === "hunt") {
-      const monster = await tx.monster.findUnique({ where: { key: roll.key } });
-      await tx.gameLog.create({ data: { characterId, type: "encounter", message: monster ? `Bạn phát hiện ${monster.name}. Hãy chuẩn bị trước khi giao chiến.` : "Bạn phát hiện dấu vết yêu thú nhưng nó đã lẩn mất.", metadata: { mode, monster: roll.key } } });
-      await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
-      await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
-      return { itemName: monster?.name ?? "Dấu vết yêu thú" };
-    }
+    const roll = pickWeighted(resourceTable, rng);
+    const template = await tx.itemTemplate.findUnique({ where: { key: roll.key } });
+    const nextReward = { mode, item: roll.key, quantity: template ? 1 : 0 };
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: inputJson(nextReward) } });
     if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
     const verb = mode === "gather" ? "Thu thập" : "Khám phá";
@@ -289,7 +403,17 @@ export async function leaveExplorationEncounter(db: Db, characterId: string, act
     if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy tình huống.");
     const reward = parseJsonRecord(activity.reward);
     if (reward.mode !== "hunt" || typeof reward.monster !== "string") throw new GameError("BAD_ENCOUNTER", "Tình huống không hợp lệ.");
-    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: { ...reward, pending: false, decision: "leave" } } });
+    const session = parseJsonRecord(reward.session);
+    if (Object.keys(session).length > 0) {
+      const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
+      const nextCheckpoints = checkpoints.map((checkpoint) => checkpoint.id === session.pendingCheckpointId ? { ...checkpoint, resolved: true, outcome: "skipped" } : checkpoint);
+      const stats = parseJsonRecord(session.stats);
+      const nextSession = { ...session, pausedAt: null, pendingCheckpointId: null, checkpoints: nextCheckpoints, stats: { ...stats, detected: numberFromRecord(stats, "detected") + 1, skipped: numberFromRecord(stats, "skipped") + 1 }, log: [...(Array.isArray(session.log) ? session.log : []), "Bạn tránh khỏi dấu vết yêu thú và tiếp tục đi săn."] };
+      await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.ACTIVE, startedAt: now, endsAt: huntEndsAt(now, nextSession), reward: inputJson({ ...reward, pending: false, monster: null, session: nextSession }) } });
+      await tx.gameLog.create({ data: { characterId, type: "encounter", message: "Bạn bỏ qua dấu vết yêu thú và tiếp tục săn." } });
+      return { left: true };
+    }
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: inputJson({ ...reward, pending: false, decision: "leave" }) } });
     await tx.gameLog.create({ data: { characterId, type: "encounter", message: "Bạn rút lui khỏi dấu vết yêu thú." } });
     return { left: true };
   });
@@ -313,9 +437,20 @@ export async function attackExplorationEncounter(db: Db, characterId: string, ac
     await tx.character.update({ where: { id: characterId }, data: { hp: result.remainingHp || Math.max(1, Math.floor(character.maxHp * 0.25)) } });
     const loot = result.winner === "player" ? await resolveMonsterLoot(tx, characterId, monster, activityId) : { linhThach: "0", items: [] };
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
-    if (reward.cultivation) await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: BigInt(reward.cultivation) } } });
+    if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
     await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward } });
-    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: { ...pending, pending: false, decision: "attack", combat: { winner: result.winner, reward } } } });
+    const session = parseJsonRecord(pending.session);
+    if (Object.keys(session).length > 0) {
+      const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
+      const nextCheckpoints = checkpoints.map((checkpoint) => checkpoint.id === session.pendingCheckpointId ? { ...checkpoint, resolved: true, outcome: "attacked" } : checkpoint);
+      const stats = parseJsonRecord(session.stats);
+      const defeated = result.winner === "player" ? 1 : 0;
+      const lootText = Array.isArray(loot.items) && loot.items.length > 0 ? ` và nhận ${loot.items.map((item) => `${item.name} x${item.quantity}`).join(", ")}` : "";
+      const nextSession = { ...session, pausedAt: null, pendingCheckpointId: null, checkpoints: nextCheckpoints, stats: { ...stats, detected: numberFromRecord(stats, "detected") + 1, defeated: numberFromRecord(stats, "defeated") + defeated }, log: [...(Array.isArray(session.log) ? session.log : []), result.winner === "player" ? `Bạn đánh bại ${monster.name}${lootText}.` : `${monster.name} làm bạn bị thương, nhưng chuyến săn vẫn tiếp tục.`] };
+      await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.ACTIVE, startedAt: now, endsAt: huntEndsAt(now, nextSession), reward: inputJson({ ...pending, pending: false, monster: null, session: nextSession, combat: { winner: result.winner, reward } }) } });
+    } else {
+      await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: inputJson({ ...pending, pending: false, decision: "attack", combat: { winner: result.winner, reward } }) } });
+    }
     if (result.winner === "player") await recordOnboardingEvent(tx, characterId, "MONSTER_DEFEATED");
     return { ...result, reward, monsterName: monster.name };
   });
@@ -395,7 +530,7 @@ export async function claimTravel(db: Db, characterId: string, travelId: string,
 
 async function resolveTravelEncounter(tx: Tx, characterId: string, encounterKey: string, dangerLevel: number) {
   if (encounterKey === "resource-cache") {
-    const template = await tx.itemTemplate.findFirst({ where: { key: { in: ["linh-thao", "hac-thiet-quang", "yeu-dan"] } }, orderBy: { key: "asc" } });
+    const template = await tx.itemTemplate.findFirst({ where: { key: { in: ["thanh-linh-thao", "ngung-lo-thao", "hac-thiet-quang", "yeu-dan-cap-thap"] } }, orderBy: { key: "asc" } });
     if (!template) return { kind: encounterKey, message: "Bạn phát hiện dấu vết tài nguyên nhưng không thu được gì." };
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
     return { kind: encounterKey, itemTemplateId: template.id, itemName: template.name, quantity: 1, message: `Bạn tìm thấy ${template.name}.` };
@@ -412,7 +547,8 @@ async function resolveTravelEncounter(tx: Tx, characterId: string, encounterKey:
     );
     const remainingHp = result.remainingHp || Math.max(1, Math.floor(character.maxHp * 0.3));
     const cultivationReward = result.winner === "player" ? BigInt(20 + dangerLevel * 10) : 5n;
-    await tx.character.update({ where: { id: characterId }, data: { hp: remainingHp, cultivation: { increment: cultivationReward } } });
+    await tx.character.update({ where: { id: characterId }, data: { hp: remainingHp } });
+    await addCultivationClamped(tx, characterId, cultivationReward);
     await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward: { source: "travel", cultivation: cultivationReward.toString() } } });
     return { kind: encounterKey, monsterKey: monster.key, monsterName: monster.name, winner: result.winner, cultivation: cultivationReward.toString(), message: result.winner === "player" ? `Bạn đánh lui ${monster.name} và nhận ${cultivationReward.toString()} tu vi.` : `${monster.name} cản đường, bạn bị thương nhưng vẫn thoát được.` };
   }
@@ -424,7 +560,8 @@ async function resolveTravelEncounter(tx: Tx, characterId: string, encounterKey:
 
   if (encounterKey === "rare-omen") {
     const cultivationReward = BigInt(50 + dangerLevel * 8);
-    await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: cultivationReward }, luck: { increment: 1 } } });
+    await addCultivationClamped(tx, characterId, cultivationReward);
+    await tx.character.update({ where: { id: characterId }, data: { luck: { increment: 1 } } });
     return { kind: encounterKey, cultivation: cultivationReward.toString(), luck: 1, message: `Một điềm lạ hiện lên trên đường, bạn nhận ${cultivationReward.toString()} tu vi và thêm khí vận.` };
   }
 
@@ -445,7 +582,7 @@ export async function fightMonster(db: Db, characterId: string, monsterKey: stri
     await tx.character.update({ where: { id: characterId }, data: { hp: result.remainingHp || Math.max(1, Math.floor(character.maxHp * 0.25)) } });
     const loot = result.winner === "player" ? await resolveMonsterLoot(tx, characterId, monster, `fight:${monsterKey}:${seed}`) : { linhThach: "0", items: [] };
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
-    if (reward.cultivation) await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: BigInt(reward.cultivation) } } });
+    if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
     await tx.combat.create({ data: { characterId, monsterKey, winner: result.winner, log: result.log, reward } });
     await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
     if (result.winner === "player") await recordOnboardingEvent(tx, characterId, "MONSTER_DEFEATED");
@@ -610,11 +747,11 @@ export async function consumeItem(db: Db, characterId: string, itemId: string) {
       hp: Math.min(character.maxHp, character.hp + hpRestore),
       qi: Math.min(character.maxQi, character.qi + qiRestore)
     };
-    if (cultivation > 0) data.cultivation = { increment: BigInt(cultivation) };
     await tx.character.update({
       where: { id: characterId },
       data
     });
+    if (cultivation > 0) await addCultivationClamped(tx, characterId, BigInt(cultivation));
     await tx.gameLog.create({ data: { characterId, type: "inventory", message: `Sử dụng ${item.template.name}.` } });
     return { itemName: item.template.name };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

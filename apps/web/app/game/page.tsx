@@ -34,8 +34,10 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
     getOnboardingState(prisma, c.id)
   ]);
   const nextRequirement = next?.requiredCultivation ?? c.realmStage.requiredCultivation;
-  const progress = next ? Number((c.cultivation * 100n) / next.requiredCultivation) : 100;
+  const cappedCultivation = c.cultivation > nextRequirement ? nextRequirement : c.cultivation;
+  const progress = next ? Number((cappedCultivation * 100n) / next.requiredCultivation) : 100;
   const canBreakthrough = Boolean(next && c.cultivation >= next.requiredCultivation);
+  const atCultivationCap = Boolean(next && c.cultivation >= next.requiredCultivation);
   const energy = currentEnergy(c);
   const locationName = c.currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
   const regionName = c.currentLocation?.zone.region?.name ?? "Chưa rõ địa vực";
@@ -111,26 +113,26 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
 
         <Panel title="Tu luyện" className="lg:col-span-2">
           <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-            <span className="muted">Tiến độ tới {next?.name ?? "cực hạn hiện tại"}</span>
-            <b className="text-gold">{Math.min(100, progress)}%</b>
+            <span className="muted">{atCultivationCap ? "BÌNH CẢNH" : `Tiến độ tới ${next?.name ?? "cực hạn hiện tại"}`}</span>
+            <b className="text-gold">{cappedCultivation.toString()} / {nextRequirement.toString()}</b>
           </div>
           <div className="resource-track h-3">
             <div className="resource-fill resource-cultivation" style={{ width: `${Math.min(100, progress)}%` }} />
           </div>
           <div className="mt-2 flex justify-between gap-3 text-xs text-paper/55">
-            <span>{c.cultivation.toString()} tu vi</span>
+            <span>{atCultivationCap ? "Cần Đột phá để tiếp tục." : `Còn ${(nextRequirement - cappedCultivation).toString()} Tu vi tới bình cảnh`}</span>
             <span>{next ? `${nextRequirement.toString()} cần thiết` : "Đã tới giới hạn hiện tại"}</span>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-5">
             {cultivationActivityOptions.map((m) => {
               const reward = calculateCultivationReward(cultivationBaseReward(m), c.spiritualRoot.multiplierBps);
               const cost = cultivationEnergyCost(m);
-              const disabled = activeCount > 0 || energy < cost;
+              const disabled = atCultivationCap || activeCount > 0 || energy < cost;
               return (
                 <form key={m} action={cultivateAction}>
                   <input type="hidden" name="minutes" value={m} />
                   <button className="btn btn-secondary w-full" disabled={disabled} title={`Dự kiến +${reward.toString()} tu vi · tốn ${cost} thể lực`}>
-                    {disabled ? "Không thể" : m >= 60 ? `${m / 60}h` : `${m}p`}
+                    {atCultivationCap ? "Bình cảnh" : disabled ? "Không thể" : m >= 60 ? `${m / 60}h` : `${m}p`}
                   </button>
                 </form>
               );

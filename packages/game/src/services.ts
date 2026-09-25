@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory } from "@ttg/db";
-import { calculateCultivationReward, currentEnergy, explorationEnergyCost, parseEncounterTable, simulateCombat } from "./rules.js";
+import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationEnergyCost, currentEnergy, locationActivityConfigs, parseEncounterTable, simulateCombat, travelDurationSeconds, type LocationActivityMode } from "./rules.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
 
@@ -11,8 +11,6 @@ export class GameError extends Error {
     super(message);
   }
 }
-
-type LocationActivityMode = "explore" | "hunt" | "gather";
 
 function parseJsonRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -88,8 +86,7 @@ export async function debitWallet(db: Db | Tx, characterId: string, currency: Cu
 }
 
 export async function startCultivation(db: Db, characterId: string, minutes: number, now = new Date()) {
-  const allowed = new Set([10, 30, 60, 240, 480]);
-  if (!allowed.has(minutes)) throw new GameError("BAD_DURATION", "Thời gian tu luyện không hợp lệ.");
+  if (!cultivationActivityOptions.some((option) => option === minutes)) throw new GameError("BAD_DURATION", "Thời gian tu luyện không hợp lệ.");
   const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true } });
   const [activeCultivation, activeExploration, activeTravel] = await Promise.all([
     db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
@@ -100,9 +97,9 @@ export async function startCultivation(db: Db, characterId: string, minutes: num
   if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
   if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
   const energy = currentEnergy(character, now);
-  const cost = Math.max(1, Math.ceil(minutes / 30));
+  const cost = cultivationEnergyCost(minutes);
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
-  const baseReward = BigInt(minutes * 10);
+  const baseReward = cultivationBaseReward(minutes);
   return db.$transaction(async (tx) => {
     await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
     const activity = await tx.cultivationActivity.create({
@@ -160,13 +157,9 @@ export async function attemptBreakthrough(db: Db, characterId: string, rng = Mat
   });
 }
 
-export async function startExploration(db: Db, characterId: string, minutes: number, mode: LocationActivityMode = "explore", now = new Date()) {
-  const allowedDurations: Record<LocationActivityMode, number[]> = {
-    explore: [10, 30, 60],
-    hunt: [15, 30, 60],
-    gather: [10, 30, 60]
-  };
-  if (!allowedDurations[mode].includes(minutes)) throw new GameError("BAD_DURATION", "Thời gian hoạt động không hợp lệ.");
+export async function startExploration(db: Db, characterId: string, durationSeconds: number, mode: LocationActivityMode = "explore", now = new Date()) {
+  const config = locationActivityConfigs[mode];
+  if (!config || durationSeconds !== config.durationSeconds) throw new GameError("BAD_DURATION", "Thời gian hoạt động không hợp lệ.");
   const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { currentLocation: true } });
   const services = character.currentLocation?.services ?? [];
   if (mode === "explore" && !services.includes("explore")) throw new GameError("LOCATION_NOT_EXPLOREABLE", "Địa điểm hiện tại không phù hợp để khám phá.");
@@ -183,11 +176,11 @@ export async function startExploration(db: Db, characterId: string, minutes: num
   if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang bế quan.");
   if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
   const energy = currentEnergy(character, now);
-  const cost = explorationEnergyCost(minutes);
+  const cost = config.energyCost;
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
   return db.$transaction(async (tx) => {
     await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
-    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + minutes * 60_000), reward: { mode } } });
+    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + durationSeconds * 1000), reward: { mode, locationId: character.currentLocation?.id ?? null } } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_STARTED");
     return activity;
   });
@@ -199,23 +192,25 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy chuyến thám hiểm.");
     if (job.status === ActivityStatus.CLAIMED) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
     if (job.endsAt > now) throw new GameError("NOT_READY", "Chuyến thám hiểm chưa hoàn thành.");
-    const zone = await tx.zone.findUniqueOrThrow({ where: { id: job.zoneId } });
     const mode = activityModeFromReward(job.reward);
+    const updated = await tx.explorationActivity.updateMany({
+      where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
+      data: {
+        status: mode === "hunt" ? ActivityStatus.COMPLETED : ActivityStatus.CLAIMED,
+        claimedAt: mode === "hunt" ? null : now,
+        eventKey: mode === "hunt" ? "hunt-found" : mode === "gather" ? "gather-resource" : "explore-result",
+        reward: { mode, resolving: true }
+      }
+    });
+    if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
+    const zone = await tx.zone.findUniqueOrThrow({ where: { id: job.zoneId } });
     const rng = seededRng(seedFromString(`${job.id}:${mode}`));
     const resourceTable = parseEncounterTable(zone.resourceTable);
     const monsterTable = parseEncounterTable(zone.monsterTable);
     const roll = mode === "hunt" ? pickWeighted(monsterTable, rng) : pickWeighted(resourceTable, rng);
     const template = mode === "hunt" ? null : await tx.itemTemplate.findUnique({ where: { key: roll.key } });
-    const updated = await tx.explorationActivity.updateMany({
-      where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
-      data: {
-        status: ActivityStatus.CLAIMED,
-        claimedAt: now,
-        eventKey: mode === "hunt" ? "hunt-found" : mode === "gather" ? "gather-resource" : "explore-result",
-        reward: mode === "hunt" ? { mode, monster: roll.key, pending: true } : { mode, item: roll.key, quantity: template ? 1 : 0 }
-      }
-    });
-    if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
+    const nextReward = mode === "hunt" ? { mode, monster: roll.key, pending: true } : { mode, item: roll.key, quantity: template ? 1 : 0 };
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: nextReward } });
     if (mode === "hunt") {
       const monster = await tx.monster.findUnique({ where: { key: roll.key } });
       await tx.gameLog.create({ data: { characterId, type: "encounter", message: monster ? `Bạn phát hiện ${monster.name}. Hãy chuẩn bị trước khi giao chiến.` : "Bạn phát hiện dấu vết yêu thú nhưng nó đã lẩn mất.", metadata: { mode, monster: roll.key } } });
@@ -229,6 +224,56 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
     return { itemName: template.name };
+  });
+}
+
+export async function cancelExploration(db: Db, characterId: string, activityId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const updated = await tx.explorationActivity.updateMany({
+      where: { id: activityId, characterId, status: ActivityStatus.ACTIVE },
+      data: { status: ActivityStatus.CANCELLED, claimedAt: now }
+    });
+    if (updated.count !== 1) throw new GameError("CANNOT_CANCEL", "Hoạt động này không thể hủy.");
+    await tx.gameLog.create({ data: { characterId, type: "exploration", message: "Bạn đã hủy hoạt động đang diễn ra." } });
+    return { cancelled: true };
+  });
+}
+
+export async function leaveExplorationEncounter(db: Db, characterId: string, activityId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const activity = await tx.explorationActivity.findUnique({ where: { id: activityId } });
+    if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy tình huống.");
+    const reward = parseJsonRecord(activity.reward);
+    if (reward.mode !== "hunt" || typeof reward.monster !== "string") throw new GameError("BAD_ENCOUNTER", "Tình huống không hợp lệ.");
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: { ...reward, pending: false, decision: "leave" } } });
+    await tx.gameLog.create({ data: { characterId, type: "encounter", message: "Bạn rút lui khỏi dấu vết yêu thú." } });
+    return { left: true };
+  });
+}
+
+export async function attackExplorationEncounter(db: Db, characterId: string, activityId: string, seed = Date.now(), now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const activity = await tx.explorationActivity.findUnique({ where: { id: activityId } });
+    if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy tình huống.");
+    const pending = parseJsonRecord(activity.reward);
+    if (pending.mode !== "hunt" || typeof pending.monster !== "string" || pending.pending !== true) throw new GameError("BAD_ENCOUNTER", "Tình huống không hợp lệ.");
+    const [character, monster] = await Promise.all([
+      tx.character.findUniqueOrThrow({ where: { id: characterId } }),
+      tx.monster.findUniqueOrThrow({ where: { key: pending.monster } })
+    ]);
+    const result = simulateCombat(
+      { name: character.name, hp: character.hp, attack: character.attack, defense: character.defense, speed: character.speed },
+      { name: monster.name, hp: monster.hp, attack: monster.attack, defense: monster.defense, speed: monster.speed },
+      seededRng(seed)
+    );
+    await tx.character.update({ where: { id: characterId }, data: { hp: result.remainingHp || Math.max(1, Math.floor(character.maxHp * 0.25)) } });
+    const reward = result.winner === "player" ? { cultivation: 80, linhThach: 30 } : { cultivation: 10, linhThach: 0 };
+    if (reward.cultivation) await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: BigInt(reward.cultivation) } } });
+    if (reward.linhThach) await creditWallet(tx, characterId, Currency.LINH_THACH, BigInt(reward.linhThach), WalletTxType.REWARD, "Monster", monster.key, `hunt:${activityId}`);
+    await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward } });
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: { ...pending, pending: false, decision: "attack", combat: { winner: result.winner, reward } } } });
+    if (result.winner === "player") await recordOnboardingEvent(tx, characterId, "MONSTER_DEFEATED");
+    return { ...result, reward, monsterName: monster.name };
   });
 }
 
@@ -267,7 +312,7 @@ export async function startTravel(db: Db, characterId: string, routeId: string, 
         originId: route.originId,
         destinationId: route.destinationId,
         startedAt: now,
-        endsAt: new Date(now.getTime() + route.travelMinutes * 60_000),
+        endsAt: new Date(now.getTime() + travelDurationSeconds(route.travelMinutes) * 1000),
         travelCost: route.travelCost,
         dangerSnapshot: route.dangerLevel,
         securitySnapshot: route.securityLevel,
@@ -375,29 +420,49 @@ export async function purchaseMarketListing(db: Db, buyerId: string, listingId: 
       data: { status: ListingStatus.SOLD }
     });
     if (claimed.count !== 1) throw new GameError("LISTING_INACTIVE", "Vật phẩm đã được người khác mua.");
-    const tax = (listing.price * 500n) / 10000n;
-    await debitWallet(tx, buyerId, Currency.LINH_THACH, listing.price, WalletTxType.MARKET, "MarketListing", listingId, `buy:${listingId}`);
-    await creditWallet(tx, listing.sellerId, Currency.LINH_THACH, listing.price - tax, WalletTxType.MARKET, "MarketListing", listingId, `sell:${listingId}`);
+    const totalPrice = listing.price * BigInt(listing.quantity);
+    const tax = (totalPrice * 500n) / 10000n;
+    await debitWallet(tx, buyerId, Currency.LINH_THACH, totalPrice, WalletTxType.MARKET, "MarketListing", listingId, `buy:${listingId}`);
+    await creditWallet(tx, listing.sellerId, Currency.LINH_THACH, totalPrice - tax, WalletTxType.MARKET, "MarketListing", listingId, `sell:${listingId}`);
     await tx.itemInstance.update({ where: { id: listing.itemId }, data: { ownerId: buyerId } });
-    await tx.marketTransaction.create({ data: { listingId, buyerId, sellerId: listing.sellerId, itemTemplateId: listing.item.templateId, quantity: listing.quantity, price: listing.price, tax } });
-    return { price: listing.price, tax };
+    await tx.marketTransaction.create({ data: { listingId, buyerId, sellerId: listing.sellerId, itemTemplateId: listing.item.templateId, quantity: listing.quantity, price: totalPrice, tax } });
+    return { price: totalPrice, tax };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function createMarketListing(db: Db, sellerId: string, itemId: string, price: bigint, now = new Date()) {
+export async function createMarketListing(db: Db, sellerId: string, itemId: string, price: bigint, quantity = 1, now = new Date()) {
   if (price <= 0n) throw new GameError("INVALID_PRICE", "Giá bán không hợp lệ.");
   if (price > 999_999_999_999n) throw new GameError("INVALID_PRICE", "Giá bán quá lớn.");
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng không hợp lệ.");
   return db.$transaction(async (tx) => {
     const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
     if (!item || item.ownerId !== sellerId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
+    if (quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Không đủ số lượng vật phẩm.");
     if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể rao bán vật phẩm đang trang bị.");
     if (!item.template.tradeable || item.bound) throw new GameError("ITEM_BOUND", "Vật phẩm này không thể giao dịch.");
     if (item.listings.length > 0) throw new GameError("ALREADY_LISTED", "Vật phẩm này đang được rao bán.");
+    let listedItemId = item.id;
+    if (quantity < item.quantity) {
+      await tx.itemInstance.update({ where: { id: item.id }, data: { quantity: { decrement: quantity } } });
+      const listedItem = await tx.itemInstance.create({
+        data: {
+          ownerId: sellerId,
+          templateId: item.templateId,
+          quantity,
+          quality: item.quality,
+          durability: item.durability,
+          enhancement: item.enhancement,
+          customModifiers: item.customModifiers as Prisma.InputJsonValue,
+          bound: item.bound
+        }
+      });
+      listedItemId = listedItem.id;
+    }
     const listing = await tx.marketListing.create({
       data: {
         sellerId,
-        itemId: item.id,
-        quantity: item.quantity,
+        itemId: listedItemId,
+        quantity,
         price,
         expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60_000)
       }

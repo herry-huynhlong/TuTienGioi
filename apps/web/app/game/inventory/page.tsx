@@ -101,7 +101,10 @@ function ItemCard({ item, mode }: { item: { id: string; quantity: number; enhanc
         {canSell ? (
           <form action={sellItemAction} className="sell-form">
             <input type="hidden" name="itemId" value={item.id} />
-            <input className="field" name="price" inputMode="numeric" pattern="[0-9]+" min="1" placeholder="Giá bán" required />
+            <div className="sell-form-grid">
+              <input className="field" name="quantity" inputMode="numeric" pattern="[0-9]+" min="1" max={item.quantity} defaultValue="1" aria-label="Số lượng bán" required />
+              <input className="field" name="price" inputMode="numeric" pattern="[0-9]+" min="1" placeholder="Giá / đơn vị" aria-label="Giá mỗi đơn vị" required />
+            </div>
             <button className="btn w-full">Rao bán</button>
           </form>
         ) : null}

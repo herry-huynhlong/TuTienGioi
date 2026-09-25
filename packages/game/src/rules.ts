@@ -23,8 +23,35 @@ export function explorationEnergyCost(minutes: number): number {
   if (minutes === 10) return 2;
   if (minutes === 30) return 5;
   if (minutes === 60) return 8;
+  if (minutes <= 45) return 2;
+  if (minutes <= 60) return 3;
   return Math.max(1, Math.ceil(minutes / 10));
 }
+
+export const cultivationActivityOptions = [1, 3, 5, 10, 20] as const;
+
+export function cultivationEnergyCost(minutes: number): number {
+  return Math.max(1, Math.ceil(minutes / 5));
+}
+
+export function cultivationBaseReward(minutes: number): bigint {
+  return BigInt(minutes * 10);
+}
+
+export function travelDurationSeconds(travelMinutes: number): number {
+  if (travelMinutes <= 5) return 15;
+  if (travelMinutes <= 15) return 30;
+  if (travelMinutes <= 35) return 60;
+  return 90;
+}
+
+export const locationActivityConfigs = {
+  explore: { durationSeconds: 45, energyCost: 2 },
+  gather: { durationSeconds: 45, energyCost: 2 },
+  hunt: { durationSeconds: 60, energyCost: 3 }
+} as const;
+
+export type LocationActivityMode = keyof typeof locationActivityConfigs;
 
 export function calculateCharacterStats(
   character: Pick<Character, "body" | "attack" | "defense" | "speed">,

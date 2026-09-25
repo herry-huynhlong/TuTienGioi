@@ -610,6 +610,12 @@ button, input, select, textarea {
   gap: 0.5rem;
 }
 
+.sell-form-grid {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
 .market-toolbar {
   display: grid;
   gap: 0.65rem;
@@ -851,6 +857,18 @@ select.field option {
 
 .facility-tier.locked {
   opacity: 0.72;
+}
+
+.mastery-box {
+  margin-top: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 0.75rem;
+}
+
+.mastery-box.compact {
+  margin-top: 0;
+  padding: 0.6rem;
 }
 
 .world-directory-page {
@@ -1205,4 +1223,36 @@ select.field option {
   font-size: 0.82rem;
   line-height: 1.45;
   padding-left: 0.55rem;
+}
+
+.situation-card {
+  border: 1px solid rgba(214, 178, 94, 0.18);
+  background:
+    linear-gradient(90deg, rgba(45, 212, 191, 0.07), transparent 55%),
+    rgba(0, 0, 0, 0.16);
+  padding: 1rem;
+}
+
+.situation-card h3 {
+  color: #d6b25e;
+  font-size: 1.25rem;
+  font-weight: 900;
+  margin-top: 0.25rem;
+}
+
+.live-countdown {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+.live-countdown-meta {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(244, 239, 227, 0.65);
+  font-size: 0.8rem;
+}
+
+.live-countdown-meta b {
+  color: #f4efe3;
 }

@@ -1,12 +1,10 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { breakthroughAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
-import { calculateCultivationReward, currentEnergy, getOnboardingState } from "@ttg/game";
+import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationEnergyCost, currentEnergy, getOnboardingState } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
-
-const cultivationOptions = [10, 30, 60, 240, 480];
 
 export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
   const params = await searchParams;
@@ -123,9 +121,9 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             <span>{next ? `${nextRequirement.toString()} cần thiết` : "Đã tới giới hạn hiện tại"}</span>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-5">
-            {cultivationOptions.map((m) => {
-              const reward = calculateCultivationReward(BigInt(m * 10), c.spiritualRoot.multiplierBps);
-              const cost = Math.max(1, Math.ceil(m / 30));
+            {cultivationActivityOptions.map((m) => {
+              const reward = calculateCultivationReward(cultivationBaseReward(m), c.spiritualRoot.multiplierBps);
+              const cost = cultivationEnergyCost(m);
               const disabled = activeCount > 0 || energy < cost;
               return (
                 <form key={m} action={cultivateAction}>

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Currency, prisma, WalletTxType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { attemptBreakthrough, cancelMarketListing, claimCultivation, claimExploration, claimTravel, consumeItem, createMarketListing, debitWallet, ensureOnboardingProgress, equipItem, GameError, purchaseMarketListing, startCultivation, startExploration, startTravel, unequipItem } from "@ttg/game";
+import { attackExplorationEncounter, attemptBreakthrough, cancelExploration, cancelMarketListing, claimCultivation, claimExploration, claimTravel, consumeItem, createMarketListing, debitWallet, ensureOnboardingProgress, equipItem, GameError, leaveExplorationEncounter, purchaseMarketListing, startCultivation, startExploration, startTravel, unequipItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -104,7 +104,7 @@ export async function exploreAction(formData: FormData) {
   try {
     const rawMode = String(formData.get("mode") ?? "explore");
     const mode = rawMode === "hunt" || rawMode === "gather" ? rawMode : "explore";
-    await startExploration(prisma, await characterId(), Number(formData.get("minutes")), mode);
+    await startExploration(prisma, await characterId(), Number(formData.get("durationSeconds")), mode);
   } catch (error) {
     redirectGameError(error, "/game/location");
   }
@@ -114,6 +114,33 @@ export async function exploreAction(formData: FormData) {
 export async function claimExploreAction(formData: FormData) {
   try {
     await claimExploration(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location");
+}
+
+export async function cancelExploreAction(formData: FormData) {
+  try {
+    await cancelExploration(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location");
+}
+
+export async function attackEncounterAction(formData: FormData) {
+  try {
+    await attackExplorationEncounter(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location");
+}
+
+export async function leaveEncounterAction(formData: FormData) {
+  try {
+    await leaveExplorationEncounter(prisma, await characterId(), String(formData.get("id")));
   } catch (error) {
     redirectGameError(error, "/game/location");
   }
@@ -168,10 +195,13 @@ export async function buyMarketListingAction(formData: FormData) {
 
 export async function sellItemAction(formData: FormData) {
   const rawPrice = String(formData.get("price") ?? "0").trim();
+  const rawQuantity = String(formData.get("quantity") ?? "1").trim();
   if (!/^\d+$/.test(rawPrice)) redirect("/game/inventory");
+  if (!/^\d+$/.test(rawQuantity)) redirect("/game/inventory");
   const price = BigInt(rawPrice);
+  const quantity = Number(rawQuantity);
   try {
-    await createMarketListing(prisma, await characterId(), String(formData.get("itemId")), price);
+    await createMarketListing(prisma, await characterId(), String(formData.get("itemId")), price, quantity);
   } catch (error) {
     redirectGameError(error, "/game/inventory");
   }

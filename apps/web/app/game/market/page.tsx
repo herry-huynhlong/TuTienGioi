@@ -65,32 +65,36 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         {listings.length > 0 ? (
           <table className="market-table">
             <thead>
-              <tr><th>Vật phẩm</th><th>Loại</th><th>Người bán</th><th>SL</th><th>Giá</th><th>Hết hạn</th><th></th></tr>
+              <tr><th>Vật phẩm</th><th>Loại</th><th>Người bán</th><th>SL</th><th>Đơn giá</th><th>Tổng</th><th>Hết hạn</th><th></th></tr>
             </thead>
             <tbody>
-              {listings.map((l) => (
-                <tr key={l.id}>
-                  <td>
-                    <b>{l.item.template.name}</b>
-                    <small>{formatRarity(l.item.template.rarity)} · +{l.item.enhancement}</small>
-                  </td>
-                  <td>{formatItemCategory(l.item.template.category)}</td>
-                  <td>{l.seller.name}</td>
-                  <td>{l.quantity}</td>
-                  <td className="text-gold">{l.price.toString()}</td>
-                  <td>{l.expiresAt.toLocaleString("vi-VN")}</td>
-                  <td>
-                    {character?.id === l.sellerId ? (
-                      <span className="badge">Của bạn</span>
-                    ) : (
-                      <form action={buyMarketListingAction}>
-                        <input type="hidden" name="listingId" value={l.id} />
-                        <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled={!character || character.linhThach < l.price}>Mua</button>
-                      </form>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {listings.map((l) => {
+                const totalPrice = l.price * BigInt(l.quantity);
+                return (
+                  <tr key={l.id}>
+                    <td>
+                      <b>{l.item.template.name}</b>
+                      <small>{formatRarity(l.item.template.rarity)} · +{l.item.enhancement}</small>
+                    </td>
+                    <td>{formatItemCategory(l.item.template.category)}</td>
+                    <td>{l.seller.name}</td>
+                    <td>{l.quantity}</td>
+                    <td>{l.price.toString()}</td>
+                    <td className="text-gold">{totalPrice.toString()}</td>
+                    <td>{l.expiresAt.toLocaleString("vi-VN")}</td>
+                    <td>
+                      {character?.id === l.sellerId ? (
+                        <span className="badge">Của bạn</span>
+                      ) : (
+                        <form action={buyMarketListingAction}>
+                          <input type="hidden" name="listingId" value={l.id} />
+                          <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled={!character || character.linhThach < totalPrice}>Mua</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ) : (

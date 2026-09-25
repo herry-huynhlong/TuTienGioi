@@ -2,7 +2,7 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { claimTravelAction, startTravelAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { getFeatureUnlockState, recordOnboardingEvent } from "@ttg/game";
+import { getFeatureUnlockState, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import {
@@ -398,7 +398,7 @@ function LocationDetail({
         <div><span>Khu vực</span><b>{location.zone.name}</b></div>
         <div><span>Loại</span><b>{formatLocationKind(location.kind)}</b></div>
         <div><span>Nguy hiểm</span><b>{route ? `Cấp ${route.dangerLevel}` : `Khu vực ${location.zone.dangerLevel}`}</b></div>
-        <div><span>Thời gian</span><b>{isCurrent ? "Đang ở đây" : route ? `${route.travelMinutes} phút` : "Không có tuyến trực tiếp"}</b></div>
+        <div><span>Thời gian</span><b>{isCurrent ? "Đang ở đây" : route ? formatTravelDuration(route.travelMinutes) : "Không có tuyến trực tiếp"}</b></div>
         <div><span>Cảnh giới đề nghị</span><b>{realmName}</b></div>
         <div><span>An ninh</span><b>{formatSecurity(location.securityLevel)}</b></div>
         <div><span>Dịch vụ</span><b>{location.services.map(formatService).join(" · ") || "Chưa rõ"}</b></div>
@@ -444,7 +444,7 @@ function LocationDetail({
             {location.routesFrom.slice(0, 5).map((outgoing) => (
               <div key={outgoing.id}>
                 <b>{outgoing.destination.name}</b>
-                <small>{outgoing.travelMinutes} phút · {outgoing.travelCost.toString()} linh thạch · nguy hiểm {outgoing.dangerLevel}</small>
+                <small>{formatTravelDuration(outgoing.travelMinutes)} · {outgoing.travelCost.toString()} linh thạch · nguy hiểm {outgoing.dangerLevel}</small>
               </div>
             ))}
           </div>
@@ -477,6 +477,10 @@ function parseWeightedTable(value: unknown): Array<{ key: string; weight: number
     if (typeof key !== "string") return [];
     return [{ key, weight: typeof weight === "number" ? weight : 0 }];
   });
+}
+
+function formatTravelDuration(travelMinutes: number) {
+  return `${travelDurationSeconds(travelMinutes)} giây`;
 }
 
 function WeightedList({ items, empty }: { items: Array<{ key: string; label: string; weight: number }>; empty: string }) {

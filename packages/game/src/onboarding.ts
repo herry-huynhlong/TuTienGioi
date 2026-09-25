@@ -65,8 +65,8 @@ export const onboardingChapters: Chapter[] = [
     summary: "Hoàn tất một lượt thám hiểm để nhận tài nguyên hoặc biến cố.",
     objectives: [
       { key: "finish-travel", label: "Hoàn tất chuyến đi", event: "TRAVEL_COMPLETED", href: "/game/world", cta: "Hoàn Tất Di Chuyển" },
-      { key: "start-exploration", label: "Bắt đầu thám hiểm tại vị trí hiện tại", event: "EXPLORATION_STARTED", href: "/game/world", cta: "Bắt Đầu Lịch Luyện" },
-      { key: "finish-exploration", label: "Nhận kết quả thám hiểm", event: "EXPLORATION_COMPLETED", href: "/game/world", cta: "Nhận Kết Quả" }
+      { key: "start-exploration", label: "Bắt đầu thám hiểm tại vị trí hiện tại", event: "EXPLORATION_STARTED", href: "/game/location", cta: "Bắt Đầu Lịch Luyện" },
+      { key: "finish-exploration", label: "Nhận kết quả thám hiểm", event: "EXPLORATION_COMPLETED", href: "/game/location", cta: "Nhận Kết Quả" }
     ]
   },
   {
@@ -74,7 +74,7 @@ export const onboardingChapters: Chapter[] = [
     title: "Yêu Thú Xuất Hiện",
     summary: "Gặp và đánh bại yêu thú thông qua lịch luyện hoặc biến cố.",
     objectives: [
-      { key: "monster-encountered", label: "Gặp một yêu thú trong hoạt động thật", event: "MONSTER_ENCOUNTERED", href: "/game/world", cta: "Tiếp Tục Lịch Luyện" },
+      { key: "monster-encountered", label: "Gặp một yêu thú trong hoạt động thật", event: "MONSTER_ENCOUNTERED", href: "/game/location", cta: "Tiếp Tục Lịch Luyện" },
       { key: "monster-defeated", label: "Đánh bại yêu thú đầu tiên", event: "MONSTER_DEFEATED", href: "/game/bestiary", cta: "Xem Đồ Giám" }
     ]
   },

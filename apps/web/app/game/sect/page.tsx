@@ -20,9 +20,10 @@ export default async function SectPage() {
       ) : (
         <form action={createSectAction} className="panel mt-6 grid max-w-xl gap-3 rounded-lg p-6">
           <h2 className="text-xl font-bold text-gold">Lập tông môn</h2>
+          <p className="muted">Bạn cần 5.000 Linh Thạch để thành lập tông môn. Gia nhập/tìm tông môn đang phát triển.</p>
           <input className="field" name="name" placeholder="Tên tông môn" required />
           <input className="field" name="tag" placeholder="Ký hiệu" required />
-          <button className="btn">Chi 5.000 Linh Thạch để thành lập</button>
+          <button className="btn" disabled={c.linhThach < 5000n}>Chi 5.000 Linh Thạch để thành lập</button>
         </form>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { formatItemCategory, formatRarity } from "@/lib/format";
 import { recordOnboardingEvent } from "@ttg/game";
 
 const equipmentSlots = [
@@ -96,7 +97,7 @@ export default async function CharacterPage() {
                 <div key={slot} className="equipment-slot">
                   <span>{label}</span>
                   <b>{item ? item.template.name : "Trống"}</b>
-                  <small>{item ? `${item.template.rarity} · +${item.enhancement}` : "Chưa trang bị"}</small>
+                  <small>{item ? `${formatRarity(item.template.rarity)} · +${item.enhancement}` : "Chưa trang bị"}</small>
                 </div>
               );
             })}
@@ -109,7 +110,7 @@ export default async function CharacterPage() {
               {inventory.map((item) => (
                 <div key={item.id} className="item-card">
                   <b>{item.template.name} x{item.quantity}</b>
-                  <span>{item.template.category} · {item.template.rarity}</span>
+                  <span>{formatItemCategory(item.template.category)} · {formatRarity(item.template.rarity)}</span>
                   <p>{item.template.description}</p>
                 </div>
               ))}

@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus } from "@ttg/db";
+import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory } from "@ttg/db";
 import { calculateCultivationReward, currentEnergy, explorationEnergyCost, parseEncounterTable, simulateCombat } from "./rules.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
@@ -29,6 +29,43 @@ function isClient(db: Db | Tx): db is Db {
   return "$transaction" in db;
 }
 
+function modifierValue(value: unknown, key: string): number {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+}
+
+function itemStatDelta(value: unknown, direction: 1 | -1) {
+  return {
+    attack: modifierValue(value, "attack") * direction,
+    defense: modifierValue(value, "defense") * direction,
+    speed: modifierValue(value, "speed") * direction,
+    spirit: modifierValue(value, "spirit") * direction,
+    maxHp: modifierValue(value, "hp") * direction,
+    maxQi: modifierValue(value, "qi") * direction
+  };
+}
+
+async function applyEquipmentDelta(tx: Tx, characterId: string, modifiers: unknown, direction: 1 | -1) {
+  const delta = itemStatDelta(modifiers, direction);
+  const current = await tx.character.findUniqueOrThrow({ where: { id: characterId }, select: { hp: true, qi: true, maxHp: true, maxQi: true } });
+  const nextMaxHp = Math.max(1, current.maxHp + delta.maxHp);
+  const nextMaxQi = Math.max(1, current.maxQi + delta.maxQi);
+  await tx.character.update({
+    where: { id: characterId },
+    data: {
+      attack: { increment: delta.attack },
+      defense: { increment: delta.defense },
+      speed: { increment: delta.speed },
+      spirit: { increment: delta.spirit },
+      maxHp: nextMaxHp,
+      hp: Math.min(current.hp, nextMaxHp),
+      maxQi: nextMaxQi,
+      qi: Math.min(current.qi, nextMaxQi)
+    }
+  });
+}
+
 export async function creditWallet(db: Db | Tx, characterId: string, currency: Currency, amount: bigint, type: WalletTxType, referenceType?: string, referenceId?: string, idempotencyKey?: string) {
   if (amount <= 0n) throw new GameError("INVALID_AMOUNT", "Số tiền không hợp lệ.");
   return isClient(db) ? db.$transaction((tx) => mutateWallet(tx, characterId, currency, amount, type, referenceType, referenceId, idempotencyKey)) : mutateWallet(db, characterId, currency, amount, type, referenceType, referenceId, idempotencyKey);
@@ -43,8 +80,14 @@ export async function startCultivation(db: Db, characterId: string, minutes: num
   const allowed = new Set([10, 30, 60, 240, 480]);
   if (!allowed.has(minutes)) throw new GameError("BAD_DURATION", "Thời gian tu luyện không hợp lệ.");
   const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true } });
-  const active = await db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
-  if (active) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang có hoạt động tu luyện.");
+  const [activeCultivation, activeExploration, activeTravel] = await Promise.all([
+    db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+  ]);
+  if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang có hoạt động tu luyện.");
+  if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
+  if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
   const energy = currentEnergy(character, now);
   const cost = Math.max(1, Math.ceil(minutes / 30));
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
@@ -115,8 +158,14 @@ export async function startExploration(db: Db, characterId: string, minutes: num
   }
   const zoneId = character.currentLocation?.zoneId ?? character.locationId;
   if (!zoneId) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm.");
-  const active = await db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
-  if (active) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang thám hiểm.");
+  const [activeExploration, activeCultivation, activeTravel] = await Promise.all([
+    db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+  ]);
+  if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang thám hiểm.");
+  if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang bế quan.");
+  if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
   const energy = currentEnergy(character, now);
   const cost = explorationEnergyCost(minutes);
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
@@ -162,8 +211,14 @@ export async function startTravel(db: Db, characterId: string, routeId: string, 
       where: { id: characterId },
       include: { currentLocation: true, location: true, realmStage: { include: { realm: true } } }
     });
-    const activeTravel = await tx.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
+    const [activeTravel, activeCultivation, activeExploration] = await Promise.all([
+      tx.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+    ]);
     if (activeTravel) throw new GameError("ACTIVE_TRAVEL", "Bạn đang di chuyển.");
+    if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang bế quan.");
+    if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
     const route = await tx.route.findUnique({
       where: { id: routeId },
       include: { origin: { include: { zone: true } }, destination: { include: { zone: true } } }
@@ -287,12 +342,117 @@ export async function purchaseMarketListing(db: Db, buyerId: string, listingId: 
     const listing = await tx.marketListing.findUnique({ where: { id: listingId }, include: { item: true } });
     if (!listing || listing.status !== ListingStatus.ACTIVE || listing.expiresAt < now) throw new GameError("LISTING_INACTIVE", "Vật phẩm đã được người khác mua.");
     if (listing.sellerId === buyerId) throw new GameError("SELF_BUY", "Không thể mua vật phẩm của chính mình.");
+    if (listing.item.ownerId !== listing.sellerId) throw new GameError("LISTING_INACTIVE", "Vật phẩm không còn thuộc người bán.");
+    const claimed = await tx.marketListing.updateMany({
+      where: { id: listingId, status: ListingStatus.ACTIVE, expiresAt: { gt: now } },
+      data: { status: ListingStatus.SOLD }
+    });
+    if (claimed.count !== 1) throw new GameError("LISTING_INACTIVE", "Vật phẩm đã được người khác mua.");
     const tax = (listing.price * 500n) / 10000n;
     await debitWallet(tx, buyerId, Currency.LINH_THACH, listing.price, WalletTxType.MARKET, "MarketListing", listingId, `buy:${listingId}`);
     await creditWallet(tx, listing.sellerId, Currency.LINH_THACH, listing.price - tax, WalletTxType.MARKET, "MarketListing", listingId, `sell:${listingId}`);
-    await tx.marketListing.update({ where: { id: listingId }, data: { status: ListingStatus.SOLD } });
     await tx.itemInstance.update({ where: { id: listing.itemId }, data: { ownerId: buyerId } });
     await tx.marketTransaction.create({ data: { listingId, buyerId, sellerId: listing.sellerId, itemTemplateId: listing.item.templateId, quantity: listing.quantity, price: listing.price, tax } });
     return { price: listing.price, tax };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function createMarketListing(db: Db, sellerId: string, itemId: string, price: bigint, now = new Date()) {
+  if (price <= 0n) throw new GameError("INVALID_PRICE", "Giá bán không hợp lệ.");
+  if (price > 999_999_999_999n) throw new GameError("INVALID_PRICE", "Giá bán quá lớn.");
+  return db.$transaction(async (tx) => {
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    if (!item || item.ownerId !== sellerId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
+    if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể rao bán vật phẩm đang trang bị.");
+    if (!item.template.tradeable || item.bound) throw new GameError("ITEM_BOUND", "Vật phẩm này không thể giao dịch.");
+    if (item.listings.length > 0) throw new GameError("ALREADY_LISTED", "Vật phẩm này đang được rao bán.");
+    const listing = await tx.marketListing.create({
+      data: {
+        sellerId,
+        itemId: item.id,
+        quantity: item.quantity,
+        price,
+        expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60_000)
+      }
+    });
+    await tx.gameLog.create({ data: { characterId: sellerId, type: "market", message: `Rao bán ${item.template.name} với giá ${price.toString()} Linh Thạch.` } });
+    return listing;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function cancelMarketListing(db: Db, sellerId: string, listingId: string) {
+  return db.$transaction(async (tx) => {
+    const updated = await tx.marketListing.updateMany({
+      where: { id: listingId, sellerId, status: ListingStatus.ACTIVE },
+      data: { status: ListingStatus.CANCELLED }
+    });
+    if (updated.count !== 1) throw new GameError("LISTING_INACTIVE", "Tin rao không còn khả dụng.");
+    await tx.gameLog.create({ data: { characterId: sellerId, type: "market", message: "Hủy một tin rao bán." } });
+    return { cancelled: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function equipItem(db: Db, characterId: string, itemId: string) {
+  return db.$transaction(async (tx) => {
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
+    if (item.template.category !== ItemCategory.EQUIPMENT || !item.template.equipSlot) throw new GameError("NOT_EQUIPMENT", "Vật phẩm này không thể trang bị.");
+    if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Không thể trang bị vật phẩm đang rao bán.");
+    if (item.equippedSlot === item.template.equipSlot) return item;
+    const current = await tx.itemInstance.findFirst({
+      where: { ownerId: characterId, equippedSlot: item.template.equipSlot },
+      include: { template: true }
+    });
+    if (current) {
+      await tx.itemInstance.update({ where: { id: current.id }, data: { equippedSlot: null } });
+      await applyEquipmentDelta(tx, characterId, current.template.baseModifiers, -1);
+    }
+    await tx.itemInstance.update({ where: { id: item.id }, data: { equippedSlot: item.template.equipSlot } });
+    await applyEquipmentDelta(tx, characterId, item.template.baseModifiers, 1);
+    await tx.gameLog.create({ data: { characterId, type: "inventory", message: `Trang bị ${item.template.name}.` } });
+    return item;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function unequipItem(db: Db, characterId: string, itemId: string) {
+  return db.$transaction(async (tx) => {
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true } });
+    if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
+    if (!item.equippedSlot) throw new GameError("NOT_EQUIPPED", "Vật phẩm này chưa được trang bị.");
+    await tx.itemInstance.update({ where: { id: item.id }, data: { equippedSlot: null } });
+    await applyEquipmentDelta(tx, characterId, item.template.baseModifiers, -1);
+    await tx.gameLog.create({ data: { characterId, type: "inventory", message: `Tháo ${item.template.name}.` } });
+    return item;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function consumeItem(db: Db, characterId: string, itemId: string) {
+  return db.$transaction(async (tx) => {
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
+    if (item.template.category !== ItemCategory.CONSUMABLE) throw new GameError("NOT_CONSUMABLE", "Vật phẩm này không thể sử dụng.");
+    if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Không thể dùng vật phẩm đang rao bán.");
+    if (item.quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng vật phẩm không hợp lệ.");
+    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId } });
+    const hpRestore = modifierValue(item.template.baseModifiers, "hpRestore");
+    const qiRestore = modifierValue(item.template.baseModifiers, "qiRestore");
+    const cultivation = modifierValue(item.template.baseModifiers, "cultivation");
+    const updated = await tx.itemInstance.updateMany({
+      where: { id: item.id, ownerId: characterId, quantity: { gt: 0 } },
+      data: { quantity: { decrement: 1 } }
+    });
+    if (updated.count !== 1) throw new GameError("ALREADY_USED", "Vật phẩm đã được sử dụng.");
+    await tx.itemInstance.deleteMany({ where: { id: item.id, quantity: { lte: 0 } } });
+    const data: Prisma.CharacterUpdateInput = {
+      hp: Math.min(character.maxHp, character.hp + hpRestore),
+      qi: Math.min(character.maxQi, character.qi + qiRestore)
+    };
+    if (cultivation > 0) data.cultivation = { increment: BigInt(cultivation) };
+    await tx.character.update({
+      where: { id: characterId },
+      data
+    });
+    await tx.gameLog.create({ data: { characterId, type: "inventory", message: `Sử dụng ${item.template.name}.` } });
+    return { itemName: item.template.name };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

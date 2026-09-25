@@ -14,7 +14,7 @@ export default async function GameLayout({ children }: { children: React.ReactNo
       currentLocation: { include: { zone: { include: { region: true } } } },
       location: true,
       sect: true,
-      notifications: { where: { readAt: null }, take: 1 }
+      notifications: { where: { readAt: null }, take: 99 }
     }
   });
   const featureUnlocks = character ? await getFeatureUnlockState(prisma, character.id) : null;

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Currency, prisma, WalletTxType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { attemptBreakthrough, claimCultivation, claimExploration, claimTravel, debitWallet, ensureOnboardingProgress, fightMonster, startCultivation, startExploration, startTravel } from "@ttg/game";
+import { attemptBreakthrough, cancelMarketListing, claimCultivation, claimExploration, claimTravel, consumeItem, createMarketListing, debitWallet, ensureOnboardingProgress, equipItem, GameError, purchaseMarketListing, startCultivation, startExploration, startTravel, unequipItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -68,43 +68,71 @@ async function characterId() {
   return user.character.id;
 }
 
+function redirectGameError(error: unknown, path: string): never {
+  if (error instanceof GameError) redirect(`${path}?error=${encodeURIComponent(error.message)}`);
+  throw error;
+}
+
 export async function cultivateAction(formData: FormData) {
-  await startCultivation(prisma, await characterId(), Number(formData.get("minutes")));
+  try {
+    await startCultivation(prisma, await characterId(), Number(formData.get("minutes")));
+  } catch (error) {
+    redirectGameError(error, "/game");
+  }
   redirect("/game");
 }
 
 export async function claimCultivationAction(formData: FormData) {
-  await claimCultivation(prisma, await characterId(), String(formData.get("id")));
+  try {
+    await claimCultivation(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game");
+  }
   redirect("/game");
 }
 
 export async function breakthroughAction() {
-  await attemptBreakthrough(prisma, await characterId());
+  try {
+    await attemptBreakthrough(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, "/game");
+  }
   redirect("/game");
 }
 
 export async function exploreAction(formData: FormData) {
-  await startExploration(prisma, await characterId(), Number(formData.get("minutes")));
+  try {
+    await startExploration(prisma, await characterId(), Number(formData.get("minutes")));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
   redirect("/game/location");
 }
 
 export async function claimExploreAction(formData: FormData) {
-  await claimExploration(prisma, await characterId(), String(formData.get("id")));
+  try {
+    await claimExploration(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
   redirect("/game/location");
 }
 
 export async function startTravelAction(formData: FormData) {
-  await startTravel(prisma, await characterId(), String(formData.get("routeId")));
+  try {
+    await startTravel(prisma, await characterId(), String(formData.get("routeId")));
+  } catch (error) {
+    redirectGameError(error, "/game/world");
+  }
   redirect("/game/world");
 }
 
 export async function claimTravelAction(formData: FormData) {
-  await claimTravel(prisma, await characterId(), String(formData.get("id")));
-  redirect("/game/location");
-}
-
-export async function fightAction(formData: FormData) {
-  await fightMonster(prisma, await characterId(), String(formData.get("monster")));
+  try {
+    await claimTravel(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/world");
+  }
   redirect("/game/location");
 }
 
@@ -125,4 +153,68 @@ export async function createSectAction(formData: FormData) {
     await tx.worldNews.create({ data: { title: `${name} thành lập`, body: `${character.name} dựng cờ ${tag}, khai sinh một thế lực mới.`, category: "sect", permanent: true } });
   });
   redirect("/game/sect");
+}
+
+export async function buyMarketListingAction(formData: FormData) {
+  try {
+    await purchaseMarketListing(prisma, await characterId(), String(formData.get("listingId")));
+  } catch (error) {
+    redirectGameError(error, "/game/market");
+  }
+  redirect("/game/market");
+}
+
+export async function sellItemAction(formData: FormData) {
+  const rawPrice = String(formData.get("price") ?? "0").trim();
+  if (!/^\d+$/.test(rawPrice)) redirect("/game/inventory");
+  const price = BigInt(rawPrice);
+  try {
+    await createMarketListing(prisma, await characterId(), String(formData.get("itemId")), price);
+  } catch (error) {
+    redirectGameError(error, "/game/inventory");
+  }
+  redirect("/game/market");
+}
+
+export async function cancelMarketListingAction(formData: FormData) {
+  try {
+    await cancelMarketListing(prisma, await characterId(), String(formData.get("listingId")));
+  } catch (error) {
+    redirectGameError(error, "/game/inventory");
+  }
+  redirect("/game/inventory");
+}
+
+export async function equipItemAction(formData: FormData) {
+  try {
+    await equipItem(prisma, await characterId(), String(formData.get("itemId")));
+  } catch (error) {
+    redirectGameError(error, "/game/inventory");
+  }
+  redirect("/game/inventory");
+}
+
+export async function unequipItemAction(formData: FormData) {
+  try {
+    await unequipItem(prisma, await characterId(), String(formData.get("itemId")));
+  } catch (error) {
+    redirectGameError(error, "/game/inventory");
+  }
+  redirect("/game/inventory");
+}
+
+export async function consumeItemAction(formData: FormData) {
+  try {
+    await consumeItem(prisma, await characterId(), String(formData.get("itemId")));
+  } catch (error) {
+    redirectGameError(error, "/game/inventory");
+  }
+  redirect("/game/inventory");
+}
+
+export async function markNotificationReadAction(formData: FormData) {
+  const cid = await characterId();
+  const id = String(formData.get("id") ?? "");
+  await prisma.notification.updateMany({ where: { id, characterId: cid, readAt: null }, data: { readAt: new Date() } });
+  redirect("/game/mail");
 }

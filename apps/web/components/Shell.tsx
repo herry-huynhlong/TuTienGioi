@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   ChevronRight,
   Compass,
+  Dumbbell,
   Gavel,
   Hammer,
   Home,
@@ -27,11 +28,15 @@ import {
   type LucideIcon
 } from "lucide-react";
 
+type FeatureStatus = "implemented" | "partial" | "coming_soon" | "disabled";
+
 type NavLink = {
   href: string;
   label: string;
   icon: LucideIcon;
+  status: FeatureStatus;
   featureKey?: keyof FeatureUnlocks;
+  adminOnly?: boolean;
 };
 
 type NavGroup = {
@@ -45,51 +50,47 @@ const navGroups: NavGroup[] = [
   {
     title: "Tổng quan",
     links: [
-      { href: "/game", label: "Tổng Quan", icon: Home }
+      { href: "/game", label: "Tổng Quan", icon: Home, status: "implemented" },
+      { href: "/game/character", label: "Nhân Vật", icon: User, status: "implemented", featureKey: "character" },
+      { href: "/game/world", label: "Thế Giới", icon: Mountain, status: "implemented", featureKey: "world" },
+      { href: "/game/leaderboard", label: "Xếp Hạng", icon: Trophy, status: "implemented" }
     ]
   },
   {
-    title: "Nhân vật",
+    title: "Tu luyện",
     links: [
-      { href: "/game/character", label: "Nhân Vật", icon: User, featureKey: "character" },
-      { href: "/game", label: "Tu Luyện", icon: Compass, featureKey: "cultivation" },
-      { href: "/game/character", label: "Công Pháp", icon: BookOpen, featureKey: "character" },
-      { href: "/game/character", label: "Túi Đồ", icon: Backpack, featureKey: "character" }
-    ]
-  },
-  {
-    title: "Thế giới",
-    links: [
-      { href: "/game/world", label: "Thế Giới", icon: Mountain, featureKey: "world" },
-      { href: "/game/location", label: "Lịch Luyện", icon: Compass, featureKey: "exploration" },
-      { href: "/game/bestiary", label: "Yêu Thú Đồ Giám", icon: Swords, featureKey: "bestiary" },
-      { href: "/game/world", label: "Bí Cảnh", icon: Map, featureKey: "secretRealm" }
+      { href: "/game", label: "Tu Luyện", icon: Compass, status: "implemented", featureKey: "cultivation" },
+      { href: "/game/training", label: "Rèn Luyện", icon: Dumbbell, status: "coming_soon", featureKey: "character" },
+      { href: "/game/location", label: "Lịch Luyện", icon: Mountain, status: "partial", featureKey: "exploration" },
+      { href: "/game/inventory", label: "Túi Đồ", icon: Backpack, status: "partial", featureKey: "character" },
+      { href: "/game/techniques", label: "Công Pháp", icon: BookOpen, status: "partial", featureKey: "character" },
+      { href: "/game/bestiary", label: "Đồ Giám", icon: Swords, status: "partial", featureKey: "bestiary" }
     ]
   },
   {
     title: "Kinh tế",
     links: [
-      { href: "/game/market", label: "Chợ", icon: ShoppingBag, featureKey: "market" },
-      { href: "/game/market", label: "Đấu Giá", icon: Gavel, featureKey: "auction" },
-      { href: "/game/market", label: "Nghề Nghiệp", icon: BriefcaseBusiness, featureKey: "profession" }
+      { href: "/game/market", label: "Chợ", icon: ShoppingBag, status: "partial", featureKey: "market" },
+      { href: "/game/auction", label: "Đấu Giá", icon: Gavel, status: "coming_soon", featureKey: "auction" },
+      { href: "/game/profession", label: "Nghề Nghiệp", icon: BriefcaseBusiness, status: "partial", featureKey: "profession" }
     ]
   },
   {
-    title: "Cộng đồng",
+    title: "Xã hội",
     links: [
-      { href: "/game/sect", label: "Tông Môn", icon: Shield, featureKey: "sect" },
-      { href: "/game/sect", label: "Bạn Bè", icon: Users },
-      { href: "/game/sect", label: "Tin Nhắn", icon: Mail },
-      { href: "/game/sect", label: "Chat", icon: MessageSquare }
+      { href: "/game/sect", label: "Tông Môn", icon: Shield, status: "partial", featureKey: "sect" },
+      { href: "/game/friends", label: "Bạn Bè", icon: Users, status: "coming_soon" },
+      { href: "/game/mail", label: "Thư", icon: Mail, status: "partial" },
+      { href: "/game/chat", label: "Chat", icon: MessageSquare, status: "coming_soon" }
     ]
   },
   {
-    title: "Thành tựu",
+    title: "Nội dung",
     links: [
-      { href: "/game/leaderboard", label: "Xếp Hạng", icon: Trophy },
-      { href: "/game", label: "Thiên Cơ Các", icon: ScrollText },
-      { href: "/admin", label: "Admin", icon: Landmark },
-      { href: "/game", label: "Cài Đặt", icon: Settings }
+      { href: "/game/secret-realm", label: "Bí Cảnh", icon: Map, status: "coming_soon", featureKey: "secretRealm" },
+      { href: "/game/heavenly", label: "Thiên Cơ Các", icon: ScrollText, status: "coming_soon" },
+      { href: "/game/settings", label: "Cài Đặt", icon: Settings, status: "coming_soon" },
+      { href: "/admin", label: "Admin", icon: Landmark, status: "implemented", adminOnly: true }
     ]
   }
 ] satisfies NavGroup[];
@@ -118,8 +119,15 @@ type ShellCharacter = {
 export function Shell({ children, user, character, featureUnlocks }: { children: React.ReactNode; user: { username: string; role: string }; character: ShellCharacter; featureUnlocks: FeatureUnlocks | null }) {
   const energy = character ? currentEnergy(character) : 0;
   const cultivationProgress = character ? Number(character.cultivation % 1000n) / 10 : 0;
-  const isUnlocked = (link: NavLink) => !link.featureKey || featureUnlocks?.[link.featureKey]?.unlocked !== false;
-  const mobileNav = navGroups.flatMap((group) => group.links).filter(isUnlocked).slice(0, 5);
+  const isClickable = (link: NavLink) => (link.status === "implemented" || link.status === "partial") && (!link.adminOnly || user.role === "ADMIN") && (!link.featureKey || featureUnlocks?.[link.featureKey]?.unlocked !== false);
+  const statusText = (link: NavLink) => {
+    if (link.adminOnly && user.role !== "ADMIN") return "Admin";
+    if (link.status === "coming_soon") return "Sau";
+    if (link.status === "disabled") return "Khóa";
+    if (link.status === "partial") return "Một phần";
+    return "";
+  };
+  const mobileNav = navGroups.flatMap((group) => group.links).filter(isClickable).slice(0, 5);
   return (
     <div className="game-frame min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
       <aside className="game-sidebar hidden lg:block">
@@ -170,9 +178,9 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
               <div className="space-y-1">
                 {group.links.map((link) => {
                   const { href, label, icon: Icon } = link;
-                  const unlocked = isUnlocked(link);
-                  const reason = link.featureKey ? featureUnlocks?.[link.featureKey]?.reason : "";
-                  return unlocked ? (
+                  const clickable = isClickable(link);
+                  const reason = link.featureKey && featureUnlocks?.[link.featureKey]?.unlocked === false ? featureUnlocks[link.featureKey]?.reason : statusText(link);
+                  return clickable ? (
                     <Link key={label} href={href} className="nav-row">
                       <Icon size={15} />
                       <span>{label}</span>
@@ -182,7 +190,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
                     <div key={label} className="nav-row nav-row-disabled" title={reason}>
                       <Lock size={14} />
                       <span>{label}</span>
-                      <small>{reason}</small>
+                      <small>{reason || "Chưa mở"}</small>
                     </div>
                   );
                 })}

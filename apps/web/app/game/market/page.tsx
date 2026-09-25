@@ -1,6 +1,10 @@
 import { ItemCategory, prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { buyMarketListingAction } from "@/lib/forms";
+import { formatItemCategory, formatRarity } from "@/lib/format";
 import { recordOnboardingEvent } from "@ttg/game";
+import Link from "next/link";
+import { ActionAlert } from "@/components/ActionAlert";
 
 const categories = [
   ["", "Tất cả"],
@@ -11,7 +15,7 @@ const categories = [
   [ItemCategory.QUEST, "Nhiệm vụ"]
 ];
 
-export default async function MarketPage({ searchParams }: { searchParams?: Promise<{ q?: string; category?: string }> }) {
+export default async function MarketPage({ searchParams }: { searchParams?: Promise<{ q?: string; category?: string; error?: string }> }) {
   const user = await getUser();
   const params = await searchParams;
   const q = params?.q?.trim() ?? "";
@@ -40,6 +44,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         <h1 className="mt-1 text-3xl font-black">Chợ</h1>
         <p className="muted mt-2">Tra cứu vật phẩm đang bán, so giá và chuẩn bị tài nguyên cho tu luyện.</p>
       </header>
+      <ActionAlert message={params?.error} />
 
       <section className="panel rounded-lg p-5">
         <form className="market-toolbar">
@@ -52,6 +57,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
           <span className="muted">{listings.length} vật phẩm đang khớp bộ lọc</span>
           <span className="text-gold">Linh thạch: {character?.linhThach.toString() ?? "0"}</span>
+          <Link href="/game/inventory" className="btn btn-secondary min-h-0 px-3 py-2 text-xs">Rao bán từ Túi Đồ</Link>
         </div>
       </section>
 
@@ -59,20 +65,30 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         {listings.length > 0 ? (
           <table className="market-table">
             <thead>
-              <tr><th>Vật phẩm</th><th>Loại</th><th>Người bán</th><th>SL</th><th>Giá</th><th>Hết hạn</th></tr>
+              <tr><th>Vật phẩm</th><th>Loại</th><th>Người bán</th><th>SL</th><th>Giá</th><th>Hết hạn</th><th></th></tr>
             </thead>
             <tbody>
               {listings.map((l) => (
                 <tr key={l.id}>
                   <td>
                     <b>{l.item.template.name}</b>
-                    <small>{l.item.template.rarity} · +{l.item.enhancement}</small>
+                    <small>{formatRarity(l.item.template.rarity)} · +{l.item.enhancement}</small>
                   </td>
-                  <td>{l.item.template.category}</td>
+                  <td>{formatItemCategory(l.item.template.category)}</td>
                   <td>{l.seller.name}</td>
                   <td>{l.quantity}</td>
                   <td className="text-gold">{l.price.toString()}</td>
                   <td>{l.expiresAt.toLocaleString("vi-VN")}</td>
+                  <td>
+                    {character?.id === l.sellerId ? (
+                      <span className="badge">Của bạn</span>
+                    ) : (
+                      <form action={buyMarketListingAction}>
+                        <input type="hidden" name="listingId" value={l.id} />
+                        <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled={!character || character.linhThach < l.price}>Mua</button>
+                      </form>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

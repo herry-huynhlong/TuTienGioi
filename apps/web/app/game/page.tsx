@@ -1,13 +1,15 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { breakthroughAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
-import { calculateCultivationReward, getOnboardingState } from "@ttg/game";
+import { calculateCultivationReward, currentEnergy, getOnboardingState } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
+import { ActionAlert } from "@/components/ActionAlert";
 
 const cultivationOptions = [10, 30, 60, 240, 480];
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
+  const params = await searchParams;
   const user = await getUser();
   const c = await prisma.character.findUniqueOrThrow({
     where: { userId: user!.id },
@@ -35,6 +37,7 @@ export default async function Dashboard() {
   const nextRequirement = next?.requiredCultivation ?? c.realmStage.requiredCultivation;
   const progress = next ? Number((c.cultivation * 100n) / next.requiredCultivation) : 100;
   const canBreakthrough = Boolean(next && c.cultivation >= next.requiredCultivation);
+  const energy = currentEnergy(c);
   const locationName = c.currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
   const regionName = c.currentLocation?.zone.region?.name ?? "Chưa rõ địa vực";
   const activeCount = c.cultivationJobs.length + c.explorations.length + c.travels.length;
@@ -53,6 +56,7 @@ export default async function Dashboard() {
           {regionName} · {c.sect?.name ?? "Tán tu"}
         </div>
       </header>
+      <ActionAlert message={params?.error} />
 
       <section className="dashboard-grid">
         <Panel title="Dẫn Đạo" className="lg:col-span-2">
@@ -96,7 +100,7 @@ export default async function Dashboard() {
               <ScrollText size={17} aria-hidden />
             </Link>
             <Link href="/game/world" className="activity-row">
-              <span><b>Kiểm tra địa điểm</b><small>{locationName} · {regionName}</small></span>
+              <span><b>Xem bản đồ</b><small>{locationName} · {regionName}</small></span>
               <MapPin size={17} aria-hidden />
             </Link>
             <Link href="/game/character" className="activity-row">
@@ -121,11 +125,13 @@ export default async function Dashboard() {
           <div className="mt-4 grid gap-2 sm:grid-cols-5">
             {cultivationOptions.map((m) => {
               const reward = calculateCultivationReward(BigInt(m * 10), c.spiritualRoot.multiplierBps);
+              const cost = Math.max(1, Math.ceil(m / 30));
+              const disabled = activeCount > 0 || energy < cost;
               return (
                 <form key={m} action={cultivateAction}>
                   <input type="hidden" name="minutes" value={m} />
-                  <button className="btn btn-secondary w-full" title={`Dự kiến +${reward.toString()} tu vi`}>
-                    {m >= 60 ? `${m / 60}h` : `${m}p`}
+                  <button className="btn btn-secondary w-full" disabled={disabled} title={`Dự kiến +${reward.toString()} tu vi · tốn ${cost} thể lực`}>
+                    {disabled ? "Không thể" : m >= 60 ? `${m / 60}h` : `${m}p`}
                   </button>
                 </form>
               );
@@ -151,13 +157,13 @@ export default async function Dashboard() {
             {c.explorations.map((job) => (
               <div key={job.id} className="activity-row">
                 <span><b>Lịch luyện</b><small>Kết thúc {job.endsAt.toLocaleString("vi-VN")}</small></span>
-                <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
+                <Link href="/game/location" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
               </div>
             ))}
             {c.travels.map((travel) => (
               <div key={travel.id} className="activity-row">
                 <span><b>Di chuyển</b><small>{travel.route.origin.name} -&gt; {travel.route.destination.name}</small></span>
-                <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Hoàn tất</Link>
+                <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
               </div>
             ))}
             {activeCount === 0 ? <p className="muted">Không có hoạt động nào đang chạy.</p> : null}
@@ -188,8 +194,8 @@ export default async function Dashboard() {
         <Panel title="Lối tắt">
           <div className="quick-links">
             <Link href="/game/world">Thế giới</Link>
-            <Link href="/game/market">Chợ</Link>
-            <Link href="/game/sect">Tông môn</Link>
+            <Link href="/game/location">Địa điểm</Link>
+            <Link href="/game/character">Nhân vật</Link>
             <Link href="/game/leaderboard">Xếp hạng</Link>
           </div>
         </Panel>

@@ -1,8 +1,10 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { claimExploreAction, exploreAction } from "@/lib/forms";
-import { explorationEnergyCost, recordOnboardingEvent } from "@ttg/game";
+import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
+import { currentEnergy, explorationEnergyCost, recordOnboardingEvent } from "@ttg/game";
 import Link from "next/link";
+import { ActionAlert } from "@/components/ActionAlert";
 
 const exploreOptions = [
   { minutes: 10, risk: "Thấp", reward: "Dấu vết nhỏ" },
@@ -27,12 +29,15 @@ const activityLabels: Record<string, string> = {
   forging: "Luyện khí"
 };
 
-export default async function LocationPage() {
+export default async function LocationPage({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
+  const params = await searchParams;
   const user = await getUser();
   const c = await prisma.character.findUniqueOrThrow({
     where: { userId: user!.id },
     include: {
       explorations: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
+      cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
+      travels: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
       currentLocation: { include: { zone: { include: { region: true } } } },
       location: true
     }
@@ -41,6 +46,8 @@ export default async function LocationPage() {
   const location = c.currentLocation;
   const services = location?.services ?? [];
   const canExplore = services.includes("explore") || services.includes("pve");
+  const hasActiveActivity = c.explorations.length + c.cultivationJobs.length + c.travels.length > 0;
+  const energy = currentEnergy(c);
   const logs = await prisma.gameLog.findMany({
     where: { characterId: c.id, type: { in: ["exploration", "encounter"] } },
     take: 6,
@@ -57,6 +64,7 @@ export default async function LocationPage() {
         </div>
         <Link href="/game/world" className="btn btn-secondary">Xem Thế Giới</Link>
       </header>
+      <ActionAlert message={params?.error} />
 
       <section className="location-hero">
         <div>
@@ -65,9 +73,9 @@ export default async function LocationPage() {
           <p className="muted mt-2">{location?.description ?? "Chưa có mô tả địa điểm."}</p>
         </div>
         <div className="location-meta">
-          <span><b>Loại</b>{location?.kind ?? "Không rõ"}</span>
-          <span><b>An ninh</b>{location?.securityLevel ?? "Không rõ"}</span>
-          <span><b>Hoạt động</b>{services.length ? services.map((service) => activityLabels[service] ?? service).join(", ") : "Chưa mở"}</span>
+          <span><b>Loại</b>{location ? formatLocationKind(location.kind) : "Không rõ"}</span>
+          <span><b>An ninh</b>{location ? formatSecurity(location.securityLevel) : "Không rõ"}</span>
+          <span><b>Hoạt động</b>{services.length ? services.map((service) => activityLabels[service] ?? formatService(service)).join(", ") : "Chưa mở"}</span>
           <span><b>Yêu thú</b>{canExplore ? "Có thể gặp qua hoạt động" : "Không xuất hiện trong khu này"}</span>
         </div>
       </section>
@@ -77,15 +85,7 @@ export default async function LocationPage() {
           {canExplore ? (
             <div className="action-grid">
               {exploreOptions.map((option) => (
-                <form key={option.minutes} action={exploreAction} className="action-card">
-                  <input type="hidden" name="minutes" value={option.minutes} />
-                  <div>
-                    <b>{option.minutes} phút</b>
-                    <small>Tốn {explorationEnergyCost(option.minutes)} thể lực · Nguy hiểm {option.risk}</small>
-                  </div>
-                  <p className="muted text-sm">{option.reward}. Yêu thú chỉ xuất hiện nếu hoạt động tạo encounter.</p>
-                  <button className="btn btn-secondary w-full">Khám phá</button>
-                </form>
+                <ExploreForm key={option.minutes} option={option} disabled={hasActiveActivity || energy < explorationEnergyCost(option.minutes)} reason={hasActiveActivity ? "Đang có hoạt động" : energy < explorationEnergyCost(option.minutes) ? "Thiếu thể lực" : "Khám phá"} />
               ))}
             </div>
           ) : (
@@ -120,6 +120,21 @@ export default async function LocationPage() {
         </Panel>
       </section>
     </div>
+  );
+}
+
+function ExploreForm({ option, disabled, reason }: { option: { minutes: number; risk: string; reward: string }; disabled: boolean; reason: string }) {
+  const cost = explorationEnergyCost(option.minutes);
+  return (
+    <form action={exploreAction} className="action-card">
+      <input type="hidden" name="minutes" value={option.minutes} />
+      <div>
+        <b>{option.minutes} phút</b>
+        <small>Tốn {cost} thể lực · Nguy hiểm {option.risk}</small>
+      </div>
+      <p className="muted text-sm">{option.reward}. Yêu thú chỉ xuất hiện nếu hoạt động tạo encounter.</p>
+      <button className="btn btn-secondary w-full" disabled={disabled}>{reason}</button>
+    </form>
   );
 }
 

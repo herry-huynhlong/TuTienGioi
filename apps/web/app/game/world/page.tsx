@@ -5,6 +5,30 @@ import { formatLocationKind, formatSecurity, formatService } from "@/lib/format"
 import { getFeatureUnlockState, recordOnboardingEvent } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
+import {
+  Anchor,
+  Castle,
+  CircleDot,
+  Compass,
+  DoorOpen,
+  Gem,
+  HelpCircle,
+  Home,
+  Landmark,
+  Leaf,
+  Lock,
+  MapPin,
+  Mountain,
+  Pickaxe,
+  Route,
+  ScrollText,
+  Shield,
+  ShoppingBag,
+  Swords,
+  Trees,
+  Waves,
+  type LucideIcon
+} from "lucide-react";
 
 type DiscoveryState = "current" | "reachable" | "known_unreachable" | "locked" | "unknown";
 type QuickFeatureKey = "character" | "market" | "bestiary" | "sect";
@@ -37,22 +61,41 @@ const locationOrder: Record<string, number> = {
   "hac-phong-coc": 80
 };
 
-const locationGlyph: Record<string, string> = {
-  district: "◎",
-  market: "◇",
-  gate: "◇",
-  road: "·",
-  wilds: "●",
-  forest: "●",
-  mountain: "▲",
-  river: "~",
-  valley: "◇",
-  sect_land: "△",
-  harbor: "◇",
-  resource: "◆",
-  outpost: "◇",
-  ruin: "□",
-  city_hub: "◎"
+const locationIcons: Record<string, LucideIcon> = {
+  district: Home,
+  market: ShoppingBag,
+  gate: DoorOpen,
+  road: Route,
+  wilds: Compass,
+  forest: Trees,
+  mountain: Mountain,
+  river: Waves,
+  valley: Mountain,
+  sect_land: Shield,
+  harbor: Anchor,
+  resource: Pickaxe,
+  outpost: Castle,
+  ruin: Landmark,
+  city_hub: Landmark
+};
+
+const serviceIcons: Record<string, LucideIcon> = {
+  market: ShoppingBag,
+  auction: Gem,
+  npc_shop: ShoppingBag,
+  inn: Home,
+  mail: ScrollText,
+  travel: Route,
+  caravan: Route,
+  explore: Compass,
+  pve: Swords,
+  resource: Leaf,
+  encounter: CircleDot,
+  formation: Shield,
+  secret: Landmark,
+  forging: Pickaxe,
+  contract: ScrollText,
+  event: CircleDot
 };
 
 const quickLinks: QuickLink[] = [
@@ -79,7 +122,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
       realmStage: { include: { realm: true } }
     }
   });
-  const [worlds, featureUnlocks] = await Promise.all([
+  const [worlds, featureUnlocks, itemTemplates, monsters] = await Promise.all([
     prisma.world.findMany({
       orderBy: { createdAt: "asc" },
       include: {
@@ -102,7 +145,9 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
         }
       }
     }),
-    getFeatureUnlockState(prisma, c.id)
+    getFeatureUnlockState(prisma, c.id),
+    prisma.itemTemplate.findMany({ select: { key: true, name: true } }),
+    prisma.monster.findMany({ select: { key: true, name: true } })
   ]);
   await recordOnboardingEvent(prisma, c.id, "VIEW_WORLD");
 
@@ -133,6 +178,8 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
   const selectedRoute = selectedLocation ? routeByDestinationId.get(selectedLocation.id) : null;
   const currentLocationName = c.currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
   const travelBlockedByActivity = c.cultivationJobs.length + c.explorations.length + c.travels.length > 0;
+  const itemNames = new Map(itemTemplates.map((item) => [item.key, item.name]));
+  const monsterNames = new Map(monsters.map((monster) => [monster.key, monster.name]));
 
   return (
     <div className="world-directory-page p-5 lg:p-8">
@@ -215,6 +262,8 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
                   realmName={`${c.realmStage.realm.name} ${c.realmStage.name}`}
                   isLocked={Boolean(selectedRoute && selectedRoute.minimumRealmOrder > currentRealmOrder)}
                   activityLocked={travelBlockedByActivity}
+                  itemNames={itemNames}
+                  monsterNames={monsterNames}
                 />
               ) : (
                 <div className="empty-state"><b>Chưa chọn địa điểm.</b><p>Chọn một địa điểm đã biết trong danh sách để xem chi tiết.</p></div>
@@ -250,29 +299,32 @@ function LocationRow({
   state
 }: {
   activeRegionKey: string;
-  location: { key: string; name: string; kind: string };
+  location: { key: string; name: string; kind: string; services: string[] };
   selected: boolean;
   state: DiscoveryState;
 }) {
   if (state === "unknown") {
     return (
       <div className="directory-location-row directory-location-unknown" title="Bạn chưa biết nơi này.">
-        <span className="directory-location-icon">?</span>
+        <span className="directory-location-icon"><HelpCircle size={15} aria-hidden /></span>
         <span className="directory-location-name">???</span>
       </div>
     );
   }
 
-  const glyph = state === "locked" ? "◇" : state === "current" ? "◎" : locationGlyph[location.kind] ?? "◇";
+  const Icon = state === "locked" ? Lock : state === "current" ? MapPin : locationIcons[location.kind] ?? MapPin;
   return (
     <Link
       href={`/game/world?region=${activeRegionKey}&location=${location.key}`}
       className={`directory-location-row directory-location-${state} ${selected ? "selected" : ""}`}
     >
-      <span className="directory-location-icon">{glyph}</span>
-      <span className="directory-location-name">{location.name}</span>
-      {state === "current" ? <small>Hiện tại</small> : null}
-      {state === "locked" ? <small>Khóa</small> : null}
+      <span className="directory-location-icon"><Icon size={15} aria-hidden /></span>
+      <span className="directory-location-name">
+        {location.name}
+        <small>{formatLocationKind(location.kind)}{location.services.length ? ` · ${location.services.slice(0, 2).map(formatService).join(", ")}` : ""}</small>
+      </span>
+      {state === "current" ? <small className="directory-location-status">Hiện tại</small> : null}
+      {state === "locked" ? <small className="directory-location-status">Khóa</small> : null}
     </Link>
   );
 }
@@ -305,7 +357,9 @@ function LocationDetail({
   route,
   realmName,
   isLocked,
-  activityLocked
+  activityLocked,
+  itemNames,
+  monsterNames
 }: {
   currentLocationId: string | null;
   location: {
@@ -315,18 +369,30 @@ function LocationDetail({
     kind: string;
     securityLevel: string;
     services: string[];
-    zone: { name: string; dangerLevel: number };
+    encounterTable: unknown;
+    zone: { name: string; dangerLevel: number; description: string; resourceTable: unknown; monsterTable: unknown };
+    routesFrom: Array<{ id: string; name: string; travelMinutes: number; travelCost: bigint; dangerLevel: number; destination: { name: string } }>;
   };
   route?: { id: string; travelMinutes: number; travelCost: bigint; dangerLevel: number; ambushAllowed: boolean; minimumRealmOrder: number } | null;
   realmName: string;
   isLocked: boolean;
   activityLocked: boolean;
+  itemNames: Map<string, string>;
+  monsterNames: Map<string, string>;
 }) {
   const isCurrent = location.id === currentLocationId;
+  const LocationIcon = locationIcons[location.kind] ?? MapPin;
+  const resources = parseWeightedTable(location.zone.resourceTable).map((entry) => ({ ...entry, label: itemNames.get(entry.key) ?? entry.key }));
+  const monsters = parseWeightedTable(location.zone.monsterTable).map((entry) => ({ ...entry, label: monsterNames.get(entry.key) ?? entry.key }));
+  const encounters = parseWeightedTable(location.encounterTable);
+  const opportunities = describeOpportunities(location.services, Boolean(route?.ambushAllowed));
   return (
     <div>
       <p className="text-xs font-bold uppercase text-jade">Chi tiết địa điểm</p>
-      <h2>{location.name}</h2>
+      <div className="location-detail-heading">
+        <span><LocationIcon size={22} aria-hidden /></span>
+        <h2>{location.name}</h2>
+      </div>
       <p className="muted mt-2">{location.description}</p>
       <div className="info-table mt-4">
         <div><span>Khu vực</span><b>{location.zone.name}</b></div>
@@ -336,6 +402,55 @@ function LocationDetail({
         <div><span>Cảnh giới đề nghị</span><b>{realmName}</b></div>
         <div><span>An ninh</span><b>{formatSecurity(location.securityLevel)}</b></div>
         <div><span>Dịch vụ</span><b>{location.services.map(formatService).join(" · ") || "Chưa rõ"}</b></div>
+      </div>
+
+      <div className="world-detail-section">
+        <h3>Ở đây có gì</h3>
+        <div className="world-service-grid">
+          {location.services.map((service) => {
+            const Icon = serviceIcons[service] ?? CircleDot;
+            return (
+              <span key={service}>
+                <Icon size={14} aria-hidden />
+                {formatService(service)}
+              </span>
+            );
+          })}
+          {location.services.length === 0 ? <span><HelpCircle size={14} aria-hidden />Chưa có dịch vụ</span> : null}
+        </div>
+      </div>
+
+      <div className="world-detail-section">
+        <h3>Thiên tài địa bảo</h3>
+        <WeightedList items={resources} empty="Chưa ghi nhận tài nguyên ổn định tại khu vực này." />
+      </div>
+
+      <div className="world-detail-section">
+        <h3>Yêu thú / biến cố</h3>
+        <WeightedList items={monsters.length ? monsters : encounters.map((entry) => ({ ...entry, label: formatEncounter(entry.key) }))} empty="Khu vực này tương đối yên ổn." />
+      </div>
+
+      <div className="world-detail-section">
+        <h3>Gợi ý hoạt động</h3>
+        <div className="world-hint-list">
+          {opportunities.map((item) => <p key={item}>{item}</p>)}
+        </div>
+      </div>
+
+      <div className="world-detail-section">
+        <h3>Tuyến từ đây</h3>
+        {location.routesFrom.length > 0 ? (
+          <div className="world-route-list">
+            {location.routesFrom.slice(0, 5).map((outgoing) => (
+              <div key={outgoing.id}>
+                <b>{outgoing.destination.name}</b>
+                <small>{outgoing.travelMinutes} phút · {outgoing.travelCost.toString()} linh thạch · nguy hiểm {outgoing.dangerLevel}</small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted text-sm">Chưa có tuyến xuất phát trực tiếp từ địa điểm này.</p>
+        )}
       </div>
 
       {isCurrent ? (
@@ -351,4 +466,53 @@ function LocationDetail({
       )}
     </div>
   );
+}
+
+function parseWeightedTable(value: unknown): Array<{ key: string; weight: number }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const key = "key" in entry ? entry.key : undefined;
+    const weight = "weight" in entry ? entry.weight : undefined;
+    if (typeof key !== "string") return [];
+    return [{ key, weight: typeof weight === "number" ? weight : 0 }];
+  });
+}
+
+function WeightedList({ items, empty }: { items: Array<{ key: string; label: string; weight: number }>; empty: string }) {
+  if (items.length === 0) return <p className="muted text-sm">{empty}</p>;
+  const total = items.reduce((sum, item) => sum + Math.max(0, item.weight), 0);
+  return (
+    <div className="world-chip-list">
+      {items.slice(0, 6).map((item) => (
+        <span key={item.key}>
+          {item.label}
+          {total > 0 ? <small>{Math.round((Math.max(0, item.weight) / total) * 100)}%</small> : null}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function describeOpportunities(services: string[], routeHasAmbush: boolean) {
+  const hints: string[] = [];
+  if (services.includes("travel")) hints.push("Có thể dùng làm điểm trung chuyển để mở tuyến đường mới.");
+  if (services.includes("caravan")) hints.push("Có tiêu cục hoặc đoàn lữ hành, phù hợp chuẩn bị trước khi ra ngoại vực.");
+  if (services.includes("market")) hints.push("Có giao dịch vật phẩm, nên kiểm tra chợ trước khi lịch luyện dài.");
+  if (services.includes("explore")) hints.push("Có thể lịch luyện để nhận tài nguyên hoặc cơ duyên.");
+  if (services.includes("pve")) hints.push("Có khả năng gặp yêu thú qua hoạt động thật, không khiêu chiến trực tiếp từ bản đồ.");
+  if (services.includes("resource")) hints.push("Có thiên tài địa bảo trong bảng tài nguyên của khu vực.");
+  if (services.includes("formation")) hints.push("Có dấu vết trận pháp, phù hợp các nội dung công pháp/trận pháp sau này.");
+  if (routeHasAmbush) hints.push("Tuyến tới đây có thể phát sinh biến cố trên đường.");
+  return hints.length ? hints : ["Địa điểm này chủ yếu dùng để định vị và mở đường đi tiếp."];
+}
+
+function formatEncounter(key: string) {
+  return ({
+    "safe-passage": "Đường bình an",
+    "resource-cache": "Dấu tài nguyên",
+    "wandering-monster": "Yêu thú lang thang",
+    traveler: "Tu sĩ lữ hành",
+    "rare-omen": "Điềm lạ"
+  } as Record<string, string>)[key] ?? key;
 }

@@ -982,13 +982,13 @@ select.field option {
 
 .directory-location-row {
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr) auto;
+  grid-template-columns: 1.55rem minmax(0, 1fr) auto;
   align-items: center;
-  min-height: 2.35rem;
+  min-height: 3rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.14);
   color: rgba(244, 239, 227, 0.78);
-  padding: 0.35rem 0.55rem;
+  padding: 0.45rem 0.6rem;
 }
 
 .directory-location-row:hover,
@@ -999,22 +999,30 @@ select.field option {
 }
 
 .directory-location-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #aef4eb;
   font-weight: 900;
 }
 
 .directory-location-name {
+  display: grid;
+  gap: 0.12rem;
   overflow: hidden;
   font-size: 0.84rem;
   font-weight: 800;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.directory-location-row small {
+.directory-location-name small,
+.directory-location-status {
   color: rgba(244, 239, 227, 0.52);
   font-size: 0.68rem;
   font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .directory-location-current {
@@ -1080,9 +1088,110 @@ select.field option {
   padding: 1rem;
 }
 
+.location-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.location-detail-heading span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  background: rgba(45, 212, 191, 0.08);
+  color: #aef4eb;
+}
+
 .location-detail-panel h2,
 .travel-status h2 {
   color: #d6b25e;
   font-size: 1.25rem;
   font-weight: 900;
+}
+
+.world-detail-section {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.world-detail-section h3 {
+  color: #d6b25e;
+  font-size: 0.86rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.world-service-grid,
+.world-chip-list,
+.world-route-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.world-service-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.world-service-grid span,
+.world-chip-list span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(244, 239, 227, 0.78);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.38rem 0.5rem;
+}
+
+.world-service-grid span {
+  justify-content: flex-start;
+}
+
+.world-service-grid svg {
+  color: #8debe2;
+  flex: none;
+}
+
+.world-chip-list small {
+  color: rgba(244, 239, 227, 0.46);
+  font-size: 0.68rem;
+}
+
+.world-route-list div {
+  display: grid;
+  gap: 0.12rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.16);
+  padding: 0.5rem 0.6rem;
+}
+
+.world-route-list b {
+  color: #f4efe3;
+  font-size: 0.82rem;
+}
+
+.world-route-list small {
+  color: rgba(244, 239, 227, 0.55);
+  font-size: 0.72rem;
+}
+
+.world-hint-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.world-hint-list p {
+  border-left: 2px solid rgba(45, 212, 191, 0.35);
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding-left: 0.55rem;
 }

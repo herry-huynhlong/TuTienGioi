@@ -19,6 +19,13 @@ export function calculateCultivationReward(baseReward: bigint, multiplierBps: nu
   return (baseReward * BigInt(multiplierBps)) / 10000n;
 }
 
+export function explorationEnergyCost(minutes: number): number {
+  if (minutes === 10) return 2;
+  if (minutes === 30) return 5;
+  if (minutes === 60) return 8;
+  return Math.max(1, Math.ceil(minutes / 10));
+}
+
 export function calculateCharacterStats(
   character: Pick<Character, "body" | "attack" | "defense" | "speed">,
   stage: Pick<RealmStage, "baseHp" | "baseQi" | "baseAttack" | "baseDefense" | "baseSpeed">,

@@ -1,9 +1,11 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { breakthroughAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
-import { currentEnergy, getOnboardingState } from "@ttg/game";
+import { calculateCultivationReward, getOnboardingState } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
+
+const cultivationOptions = [10, 30, 60, 240, 480];
 
 export default async function Dashboard() {
   const user = await getUser();
@@ -30,16 +32,18 @@ export default async function Dashboard() {
     }),
     getOnboardingState(prisma, c.id)
   ]);
-  const energy = currentEnergy(c);
   const nextRequirement = next?.requiredCultivation ?? c.realmStage.requiredCultivation;
   const progress = next ? Number((c.cultivation * 100n) / next.requiredCultivation) : 100;
+  const canBreakthrough = Boolean(next && c.cultivation >= next.requiredCultivation);
   const locationName = c.currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
   const regionName = c.currentLocation?.zone.region?.name ?? "Chưa rõ địa vực";
+  const activeCount = c.cultivationJobs.length + c.explorations.length + c.travels.length;
+
   return (
     <div className="dashboard-page p-4 lg:p-6">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-xs uppercase tracking-[.2em] text-jade">Bảng điều khiển</p>
+          <p className="text-xs uppercase text-jade">Tu Tiên Giới</p>
           <h1 className="mt-1 text-3xl font-black text-paper">{c.name}</h1>
           <p className="muted mt-1 text-sm">/@{user!.username} · {c.title}</p>
         </div>
@@ -74,6 +78,17 @@ export default async function Dashboard() {
           </div>
         </Panel>
 
+        <Panel title="Hiện Trạng" className="lg:col-span-2">
+          <div className="info-table">
+            <Info label="Cảnh giới" value={`${c.realmStage.realm.name} ${c.realmStage.name}`} />
+            <Info label="Linh căn" value={`${c.spiritualRoot.name} · ${Math.round(c.spiritualRoot.multiplierBps / 100)}%`} />
+            <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
+            <Info label="Hoạt động" value={activeCount > 0 ? `${activeCount} việc đang chạy` : "Đang rảnh"} accent={activeCount > 0} />
+            <Info label="Vị trí" value={locationName} />
+            <Info label="Linh thạch" value={c.linhThach.toString()} accent />
+          </div>
+        </Panel>
+
         <Panel title="Việc nên làm tiếp" className="lg:col-span-2">
           <div className="activity-list">
             <Link href={onboarding.nextObjective.href} className="activity-row">
@@ -81,43 +96,19 @@ export default async function Dashboard() {
               <ScrollText size={17} aria-hidden />
             </Link>
             <Link href="/game/world" className="activity-row">
-              <span><b>Kiểm tra vị trí</b><small>{locationName} · {regionName}</small></span>
+              <span><b>Kiểm tra địa điểm</b><small>{locationName} · {regionName}</small></span>
               <MapPin size={17} aria-hidden />
             </Link>
-          </div>
-        </Panel>
-
-        <Panel title="Tổng quan" className="lg:col-span-2">
-          <div className="info-table">
-            <Info label="Tên" value={c.name} />
-            <Info label="Cảnh giới" value={`${c.realmStage.realm.name} ${c.realmStage.name}`} />
-            <Info label="Linh căn" value={c.spiritualRoot.name} />
-            <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
-            <Info label="Vị trí" value={locationName} />
-            <Info label="Linh thạch" value={c.linhThach.toString()} accent />
-          </div>
-        </Panel>
-
-        <Panel title="Sinh mệnh">
-          <div className="compact-bars">
-            <MiniBar label="HP" value={c.hp} max={c.maxHp} tone="life" />
-            <MiniBar label="Chân nguyên" value={c.qi} max={c.maxQi} tone="qi" />
-            <MiniBar label="Thể lực" value={energy} max={c.energyMax} tone="energy" />
-          </div>
-        </Panel>
-
-        <Panel title="Chiến lực">
-          <div className="info-table">
-            <Info label="Công kích" value={c.attack.toString()} />
-            <Info label="Phòng ngự" value={c.defense.toString()} />
-            <Info label="Tốc độ" value={c.speed.toString()} />
-            <Info label="Khí vận" value={c.luck.toString()} />
+            <Link href="/game/character" className="activity-row">
+              <span><b>Xem nhân vật</b><small>Công pháp, thiên phú, trang bị và túi đồ</small></span>
+              <Compass size={17} aria-hidden />
+            </Link>
           </div>
         </Panel>
 
         <Panel title="Tu luyện" className="lg:col-span-2">
           <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-            <span className="muted">Tiến độ tới mốc kế tiếp</span>
+            <span className="muted">Tiến độ tới {next?.name ?? "cực hạn hiện tại"}</span>
             <b className="text-gold">{Math.min(100, progress)}%</b>
           </div>
           <div className="resource-track h-3">
@@ -128,15 +119,22 @@ export default async function Dashboard() {
             <span>{next ? `${nextRequirement.toString()} cần thiết` : "Đã tới giới hạn hiện tại"}</span>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-5">
-            {[10, 30, 60, 240, 480].map((m) => (
-              <form key={m} action={cultivateAction}>
-                <input type="hidden" name="minutes" value={m} />
-                <button className="btn btn-secondary w-full">{m >= 60 ? `${m / 60}h` : `${m}p`}</button>
-              </form>
-            ))}
+            {cultivationOptions.map((m) => {
+              const reward = calculateCultivationReward(BigInt(m * 10), c.spiritualRoot.multiplierBps);
+              return (
+                <form key={m} action={cultivateAction}>
+                  <input type="hidden" name="minutes" value={m} />
+                  <button className="btn btn-secondary w-full" title={`Dự kiến +${reward.toString()} tu vi`}>
+                    {m >= 60 ? `${m / 60}h` : `${m}p`}
+                  </button>
+                </form>
+              );
+            })}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
-            <form action={breakthroughAction}><button className="btn">Đột phá</button></form>
+            <form action={breakthroughAction}>
+              <button className="btn" disabled={!canBreakthrough}>{canBreakthrough ? "Đột phá" : "Chưa đủ tu vi"}</button>
+            </form>
             <Link href="/game/character" className="btn btn-secondary">Nhân vật</Link>
           </div>
         </Panel>
@@ -152,17 +150,17 @@ export default async function Dashboard() {
             ))}
             {c.explorations.map((job) => (
               <div key={job.id} className="activity-row">
-                <span><b>Thám hiểm</b><small>Kết thúc {job.endsAt.toLocaleString("vi-VN")}</small></span>
+                <span><b>Lịch luyện</b><small>Kết thúc {job.endsAt.toLocaleString("vi-VN")}</small></span>
                 <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
               </div>
             ))}
             {c.travels.map((travel) => (
               <div key={travel.id} className="activity-row">
-                <span><b>Di chuyển</b><small>{travel.route.origin.name} → {travel.route.destination.name}</small></span>
+                <span><b>Di chuyển</b><small>{travel.route.origin.name} -&gt; {travel.route.destination.name}</small></span>
                 <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Hoàn tất</Link>
               </div>
             ))}
-            {c.cultivationJobs.length + c.explorations.length + c.travels.length === 0 ? <p className="muted">Không có hoạt động nào đang chạy.</p> : null}
+            {activeCount === 0 ? <p className="muted">Không có hoạt động nào đang chạy.</p> : null}
           </div>
         </Panel>
 
@@ -214,18 +212,6 @@ function Info({ label, value, accent = false }: { label: string; value: string; 
     <div>
       <span>{label}</span>
       <b className={accent ? "text-gold" : ""}>{value}</b>
-    </div>
-  );
-}
-
-function MiniBar({ label, value, max, tone }: { label: string; value: number; max: number; tone: "life" | "qi" | "energy" }) {
-  const percent = max > 0 ? Math.max(0, Math.min(100, Math.round((value / max) * 100))) : 0;
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-xs text-paper/70"><span>{label}</span><b>{value}/{max}</b></div>
-      <div className="resource-track">
-        <div className={`resource-fill resource-${tone}`} style={{ width: `${percent}%` }} />
-      </div>
     </div>
   );
 }

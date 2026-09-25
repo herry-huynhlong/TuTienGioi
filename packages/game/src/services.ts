@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus } from "@ttg/db";
-import { calculateCultivationReward, currentEnergy, parseEncounterTable, simulateCombat } from "./rules.js";
+import { calculateCultivationReward, currentEnergy, explorationEnergyCost, parseEncounterTable, simulateCombat } from "./rules.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
 
@@ -108,12 +108,20 @@ export async function attemptBreakthrough(db: Db, characterId: string, rng = Mat
 
 export async function startExploration(db: Db, characterId: string, minutes: number, now = new Date()) {
   if (![10, 30, 60].includes(minutes)) throw new GameError("BAD_DURATION", "Thời gian thám hiểm không hợp lệ.");
-  const character = await db.character.findUniqueOrThrow({ where: { id: characterId } });
-  if (!character.locationId) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm.");
-  const zoneId = character.locationId;
+  const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { currentLocation: true } });
+  const services = character.currentLocation?.services ?? [];
+  if (!services.includes("explore") && !services.includes("pve")) {
+    throw new GameError("LOCATION_NOT_EXPLOREABLE", "Địa điểm hiện tại không phù hợp để lịch luyện.");
+  }
+  const zoneId = character.currentLocation?.zoneId ?? character.locationId;
+  if (!zoneId) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm.");
   const active = await db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
   if (active) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang thám hiểm.");
+  const energy = currentEnergy(character, now);
+  const cost = explorationEnergyCost(minutes);
+  if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
   return db.$transaction(async (tx) => {
+    await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
     const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + minutes * 60_000) } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_STARTED");
     return activity;

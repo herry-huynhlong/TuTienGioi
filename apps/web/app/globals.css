@@ -52,6 +52,11 @@ button, input, select, textarea {
   border-color: rgba(45, 212, 191, 0.28);
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .muted {
   color: rgba(244, 239, 227, 0.68);
 }
@@ -393,4 +398,194 @@ button, input, select, textarea {
 .objective-row svg {
   color: #d6b25e;
   flex: none;
+}
+
+.location-hero {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(90deg, rgba(45, 212, 191, 0.09), transparent 45%),
+    linear-gradient(180deg, #252923, #171a18);
+  padding: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .location-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.7fr);
+  }
+}
+
+.location-hero h2 {
+  color: #f4efe3;
+  font-size: clamp(1.55rem, 2vw, 2.15rem);
+  font-weight: 900;
+}
+
+.location-meta,
+.action-grid,
+.route-grid,
+.equipment-grid,
+.item-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.location-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.location-meta span,
+.action-card,
+.route-card,
+.equipment-slot,
+.item-card,
+.stat-card,
+.empty-state {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.location-meta span {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem;
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.78rem;
+}
+
+.location-meta b {
+  color: #d6b25e;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+@media (min-width: 768px) {
+  .action-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .route-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .equipment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .item-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.action-card,
+.route-card,
+.equipment-slot,
+.item-card,
+.stat-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.route-card {
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .route-card {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+}
+
+.action-card b,
+.route-card b,
+.equipment-slot b,
+.item-card b,
+.stat-card b,
+.empty-state b {
+  color: #f4efe3;
+  font-weight: 900;
+}
+
+.action-card small,
+.route-card small,
+.equipment-slot small,
+.item-card span,
+.stat-card span {
+  color: rgba(244, 239, 227, 0.56);
+  font-size: 0.76rem;
+}
+
+.meta-row {
+  display: grid;
+  gap: 0.25rem;
+  color: rgba(244, 239, 227, 0.66);
+  font-size: 0.8rem;
+}
+
+.badge {
+  border: 1px solid rgba(214, 178, 94, 0.28);
+  background: rgba(214, 178, 94, 0.08);
+  color: #d6b25e;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.empty-state {
+  padding: 1rem;
+}
+
+.empty-state p,
+.item-card p,
+.stat-card p {
+  color: rgba(244, 239, 227, 0.68);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.market-toolbar {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 768px) {
+  .market-toolbar {
+    grid-template-columns: minmax(0, 1fr) 14rem auto;
+  }
+}
+
+select.field option {
+  background: #1f231f;
+  color: #f4efe3;
+}
+
+.market-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.market-table th {
+  color: #d6b25e;
+  font-weight: 900;
+  text-align: left;
+}
+
+.market-table th,
+.market-table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.7rem;
+}
+
+.market-table td:first-child {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.market-table small {
+  color: rgba(244, 239, 227, 0.52);
 }

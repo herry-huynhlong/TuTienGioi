@@ -62,6 +62,10 @@ const regions = [
 
 const locations = [
   ["thanh-van-dong-thanh", "Thanh Vân Đông Thành", "thanh-van-thanh", "district", "Khu dân cư và phường hội đông đúc.", "HIGH", ["market", "inn", "mail"]],
+  ["thanh-truc-lam", "Thanh Trúc Lâm", "hac-son", "forest", "Rừng trúc phía bắc Đông Thành, linh khí mỏng nhưng thường có dấu vết yêu thú cấp thấp.", "LOW", ["explore", "pve", "resource", "encounter"]],
+  ["thanh-van-son", "Thanh Vân Sơn", "thanh-linh-son-mach", "mountain", "Dãy núi nhìn xuống Thanh Vân Vực, thích hợp tìm linh dược và luyện thân.", "MEDIUM", ["explore", "pve", "resource"]],
+  ["linh-khe", "Linh Khê", "thanh-van-thanh", "river", "Dòng suối linh khí chảy qua rìa thành, an toàn hơn ngoại vực nhưng vẫn có cơ duyên nhỏ.", "MEDIUM", ["explore", "resource", "encounter"]],
+  ["hac-phong-coc", "Hắc Phong Cốc", "hac-son", "valley", "Sơn cốc âm phong nặng, chỉ tu sĩ đã vững căn cơ mới nên tiến vào.", "LOW", ["explore", "pve", "event"]],
   ["cho-linh-bao", "Chợ Linh Bảo", "thanh-van-thanh", "market", "Nơi thương nhân và tu sĩ giao dịch vật phẩm phổ thông.", "HIGH", ["market", "auction", "npc_shop"]],
   ["bac-mon", "Bắc Môn", "thanh-van-thanh", "gate", "Cửa bắc dẫn ra quan đạo, nhiều tiêu cục tụ tập.", "MEDIUM", ["travel", "caravan"]],
   ["thanh-van-quan-dao", "Thanh Vân Quan Đạo", "hac-son", "road", "Tuyến đường chính giữa thành và Hắc Sơn.", "LOW", ["travel", "encounter"]],
@@ -76,6 +80,14 @@ const locations = [
 ] as const;
 
 const routes = [
+  ["dong-thanh-to-thanh-truc-lam", "Thanh Vân Đông Thành → Thanh Trúc Lâm", "thanh-van-dong-thanh", "thanh-truc-lam", 5, 0, 1, "MEDIUM", false, true],
+  ["thanh-truc-lam-to-dong-thanh", "Thanh Trúc Lâm → Thanh Vân Đông Thành", "thanh-truc-lam", "thanh-van-dong-thanh", 5, 0, 1, "MEDIUM", false, true],
+  ["thanh-truc-lam-to-thanh-van-son", "Thanh Trúc Lâm → Thanh Vân Sơn", "thanh-truc-lam", "thanh-van-son", 8, 20, 2, "LOW", true, true],
+  ["thanh-van-son-to-thanh-truc-lam", "Thanh Vân Sơn → Thanh Trúc Lâm", "thanh-van-son", "thanh-truc-lam", 8, 20, 2, "LOW", true, true],
+  ["thanh-truc-lam-to-linh-khe", "Thanh Trúc Lâm → Linh Khê", "thanh-truc-lam", "linh-khe", 6, 0, 1, "MEDIUM", false, true],
+  ["linh-khe-to-thanh-truc-lam", "Linh Khê → Thanh Trúc Lâm", "linh-khe", "thanh-truc-lam", 6, 0, 1, "MEDIUM", false, true],
+  ["thanh-van-son-to-hac-phong-coc", "Thanh Vân Sơn → Hắc Phong Cốc", "thanh-van-son", "hac-phong-coc", 12, 45, 4, "LOW", true, false],
+  ["hac-phong-coc-to-thanh-van-son", "Hắc Phong Cốc → Thanh Vân Sơn", "hac-phong-coc", "thanh-van-son", 12, 45, 4, "LOW", true, false],
   ["bac-mon-to-quan-dao", "Bắc Môn → Thanh Vân Quan Đạo", "bac-mon", "thanh-van-quan-dao", 8, 30, 2, "MEDIUM", false, true],
   ["quan-dao-to-hac-son", "Thanh Vân Quan Đạo → Chân Núi Hắc Sơn", "thanh-van-quan-dao", "hac-son-chan-nui", 12, 45, 4, "LOW", true, true],
   ["dong-thanh-to-cho", "Đông Thành → Chợ Linh Bảo", "thanh-van-dong-thanh", "cho-linh-bao", 3, 0, 0, "HIGH", false, false],

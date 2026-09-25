@@ -1,239 +1,226 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
-import { claimExploreAction, claimTravelAction, exploreAction, startTravelAction } from "@/lib/forms";
-import { explorationEnergyCost, recordOnboardingEvent } from "@ttg/game";
+import { claimTravelAction, startTravelAction } from "@/lib/forms";
+import { recordOnboardingEvent } from "@ttg/game";
 import Link from "next/link";
 
-const exploreOptions = [
-  { minutes: 10, risk: "Thấp", reward: "Tài nguyên nhỏ", encounter: "Hiếm" },
-  { minutes: 30, risk: "Vừa", reward: "Tài nguyên khá", encounter: "Có thể" },
-  { minutes: 60, risk: "Cao", reward: "Tài nguyên tốt", encounter: "Dễ gặp" }
-];
+type MapPoint = { x: number; y: number; icon: string; hint?: string };
 
-export default async function WorldPage() {
+const mapPoints: Record<string, MapPoint> = {
+  "thanh-van-dong-thanh": { x: 50, y: 72, icon: "◎", hint: "Thành thị" },
+  "thanh-truc-lam": { x: 50, y: 50, icon: "●", hint: "Rừng" },
+  "thanh-van-son": { x: 50, y: 25, icon: "▲", hint: "Núi" },
+  "linh-khe": { x: 50, y: 90, icon: "◆", hint: "Suối" },
+  "hac-phong-coc": { x: 25, y: 45, icon: "◇", hint: "Cốc" },
+  "cho-linh-bao": { x: 70, y: 74, icon: "◆", hint: "Chợ" },
+  "bac-mon": { x: 50, y: 62, icon: "◇", hint: "Cổng" },
+  "thanh-van-quan-dao": { x: 50, y: 44, icon: "●", hint: "Quan đạo" },
+  "hac-son-chan-nui": { x: 37, y: 32, icon: "▲", hint: "Ngoại vực" },
+  "thanh-linh-son-mon": { x: 58, y: 18, icon: "▲", hint: "Sơn môn" }
+};
+
+function fallbackPoint(index: number): MapPoint {
+  const ring = index % 10;
+  return { x: 18 + (ring % 5) * 16, y: 24 + Math.floor(ring / 5) * 34, icon: "●" };
+}
+
+export default async function WorldPage({ searchParams }: { searchParams?: Promise<{ region?: string; location?: string }> }) {
+  const params = await searchParams;
   const user = await getUser();
   const c = await prisma.character.findUniqueOrThrow({
     where: { userId: user!.id },
     include: {
-      explorations: { where: { status: "ACTIVE" } },
       travels: { where: { status: "ACTIVE" }, include: { route: { include: { origin: true, destination: true } } }, orderBy: { endsAt: "desc" } },
       location: true,
-      currentLocation: { include: { zone: { include: { region: true } } } }
+      currentLocation: { include: { zone: { include: { region: true } } } },
+      realmStage: { include: { realm: true } }
     }
   });
-  const [worlds, activityLogs] = await Promise.all([
-    prisma.world.findMany({
-      orderBy: { createdAt: "asc" },
-      include: {
-        regions: {
-          orderBy: { order: "asc" },
-          include: {
-            zones: {
-              orderBy: { dangerLevel: "asc" },
-              include: {
-                locations: {
-                  where: { active: true },
-                  orderBy: { name: "asc" },
-                  include: { routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } } }
+  const worlds = await prisma.world.findMany({
+    orderBy: { createdAt: "asc" },
+    include: {
+      regions: {
+        orderBy: { order: "asc" },
+        include: {
+          zones: {
+            orderBy: { dangerLevel: "asc" },
+            include: {
+              locations: {
+                where: { active: true },
+                orderBy: { name: "asc" },
+                include: {
+                  routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } }
                 }
               }
             }
           }
         }
       }
-    }),
-    prisma.gameLog.findMany({ where: { characterId: c.id, type: { in: ["travel", "exploration", "encounter"] } }, take: 6, orderBy: { createdAt: "desc" } })
-  ]);
+    }
+  });
   await recordOnboardingEvent(prisma, c.id, "VIEW_WORLD");
-  const currentLocation = c.currentLocation;
-  const currentServices = currentLocation?.services ?? [];
-  const canExplore = currentServices.includes("explore") || currentServices.includes("pve");
-  const currentLocationNode = worlds
-    .flatMap((world) => world.regions)
-    .flatMap((region) => region.zones)
-    .flatMap((zone) => zone.locations)
-    .find((location) => location.id === c.currentLocationId);
-  const currentRoutes = currentLocationNode?.routesFrom ?? [];
-  const locationName = currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
-  const regionName = currentLocation?.zone.region?.name ?? "Chưa rõ địa vực";
-  const zoneName = currentLocation?.zone.name ?? c.location?.name ?? "Chưa rõ khu vực";
+
+  const regions = worlds.flatMap((world) => world.regions.map((region) => ({ ...region, worldName: world.name })));
+  const currentRegionKey = c.currentLocation?.zone.region?.key;
+  const activeRegion = regions.find((region) => region.key === params?.region) ?? regions.find((region) => region.key === currentRegionKey) ?? regions[0];
+  const locations = activeRegion?.zones.flatMap((zone) => zone.locations.map((location) => ({ ...location, zone }))) ?? [];
+  const currentRoutes = locations.find((location) => location.id === c.currentLocationId)?.routesFrom ?? [];
+  const availableDestinationIds = new Set(currentRoutes.map((route) => route.destinationId));
+  const selectedLocation =
+    locations.find((location) => location.key === params?.location) ??
+    locations.find((location) => location.id === c.currentLocationId) ??
+    locations[0];
+  const selectedRoute = currentRoutes.find((route) => route.destinationId === selectedLocation?.id);
+  const currentLocationName = c.currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
+
   return (
-    <div className="world-page p-5 lg:p-8">
-      <header className="mb-5 border-b border-white/10 pb-4">
-        <p className="text-xs font-bold uppercase text-jade">World loop</p>
-        <h1 className="mt-1 text-3xl font-black">Thế Giới</h1>
-        <p className="muted mt-2 max-w-3xl">
-          Mỗi địa điểm có việc làm riêng. Ở trong thành thì giao dịch, nhận tin, chuẩn bị hành trang; ra ngoại vực mới có lịch luyện, biến cố và dấu vết yêu thú.
-        </p>
+    <div className="world-map-page p-5 lg:p-8">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
+        <div>
+          <p className="text-xs font-bold uppercase text-jade">World map</p>
+          <h1 className="mt-1 text-3xl font-black">Thế Giới</h1>
+          <p className="muted mt-2 max-w-3xl">Bản đồ chỉ trả lời: bạn đang ở đâu và có thể đi đâu. Hoạt động như khám phá, săn yêu, thu thập nằm trong trang địa điểm.</p>
+        </div>
+        <Link href="/game/location" className="btn btn-secondary">Địa điểm hiện tại</Link>
       </header>
 
-      <section className="location-hero">
-        <div>
-          <p className="text-xs font-bold uppercase text-jade">Vị trí hiện tại</p>
-          <h2>{locationName}</h2>
-          <p className="muted mt-2">{currentLocation?.description ?? "Chưa có mô tả địa điểm."}</p>
-        </div>
-        <div className="location-meta">
-          <span><b>Địa vực</b>{regionName}</span>
-          <span><b>Khu vực</b>{zoneName}</span>
-          <span><b>An ninh</b>{currentLocation?.securityLevel ?? "Không rõ"}</span>
-          <span><b>Dịch vụ</b>{currentServices.length ? currentServices.join(", ") : "Chưa rõ"}</span>
-        </div>
-      </section>
-
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
-        <Panel title="Việc có thể làm tại đây">
-          {canExplore ? (
-            <div className="action-grid">
-              {exploreOptions.map((option) => (
-                <form key={option.minutes} action={exploreAction} className="action-card">
-                  <input type="hidden" name="minutes" value={option.minutes} />
-                  <div>
-                    <b>Lịch luyện {option.minutes} phút</b>
-                    <small>Tốn {explorationEnergyCost(option.minutes)} thể lực · Rủi ro {option.risk}</small>
-                  </div>
-                  <div className="meta-row">
-                    <span>Thưởng: {option.reward}</span>
-                    <span>Gặp yêu thú: {option.encounter}</span>
-                  </div>
-                  <button className="btn btn-secondary w-full">Bắt đầu</button>
-                </form>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <b>{locationName} là khu an toàn.</b>
-              <p>Không thể tùy ý săn yêu thú hoặc thám hiểm trong khu này. Hãy đi tới cổng thành, quan đạo hoặc ngoại vực để mở lịch luyện.</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link href="/game/market" className="btn btn-secondary">Giao dịch ở chợ</Link>
-                <Link href="/game" className="btn">Về tổng quan</Link>
-              </div>
-            </div>
-          )}
-
-          {c.explorations.length > 0 ? (
-            <div className="mt-4 grid gap-3">
-              {c.explorations.map((e) => (
-                <form key={e.id} action={claimExploreAction} className="activity-row">
-                  <input type="hidden" name="id" value={e.id} />
-                  <span><b>Đang lịch luyện</b><small>Kết thúc {e.endsAt.toLocaleString("vi-VN")}</small></span>
-                  <button className="btn min-h-0 px-3 py-1 text-xs">Nhận</button>
-                </form>
-              ))}
-            </div>
-          ) : null}
-        </Panel>
-
-        <Panel title="Biến cố gần đây">
-          <div className="event-list">
-            {activityLogs.map((log) => <p key={log.id}>{log.message}</p>)}
-            {activityLogs.length === 0 ? <p className="muted">Chưa có biến cố. Hãy di chuyển hoặc lịch luyện để mở nhật ký thế giới.</p> : null}
-          </div>
-          <div className="mt-5 rounded border border-white/10 bg-black/20 p-4">
-            <h3 className="font-bold text-gold">Yêu Thú Đồ Giám</h3>
-            <p className="muted mt-2 text-sm">Yêu thú được ghi nhận từ lịch luyện và biến cố trên đường, không phải danh sách đứng sẵn trong thành.</p>
-            <Link href="/game/bestiary" className="btn btn-secondary mt-3">Mở Đồ Giám</Link>
-          </div>
-        </Panel>
-      </section>
-
-      <Panel title="Tuyến đường từ vị trí hiện tại" className="mt-5">
-        {c.travels.length > 0 ? (
-          <div className="grid gap-3">
-            {c.travels.map((travel) => (
-              <form key={travel.id} action={claimTravelAction} className="route-card">
-                <input type="hidden" name="id" value={travel.id} />
-                <div>
-                  <b>{travel.route.origin.name} -&gt; {travel.route.destination.name}</b>
-                  <small>Tới lúc {travel.endsAt.toLocaleString("vi-VN")}</small>
-                </div>
-                <button className="btn">Hoàn tất</button>
-              </form>
-            ))}
-          </div>
-        ) : currentRoutes.length > 0 ? (
-          <div className="route-grid">
-            {currentRoutes.map((route) => (
-              <form key={route.id} action={startTravelAction} className="route-card">
-                <input type="hidden" name="routeId" value={route.id} />
-                <div>
-                  <b>{route.destination.name}</b>
-                  <small>{route.travelMinutes} phút · {route.travelCost.toString()} linh thạch · nguy hiểm {route.dangerLevel}</small>
-                </div>
-                <span className="badge">{route.ambushAllowed ? "Có phục kích" : "An toàn hơn"}</span>
-                <button className="btn btn-secondary">Đi</button>
-              </form>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <b>Không có tuyến đường trực tiếp.</b>
-            <p>Địa điểm này chưa mở đường đi tiếp. Kiểm tra bản đồ đã biết bên dưới hoặc quay lại khu vực có cổng dịch chuyển.</p>
-          </div>
-        )}
-      </Panel>
-
-      <section className="mt-6 space-y-5">
-        <h2 className="text-xl font-black text-gold">Bản đồ đã biết</h2>
-        {worlds.map((world) => (
-          <article key={world.id} className="panel rounded-lg p-5">
-            <h3 className="text-2xl font-bold text-gold">{world.name}</h3>
-            <p className="muted mt-2">{world.description}</p>
-            <div className="mt-5 grid gap-5">
-              {world.regions.map((region) => (
-                <section key={region.id} className="rounded-md border border-white/10 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-bold">{region.name}</h3>
-                      <p className="muted text-sm">{region.description}</p>
-                    </div>
-                    <span className="rounded border border-jade/25 px-2 py-1 text-xs text-jade">Luật vực: {region.lawLevel}</span>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {region.zones.map((zone) => (
-                      <div key={zone.id} className="rounded-md bg-white/5 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="font-bold">{zone.name}</h4>
-                          <span className="text-xs text-paper/65">Nguy hiểm {zone.dangerLevel}</span>
-                        </div>
-                        <p className="muted mt-2 text-sm">{zone.description}</p>
-                        <div className="mt-3 space-y-3">
-                          {zone.locations.map((location) => (
-                            <div key={location.id} className="rounded border border-white/10 p-3">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                  <p className="font-semibold">{location.name}</p>
-                                  <p className="muted text-xs">{location.kind} · an ninh {location.securityLevel}</p>
-                                </div>
-                                <p className="text-xs text-paper/65">{location.services.join(", ")}</p>
-                              </div>
-                              {location.routesFrom.length > 0 ? (
-                                <div className="mt-3 grid gap-2">
-                                  {location.routesFrom.map((route) => <p key={route.id} className="muted text-xs">{location.name} -&gt; {route.destination.name} · {route.travelMinutes}p · nguy hiểm {route.dangerLevel}</p>)}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          </article>
+      <div className="region-tabs">
+        {regions.map((region) => (
+          <Link key={region.id} href={`/game/world?region=${region.key}`} className={region.id === activeRegion?.id ? "active" : ""}>
+            {region.name}
+          </Link>
         ))}
-        {worlds.length === 0 ? <div className="panel rounded-lg p-6 muted">Chưa có dữ liệu world graph. Hãy chạy seed.</div> : null}
-      </section>
+      </div>
+
+      {activeRegion ? (
+        <section className="world-map-layout mt-5">
+          <div className="fantasy-map">
+            <div className="map-heading">
+              <div>
+                <p className="text-xs font-bold uppercase text-jade">{activeRegion.worldName}</p>
+                <h2>{activeRegion.name}</h2>
+              </div>
+              <span>Đang ở: {currentLocationName}</span>
+            </div>
+
+            <svg className="map-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+              {locations.flatMap((origin, originIndex) => {
+                const originPoint = mapPoints[origin.key] ?? fallbackPoint(originIndex);
+                return origin.routesFrom.flatMap((route) => {
+                  const destinationIndex = locations.findIndex((location) => location.id === route.destinationId);
+                  if (destinationIndex < 0) return [];
+                  const destination = locations[destinationIndex]!;
+                  const destinationPoint = mapPoints[destination.key] ?? fallbackPoint(destinationIndex);
+                  return <line key={route.id} x1={originPoint.x} y1={originPoint.y} x2={destinationPoint.x} y2={destinationPoint.y} />;
+                });
+              })}
+            </svg>
+
+            {locations.map((location, index) => {
+              const point = mapPoints[location.key] ?? fallbackPoint(index);
+              const state = getLocationState(location.id, location.key, c.currentLocationId, availableDestinationIds);
+              const href = `/game/world?region=${activeRegion.key}&location=${location.key}`;
+              return (
+                <Link
+                  key={location.id}
+                  href={href}
+                  className={`map-node map-node-${state} ${selectedLocation?.id === location.id ? "map-node-selected" : ""}`}
+                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                >
+                  <span className="map-node-icon">{state === "locked" ? "?" : point.icon}</span>
+                  <span className="map-node-label">{location.name}</span>
+                  <small>{state === "current" ? "Bạn đang ở đây" : state === "available" ? "Có thể đi tới" : state === "locked" ? "Chưa mở khóa" : point.hint ?? "Đã biết"}</small>
+                </Link>
+              );
+            })}
+          </div>
+
+          <aside className="map-detail">
+            {c.travels.length > 0 ? (
+              <div className="travel-status">
+                <h2>Đang di chuyển</h2>
+                {c.travels.map((travel) => (
+                  <form key={travel.id} action={claimTravelAction} className="route-card">
+                    <input type="hidden" name="id" value={travel.id} />
+                    <div>
+                      <b>{travel.route.origin.name} -&gt; {travel.route.destination.name}</b>
+                      <small>Còn tới {travel.endsAt.toLocaleString("vi-VN")}</small>
+                    </div>
+                    <button className="btn">Hoàn tất</button>
+                  </form>
+                ))}
+              </div>
+            ) : selectedLocation ? (
+              <LocationDetail
+                currentLocationId={c.currentLocationId}
+                location={selectedLocation}
+                route={selectedRoute ?? null}
+                realmName={`${c.realmStage.realm.name} ${c.realmStage.name}`}
+                isLocked={!selectedRoute && selectedLocation.id !== c.currentLocationId}
+              />
+            ) : null}
+          </aside>
+        </section>
+      ) : (
+        <div className="panel mt-5 rounded-lg p-6 muted">Chưa có dữ liệu bản đồ. Hãy chạy seed.</div>
+      )}
     </div>
   );
 }
 
-function Panel({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
+function getLocationState(locationId: string, locationKey: string, currentLocationId: string | null, availableDestinationIds: Set<string>) {
+  if (locationId === currentLocationId) return "current";
+  if (availableDestinationIds.has(locationId)) return "available";
+  if (locationKey === "hac-phong-coc") return "locked";
+  return "discovered";
+}
+
+function LocationDetail({
+  currentLocationId,
+  location,
+  route,
+  realmName,
+  isLocked
+}: {
+  currentLocationId: string | null;
+  location: {
+    id: string;
+    name: string;
+    description: string;
+    kind: string;
+    securityLevel: string;
+    services: string[];
+    zone: { name: string; dangerLevel: number };
+  };
+  route?: { id: string; travelMinutes: number; travelCost: bigint; dangerLevel: number; ambushAllowed: boolean } | null;
+  realmName: string;
+  isLocked: boolean;
+}) {
+  const isCurrent = location.id === currentLocationId;
   return (
-    <section className={`panel rounded-lg p-5 ${className}`}>
-      <h2 className="text-xl font-bold text-gold">{title}</h2>
-      <div className="mt-4">{children}</div>
-    </section>
+    <div>
+      <p className="text-xs font-bold uppercase text-jade">Location detail</p>
+      <h2>{location.name}</h2>
+      <p className="muted mt-2">{location.description}</p>
+      <div className="info-table mt-4">
+        <div><span>Khu vực</span><b>{location.zone.name}</b></div>
+        <div><span>Khoảng cách</span><b>{isCurrent ? "Đang đứng tại đây" : route ? `${route.travelMinutes} phút` : "Chưa có tuyến trực tiếp"}</b></div>
+        <div><span>Nguy hiểm</span><b>{route ? `Cấp ${route.dangerLevel}` : `Khu vực ${location.zone.dangerLevel}`}</b></div>
+        <div><span>Cảnh giới đề nghị</span><b>{realmName}</b></div>
+        <div><span>Đặc điểm</span><b>{location.kind} · {location.securityLevel}</b></div>
+      </div>
+
+      {isCurrent ? (
+        <Link href="/game/location" className="btn mt-4 w-full">Vào địa điểm</Link>
+      ) : route ? (
+        <form action={startTravelAction} className="mt-4">
+          <input type="hidden" name="routeId" value={route.id} />
+          <button className="btn w-full">Đi tới</button>
+          <p className="muted mt-2 text-sm">Chi phí {route.travelCost.toString()} linh thạch{route.ambushAllowed ? " · có thể gặp biến cố trên đường" : ""}.</p>
+        </form>
+      ) : (
+        <button className="btn mt-4 w-full" disabled>{isLocked ? "Chưa mở tuyến đường" : "Không thể đi"}</button>
+      )}
+    </div>
   );
 }

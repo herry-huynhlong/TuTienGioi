@@ -61,7 +61,7 @@ const navGroups: NavGroup[] = [
     title: "Thế giới",
     links: [
       { href: "/game/world", label: "Thế Giới", icon: Mountain, featureKey: "world" },
-      { href: "/game/world", label: "Lịch Luyện", icon: Compass, featureKey: "exploration" },
+      { href: "/game/location", label: "Lịch Luyện", icon: Compass, featureKey: "exploration" },
       { href: "/game/bestiary", label: "Yêu Thú Đồ Giám", icon: Swords, featureKey: "bestiary" },
       { href: "/game/world", label: "Bí Cảnh", icon: Map, featureKey: "secretRealm" }
     ]

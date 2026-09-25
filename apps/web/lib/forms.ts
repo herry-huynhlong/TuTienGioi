@@ -85,12 +85,12 @@ export async function breakthroughAction() {
 
 export async function exploreAction(formData: FormData) {
   await startExploration(prisma, await characterId(), Number(formData.get("minutes")));
-  redirect("/game/world");
+  redirect("/game/location");
 }
 
 export async function claimExploreAction(formData: FormData) {
   await claimExploration(prisma, await characterId(), String(formData.get("id")));
-  redirect("/game/world");
+  redirect("/game/location");
 }
 
 export async function startTravelAction(formData: FormData) {
@@ -100,12 +100,12 @@ export async function startTravelAction(formData: FormData) {
 
 export async function claimTravelAction(formData: FormData) {
   await claimTravel(prisma, await characterId(), String(formData.get("id")));
-  redirect("/game/world");
+  redirect("/game/location");
 }
 
 export async function fightAction(formData: FormData) {
   await fightMonster(prisma, await characterId(), String(formData.get("monster")));
-  redirect("/game/world");
+  redirect("/game/location");
 }
 
 export async function createSectAction(formData: FormData) {

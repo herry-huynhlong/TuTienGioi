@@ -12,6 +12,17 @@ export class GameError extends Error {
   }
 }
 
+type LocationActivityMode = "explore" | "hunt" | "gather";
+
+function parseJsonRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function activityModeFromReward(value: unknown): LocationActivityMode {
+  const mode = parseJsonRecord(value).mode;
+  return mode === "hunt" || mode === "gather" || mode === "explore" ? mode : "explore";
+}
+
 async function mutateWallet(tx: Tx, characterId: string, currency: Currency, amount: bigint, type: WalletTxType, referenceType?: string, referenceId?: string, idempotencyKey?: string) {
   if (amount === 0n) throw new GameError("INVALID_AMOUNT", "Số tiền không hợp lệ.");
   const existing = idempotencyKey ? await tx.walletTransaction.findUnique({ where: { characterId_currency_idempotencyKey: { characterId, currency, idempotencyKey } } }) : null;
@@ -149,13 +160,18 @@ export async function attemptBreakthrough(db: Db, characterId: string, rng = Mat
   });
 }
 
-export async function startExploration(db: Db, characterId: string, minutes: number, now = new Date()) {
-  if (![10, 30, 60].includes(minutes)) throw new GameError("BAD_DURATION", "Thời gian thám hiểm không hợp lệ.");
+export async function startExploration(db: Db, characterId: string, minutes: number, mode: LocationActivityMode = "explore", now = new Date()) {
+  const allowedDurations: Record<LocationActivityMode, number[]> = {
+    explore: [10, 30, 60],
+    hunt: [15, 30, 60],
+    gather: [10, 30, 60]
+  };
+  if (!allowedDurations[mode].includes(minutes)) throw new GameError("BAD_DURATION", "Thời gian hoạt động không hợp lệ.");
   const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { currentLocation: true } });
   const services = character.currentLocation?.services ?? [];
-  if (!services.includes("explore") && !services.includes("pve")) {
-    throw new GameError("LOCATION_NOT_EXPLOREABLE", "Địa điểm hiện tại không phù hợp để lịch luyện.");
-  }
+  if (mode === "explore" && !services.includes("explore")) throw new GameError("LOCATION_NOT_EXPLOREABLE", "Địa điểm hiện tại không phù hợp để khám phá.");
+  if (mode === "hunt" && !services.includes("pve")) throw new GameError("LOCATION_NOT_HUNTABLE", "Địa điểm hiện tại không phù hợp để săn yêu.");
+  if (mode === "gather" && !services.includes("resource")) throw new GameError("LOCATION_NOT_GATHERABLE", "Địa điểm hiện tại không có tài nguyên để thu thập.");
   const zoneId = character.currentLocation?.zoneId ?? character.locationId;
   if (!zoneId) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm.");
   const [activeExploration, activeCultivation, activeTravel] = await Promise.all([
@@ -171,7 +187,7 @@ export async function startExploration(db: Db, characterId: string, minutes: num
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
   return db.$transaction(async (tx) => {
     await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
-    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + minutes * 60_000) } });
+    const activity = await tx.explorationActivity.create({ data: { characterId, zoneId, endsAt: new Date(now.getTime() + minutes * 60_000), reward: { mode } } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_STARTED");
     return activity;
   });
@@ -183,25 +199,36 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy chuyến thám hiểm.");
     if (job.status === ActivityStatus.CLAIMED) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
     if (job.endsAt > now) throw new GameError("NOT_READY", "Chuyến thám hiểm chưa hoàn thành.");
-    const resources = [{ key: "linh-thao", weight: 55 }, { key: "hac-thiet-quang", weight: 30 }, { key: "yeu-dan", weight: 15 }, { key: "monster-sign", weight: 20 }];
-    const roll = pickWeighted(resources, seededRng(seedFromString(job.id)));
-    const isMonsterEncounter = roll.key === "monster-sign";
-    const template = isMonsterEncounter ? null : await tx.itemTemplate.findUniqueOrThrow({ where: { key: roll.key } });
+    const zone = await tx.zone.findUniqueOrThrow({ where: { id: job.zoneId } });
+    const mode = activityModeFromReward(job.reward);
+    const rng = seededRng(seedFromString(`${job.id}:${mode}`));
+    const resourceTable = parseEncounterTable(zone.resourceTable);
+    const monsterTable = parseEncounterTable(zone.monsterTable);
+    const roll = mode === "hunt" ? pickWeighted(monsterTable, rng) : pickWeighted(resourceTable, rng);
+    const template = mode === "hunt" ? null : await tx.itemTemplate.findUnique({ where: { key: roll.key } });
     const updated = await tx.explorationActivity.updateMany({
       where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
-      data: { status: ActivityStatus.CLAIMED, claimedAt: now, eventKey: isMonsterEncounter ? "monster-sign" : "found-resource", reward: isMonsterEncounter ? { encounter: "monster-sign" } : { item: roll.key, quantity: 1 } }
+      data: {
+        status: ActivityStatus.CLAIMED,
+        claimedAt: now,
+        eventKey: mode === "hunt" ? "hunt-found" : mode === "gather" ? "gather-resource" : "explore-result",
+        reward: mode === "hunt" ? { mode, monster: roll.key, pending: true } : { mode, item: roll.key, quantity: template ? 1 : 0 }
+      }
     });
     if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Phần thưởng đã được nhận.");
-    if (isMonsterEncounter) {
-      await tx.gameLog.create({ data: { characterId, type: "encounter", message: "Bạn phát hiện dấu vết yêu thú trong lúc lịch luyện.", metadata: { encounter: "monster-sign" } } });
+    if (mode === "hunt") {
+      const monster = await tx.monster.findUnique({ where: { key: roll.key } });
+      await tx.gameLog.create({ data: { characterId, type: "encounter", message: monster ? `Bạn phát hiện ${monster.name}. Hãy chuẩn bị trước khi giao chiến.` : "Bạn phát hiện dấu vết yêu thú nhưng nó đã lẩn mất.", metadata: { mode, monster: roll.key } } });
       await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
       await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
-      return { itemName: "Dấu vết yêu thú" };
+      return { itemName: monster?.name ?? "Dấu vết yêu thú" };
     }
-    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template!.id, quantity: 1 } });
-    await tx.gameLog.create({ data: { characterId, type: "exploration", message: `Thám hiểm nhận được ${template!.name}.` } });
+    if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
+    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
+    const verb = mode === "gather" ? "Thu thập" : "Khám phá";
+    await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
-    return { itemName: template!.name };
+    return { itemName: template.name };
   });
 }
 

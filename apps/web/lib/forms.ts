@@ -102,7 +102,9 @@ export async function breakthroughAction() {
 
 export async function exploreAction(formData: FormData) {
   try {
-    await startExploration(prisma, await characterId(), Number(formData.get("minutes")));
+    const rawMode = String(formData.get("mode") ?? "explore");
+    const mode = rawMode === "hunt" || rawMode === "gather" ? rawMode : "explore";
+    await startExploration(prisma, await characterId(), Number(formData.get("minutes")), mode);
   } catch (error) {
     redirectGameError(error, "/game/location");
   }

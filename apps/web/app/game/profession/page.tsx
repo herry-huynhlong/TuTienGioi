@@ -23,9 +23,9 @@ export default async function ProfessionPage() {
   const craftServices = services.filter((service) => ["forging", "formation", "resource"].includes(service));
 
   return (
-    <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Theo dõi luyện đan, luyện khí, chế phù, trận pháp và các nghề kinh tế đã có dữ liệu. Chế tạo chỉ mở khi backend xử lý nguyên liệu, phí, thời gian và nhận thành phẩm hoàn chỉnh.">
+    <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Theo dõi luyện đan, luyện khí, chế phù, trận pháp và các nghề kinh tế trong tu giới.">
       <FacilityTutorial title="Hướng dẫn Nghề Nghiệp">
-        Nghề nghiệp dùng công thức, nguyên liệu, phí và thời gian. Schema hiện đã có Profession, Recipe và CraftJob; service tạo/nhận craft job chưa có, nên trang chỉ hiển thị dữ liệu thật và khóa nút thao tác.
+        Nghề nghiệp dùng công thức, nguyên liệu, phí và thời gian. Hãy tìm đúng cơ sở để bắt đầu chế tạo.
       </FacilityTutorial>
 
       <section className="mt-4 grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
@@ -34,13 +34,13 @@ export default async function ProfessionPage() {
             <Hammer size={24} aria-hidden />
             <div>
               <h2>{c.currentLocation?.name ?? "Chưa rõ địa điểm"}</h2>
-              <p>{craftServices.length ? craftServices.map(formatService).join(", ") : "Địa điểm hiện tại chưa mở dịch vụ nghề nghiệp."}</p>
+              <p>{craftServices.length ? craftServices.map(formatService).join(", ") : "Địa điểm hiện tại không có lò nghề phù hợp."}</p>
             </div>
           </div>
           <div className="mt-4 info-table">
             <div><span>Linh thạch</span><b>{c.linhThach.toString()}</b></div>
             <div><span>Việc đang chế tạo</span><b>{c.craftJobs.length}</b></div>
-            <div><span>Trạng thái action</span><b>Chưa nối service</b></div>
+            <div><span>Trạng thái</span><b>Đang chuẩn bị</b></div>
           </div>
         </FacilityPanel>
 
@@ -60,7 +60,7 @@ export default async function ProfessionPage() {
           ) : (
             <div className="empty-state">
               <b>Không có việc chế tạo đang chạy.</b>
-              <p>Khi service chế tạo được nối, các job đang luyện đan/luyện khí sẽ xuất hiện ở đây.</p>
+              <p>Các lò luyện đang chạy sẽ xuất hiện ở đây.</p>
             </div>
           )}
         </FacilityPanel>
@@ -78,7 +78,7 @@ export default async function ProfessionPage() {
         </FacilityTierStrip>
       </FacilityPanel>
 
-      <FacilityPanel title="Công thức đã có dữ liệu" subtitle="Chưa mở nút chế tạo" className="mt-5">
+      <FacilityPanel title="Công thức đã biết" subtitle="Chọn lò luyện phù hợp" className="mt-5">
         <div className="facility-action-grid">
           {professions.flatMap((profession) =>
             profession.recipes.map((recipe) => (
@@ -88,14 +88,14 @@ export default async function ProfessionPage() {
                 meta={`${profession.name} · Cấp ${recipe.requiredLevel} · ${recipe.craftMinutes} phút · ${recipe.fee.toString()} linh thạch`}
                 description={`Tạo ${recipe.outputTemplate.name}. Nguyên liệu: ${formatIngredients(recipe.ingredients)}.`}
               >
-                <button className="btn btn-secondary w-full" disabled><Lock size={16} aria-hidden /> Chưa mở chế tạo</button>
+                <button className="btn btn-secondary w-full" disabled><Lock size={16} aria-hidden /> Chưa thể chế tạo</button>
               </FacilityActionCard>
             ))
           )}
           {professions.every((profession) => profession.recipes.length === 0) ? (
             <div className="empty-state">
               <b>Chưa có công thức.</b>
-              <p>Seed hiện tại chưa tạo công thức nghề nghiệp nào.</p>
+              <p>Hãy tìm sư phụ hoặc bí quyển nghề nghiệp để mở công thức mới.</p>
             </div>
           ) : null}
         </div>

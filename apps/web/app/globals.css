@@ -1256,3 +1256,171 @@ select.field option {
 .live-countdown-meta b {
   color: #f4efe3;
 }
+
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.tab-row a {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 0.55rem 0.75rem;
+}
+
+.tab-row a.active,
+.tab-row a:hover {
+  border-color: rgba(214, 178, 94, 0.45);
+  background: rgba(214, 178, 94, 0.14);
+  color: #f4efe3;
+}
+
+.equipment-slots,
+.market-sell-list,
+.item-stat-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.equipment-slot-row,
+.market-sell-list a,
+.item-stat-list span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.14);
+  color: rgba(244, 239, 227, 0.76);
+  min-height: 2.25rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.market-sell-list a.selected,
+.market-sell-list a:hover {
+  border-color: rgba(45, 212, 191, 0.34);
+  background: rgba(45, 212, 191, 0.08);
+  color: #f4efe3;
+}
+
+.inventory-grid,
+.market-card-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+
+.inventory-tile,
+.market-listing-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(244, 239, 227, 0.78);
+  min-height: 8.5rem;
+  padding: 0.8rem;
+}
+
+.inventory-tile.selected,
+.inventory-tile:hover {
+  border-color: rgba(214, 178, 94, 0.5);
+  background: rgba(214, 178, 94, 0.1);
+  color: #f4efe3;
+}
+
+.inventory-tile b,
+.market-listing-card b {
+  color: #f4efe3;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.inventory-tile small,
+.market-listing-card small,
+.market-sell-list small {
+  color: rgba(244, 239, 227, 0.55);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.inventory-tile em {
+  color: #d6b25e;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.item-icon {
+  align-items: center;
+  background: rgba(45, 212, 191, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  color: #aef4eb;
+  display: inline-flex;
+  height: 2.45rem;
+  justify-content: center;
+  width: 2.45rem;
+}
+
+.item-icon-large {
+  height: 3.2rem;
+  width: 3.2rem;
+}
+
+.item-detail,
+.sell-panel,
+.sell-mode-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.item-detail-head {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.item-detail-head h3,
+.sell-panel h2 {
+  color: #d6b25e;
+  font-size: 1.35rem;
+  font-weight: 950;
+}
+
+.sell-mode-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+@media (min-width: 920px) {
+  .sell-mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sell-mode-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 0.9rem;
+}
+
+.sell-mode-card h3 {
+  color: #d6b25e;
+  font-weight: 900;
+}
+
+.sell-mode-card label {
+  color: rgba(244, 239, 227, 0.72);
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.activity-row-stacked {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+}

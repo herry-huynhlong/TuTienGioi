@@ -1,5 +1,5 @@
 import { ComingSoonPage } from "@/components/ComingSoonPage";
 
 export default function ChatPage() {
-  return <ComingSoonPage title="Chat" description="Chat thời gian thực chưa có backend kênh và lưu lịch sử." />;
+  return <ComingSoonPage title="Chat" description="Kênh trò chuyện giữa các tu sĩ trong cùng thế giới." />;
 }

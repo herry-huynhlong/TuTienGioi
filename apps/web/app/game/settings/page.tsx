@@ -1,5 +1,5 @@
 import { ComingSoonPage } from "@/components/ComingSoonPage";
 
 export default function SettingsPage() {
-  return <ComingSoonPage title="Cài Đặt" description="Tùy chọn tài khoản và giao diện trong game chưa được triển khai." />;
+  return <ComingSoonPage title="Cài Đặt" description="Điều chỉnh tài khoản, giao diện và nhịp thông báo cá nhân." />;
 }

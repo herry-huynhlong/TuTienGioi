@@ -1,10 +1,11 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
-import { breakthroughAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
+import { breakthroughAction, cancelCultivationAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
 import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationEnergyCost, currentEnergy, getOnboardingState } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
+import { ActivityCountdown } from "@/components/ActivityCountdown";
 
 export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
   const params = await searchParams;
@@ -146,11 +147,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
         <Panel title="Hoạt động đang chạy" className="lg:col-span-2">
           <div className="activity-list">
             {c.cultivationJobs.map((job) => (
-              <form key={job.id} action={claimCultivationAction} className="activity-row">
-                <input type="hidden" name="id" value={job.id} />
-                <span><b>Bế quan</b><small>Kết thúc {job.endsAt.toLocaleString("vi-VN")}</small></span>
-                <button className="btn min-h-0 px-3 py-1 text-xs">Nhận</button>
-              </form>
+              <CultivationActivityRow key={job.id} job={job} multiplierBps={job.multiplierBps} />
             ))}
             {c.explorations.map((job) => (
               <div key={job.id} className="activity-row">
@@ -198,6 +195,33 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
           </div>
         </Panel>
       </section>
+    </div>
+  );
+}
+
+function CultivationActivityRow({ job, multiplierBps }: { job: { id: string; startedAt: Date; endsAt: Date; baseReward: bigint; multiplierBps: number }; multiplierBps: number }) {
+  const done = job.endsAt.getTime() <= Date.now();
+  const reward = calculateCultivationReward(job.baseReward, multiplierBps);
+  return (
+    <div className="activity-row activity-row-stacked">
+      <span>
+        <b>{done ? "Bế quan hoàn thành" : "Bế quan"}</b>
+        <small>{done ? `Hoàn thành lúc ${job.endsAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}` : `Dự kiến nhận +${reward.toString()} tu vi`}</small>
+      </span>
+      {!done ? <ActivityCountdown startedAt={job.startedAt.toISOString()} endsAt={job.endsAt.toISOString()} /> : <span className="text-gold text-sm font-bold">+{reward.toString()} tu vi</span>}
+      <div className="flex flex-wrap gap-2">
+        {done ? (
+          <form action={claimCultivationAction}>
+            <input type="hidden" name="id" value={job.id} />
+            <button className="btn min-h-0 px-3 py-1 text-xs">Kết thúc bế quan</button>
+          </form>
+        ) : (
+          <form action={cancelCultivationAction}>
+            <input type="hidden" name="id" value={job.id} />
+            <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Hủy bế quan</button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

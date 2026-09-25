@@ -264,12 +264,20 @@ async function main() {
     data: { currentLocationId: locationByKey.get("thanh-van-dong-thanh")! }
   });
 
+  const materialMeta: Record<string, { subType: string; icon: string; systemBasePrice: number; npcBuyPrice: number; usage: string }> = {
+    "linh-thao": { subType: "Linh dược", icon: "leaf", systemBasePrice: 20, npcBuyPrice: 14, usage: "Nguyên liệu luyện đan cơ bản." },
+    "hac-thiet-quang": { subType: "Khoáng vật", icon: "ore", systemBasePrice: 35, npcBuyPrice: 25, usage: "Nguyên liệu luyện khí và rèn trang bị." },
+    "yeu-dan": { subType: "Yêu thú", icon: "core", systemBasePrice: 60, npcBuyPrice: 42, usage: "Tinh hoa yêu thú, dùng trong luyện đan và giao dịch." },
+    "linh-moc": { subType: "Linh mộc", icon: "wood", systemBasePrice: 28, npcBuyPrice: 19, usage: "Vật liệu chế phù, trận pháp và luyện khí nhẹ." },
+    "thien-tinh-sa": { subType: "Tinh sa", icon: "ore", systemBasePrice: 45, npcBuyPrice: 32, usage: "Khoáng sa có linh tính, dùng để gia cố pháp khí." }
+  };
   for (const name of materials) {
     const key = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll(" ", "-").replaceAll("đ", "d");
+    const meta = materialMeta[key] ?? { subType: "Nguyên liệu", icon: "leaf", systemBasePrice: 25, npcBuyPrice: 17, usage: `${name} dùng trong luyện chế và giao thương.` };
     await prisma.itemTemplate.upsert({
       where: { key },
-      update: {},
-      create: { key, name, category: ItemCategory.MATERIAL, rarity: Rarity.HA, description: `${name} dùng trong luyện chế và giao thương.`, stackable: true, maxStack: 999, baseModifiers: {} }
+      update: { bindRules: { ...meta, sellableToNpc: true } },
+      create: { key, name, category: ItemCategory.MATERIAL, rarity: Rarity.HA, description: meta.usage, stackable: true, maxStack: 999, baseModifiers: {}, bindRules: { ...meta, sellableToNpc: true } }
     });
   }
 
@@ -281,10 +289,11 @@ async function main() {
     ["giay-than-hanh", "Giày Thần Hành", "BOOTS", { speed: 8 }]
   ] as const;
   for (const [key, name, slot, mods] of equipment) {
+    const systemBasePrice = 180 + Object.values(mods).reduce((sum, value) => sum + value * 5, 0);
     await prisma.itemTemplate.upsert({
       where: { key },
-      update: {},
-      create: { key, name, category: ItemCategory.EQUIPMENT, rarity: Rarity.TRUNG, description: `${name} có thể trang bị.`, equipSlot: slot as never, baseModifiers: mods, durability: undefined } as never
+      update: { bindRules: { subType: slot, icon: slot === "ARMOR" ? "armor" : slot === "BOOTS" ? "boots" : slot === "RING" ? "ring" : slot === "TALISMAN" ? "talisman" : "sword", systemBasePrice, npcBuyPrice: Math.floor(systemBasePrice * 0.7), sellableToNpc: true, usage: `${name} có thể trang bị để tăng chỉ số.` } },
+      create: { key, name, category: ItemCategory.EQUIPMENT, rarity: Rarity.TRUNG, description: `${name} có thể trang bị.`, equipSlot: slot as never, baseModifiers: mods, durability: undefined, bindRules: { subType: slot, icon: slot === "ARMOR" ? "armor" : slot === "BOOTS" ? "boots" : slot === "RING" ? "ring" : slot === "TALISMAN" ? "talisman" : "sword", systemBasePrice, npcBuyPrice: Math.floor(systemBasePrice * 0.7), sellableToNpc: true, usage: `${name} có thể trang bị để tăng chỉ số.` } } as never
     });
   }
   for (const [key, name, mods] of [
@@ -294,7 +303,7 @@ async function main() {
     ["pha-canh-dan", "Phá Cảnh Đan", { breakthroughBps: 900 }],
     ["giai-doc-dan", "Giải Độc Đan", { cleanse: true }]
   ] as const) {
-    await prisma.itemTemplate.upsert({ where: { key }, update: {}, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods } });
+    await prisma.itemTemplate.upsert({ where: { key }, update: { bindRules: { subType: "Đan dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.` } }, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods, bindRules: { subType: "Đan dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.` } } });
   }
 
   for (const [key, name, type, mod] of [
@@ -334,7 +343,7 @@ async function main() {
     ["co-long-tan-hon", "Cổ Long Tàn Hồn", 500, 48, 28, 16],
     ["linh-thu-nho", "Linh Thú Nhỏ", 60, 8, 4, 8]
   ] as const) {
-    await prisma.monster.upsert({ where: { key }, update: {}, create: { key, name, realmOrder: 0, hp, attack: atk, defense: def, speed: spd, lootTable: [{ key: "yeu-dan", weight: 30 }, { key: "linh-thao", weight: 50 }], locationKey: "hac-son" } });
+    await prisma.monster.upsert({ where: { key }, update: { lootTable: [{ key: "yeu-dan", weight: 30, minQuantity: 1, maxQuantity: 1 }, { key: "linh-thao", weight: 50, minQuantity: 1, maxQuantity: 2 }, { key: "hac-thiet-quang", weight: 20, minQuantity: 1, maxQuantity: 1 }] }, create: { key, name, realmOrder: 0, hp, attack: atk, defense: def, speed: spd, lootTable: [{ key: "yeu-dan", weight: 30, minQuantity: 1, maxQuantity: 1 }, { key: "linh-thao", weight: 50, minQuantity: 1, maxQuantity: 2 }, { key: "hac-thiet-quang", weight: 20, minQuantity: 1, maxQuantity: 1 }], locationKey: "hac-son" } });
   }
 
   for (const [key, value] of [

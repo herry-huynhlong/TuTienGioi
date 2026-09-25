@@ -136,7 +136,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           {facilities.length === 0 && routes.length === 0 && activities.length === 0 ? (
             <Panel title="Không có hành động trực tiếp">
               <div className="empty-state">
-                <b>Địa điểm này chưa mở gameplay.</b>
+                <b>Địa điểm này không có hành động trực tiếp.</b>
                 <p>Hãy mở Thế Giới để di chuyển tới nơi có cơ sở hoặc hoạt động phù hợp.</p>
                 <Link href="/game/world" className="btn mt-4">Chọn địa điểm khác</Link>
               </div>
@@ -164,10 +164,10 @@ function getLocationFacilities(services: string[], kind?: string) {
   const facilities: Array<{ key: string; label: string; description: string; href?: string; disabled?: boolean; icon: React.ReactNode }> = [];
   if (services.includes("market")) facilities.push({ key: "market", label: "Chợ", description: "Mua bán vật phẩm giữa người chơi.", href: "/game/market", icon: <ShoppingBag size={18} aria-hidden /> });
   if (services.includes("mail")) facilities.push({ key: "mail", label: "Thư tín", description: "Đọc thư và thông báo cá nhân.", href: "/game/mail", icon: <Mail size={18} aria-hidden /> });
-  if (services.includes("inn")) facilities.push({ key: "inn", label: "Khách điếm", description: "Cơ chế nghỉ ngơi chưa được nối backend.", disabled: true, icon: <Home size={18} aria-hidden /> });
-  if (services.includes("auction")) facilities.push({ key: "auction", label: "Đấu giá", description: "Auction có schema nhưng workflow đặt giá chưa hoàn thiện.", disabled: true, icon: <Landmark size={18} aria-hidden /> });
-  if (services.includes("caravan")) facilities.push({ key: "caravan", label: "Tiêu cục", description: "Escort/delivery chưa có backend riêng.", disabled: true, icon: <Route size={18} aria-hidden /> });
-  if (services.includes("formation")) facilities.push({ key: "formation", label: "Trận pháp", description: "Trận pháp đang chờ workflow nghề/công pháp.", disabled: true, icon: <Shield size={18} aria-hidden /> });
+  if (services.includes("inn")) facilities.push({ key: "inn", label: "Khách điếm", description: "Nghỉ chân, hồi phục và nghe tin tức trong thành.", disabled: true, icon: <Home size={18} aria-hidden /> });
+  if (services.includes("auction")) facilities.push({ key: "auction", label: "Đấu giá", description: "Nơi các kỳ vật được đưa lên sàn tranh giá.", disabled: true, icon: <Landmark size={18} aria-hidden /> });
+  if (services.includes("caravan")) facilities.push({ key: "caravan", label: "Tiêu cục", description: "Nhận hộ tống hàng hóa qua các tuyến nguy hiểm.", disabled: true, icon: <Route size={18} aria-hidden /> });
+  if (services.includes("formation")) facilities.push({ key: "formation", label: "Trận pháp", description: "Bố trí trận bàn, phù văn và các phép bảo hộ.", disabled: true, icon: <Shield size={18} aria-hidden /> });
   if (kind === "sect_land") facilities.push({ key: "sect", label: "Tông môn", description: "Xem hoặc lập tông môn bằng hệ thống hiện có.", href: "/game/sect", icon: <ScrollText size={18} aria-hidden /> });
   return facilities;
 }
@@ -269,13 +269,28 @@ function SituationPanel({
 
   if (latest) {
     const reward = parseReward(latest.reward);
+    const combat = parseReward(reward.combat);
+    const combatReward = parseReward(combat.reward);
+    const loot = parseReward(combatReward.loot);
+    const lootItems = Array.isArray(loot.items) ? loot.items : [];
     const itemName = typeof reward.item === "string" ? itemNames.get(reward.item) ?? reward.item : null;
     const mode = activityModeFromReward(latest.reward);
     return (
       <div className="situation-card">
         <p className="text-xs font-bold uppercase text-jade">Kết quả gần nhất</p>
         <h3>{activityCopy[mode].title} hoàn thành</h3>
-        {itemName ? <p className="mt-2"><b className="text-gold">{itemName}</b> x{typeof reward.quantity === "number" ? reward.quantity : 1}</p> : <p className="muted mt-2">Tình huống đã được xử lý.</p>}
+        {itemName ? <p className="mt-2"><b className="text-gold">{itemName}</b> x{typeof reward.quantity === "number" ? reward.quantity : 1}</p> : null}
+        {combat.winner ? <p className="mt-2">{combat.winner === "player" ? "Bạn đã đánh bại yêu thú." : "Bạn rút khỏi trận chiến sau khi bị thương."}</p> : null}
+        {typeof loot.linhThach === "string" && loot.linhThach !== "0" ? <p className="mt-2 text-gold">Linh thạch +{loot.linhThach}</p> : null}
+        {lootItems.length > 0 ? (
+          <div className="item-stat-list mt-3">
+            {lootItems.map((entry, index) => {
+              const row = parseReward(entry);
+              return <span key={index}>{String(row.name ?? row.key ?? "Chiến lợi phẩm")} <b>x{String(row.quantity ?? 1)}</b></span>;
+            })}
+          </div>
+        ) : null}
+        {!itemName && !combat.winner ? <p className="muted mt-2">Tình huống đã được xử lý.</p> : null}
       </div>
     );
   }

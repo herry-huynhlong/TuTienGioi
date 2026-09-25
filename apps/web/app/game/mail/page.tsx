@@ -25,7 +25,7 @@ export default async function MailPage() {
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Hộp thư</p>
         <h1 className="mt-1 text-3xl font-black">Thư & Thông Báo</h1>
-        <p className="muted mt-2">Đọc thông báo hệ thống và thư đã nhận. Gửi thư là workflow riêng, chưa có server action nên chưa mở nút gửi.</p>
+        <p className="muted mt-2">Đọc thông báo hệ thống và thư đã nhận từ các tu sĩ khác.</p>
       </header>
 
       <section className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
@@ -64,7 +64,7 @@ export default async function MailPage() {
               </article>
             ))}
             {messages.length === 0 ? (
-              <div className="empty-state"><b>Chưa có thư.</b><p>PrivateMessage đã có model, nhưng luồng gửi thư chưa được triển khai nên trang chỉ hiển thị thư đã tồn tại.</p></div>
+              <div className="empty-state"><b>Chưa có thư.</b><p>Khi có tu sĩ gửi thư, nội dung sẽ xuất hiện tại đây.</p></div>
             ) : null}
           </div>
         </Panel>

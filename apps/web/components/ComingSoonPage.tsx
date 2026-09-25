@@ -11,7 +11,7 @@ export function ComingSoonPage({ title, description }: { title: string; descript
       <section className="panel rounded-lg p-6">
         <h2 className="text-xl font-bold text-gold">Chức năng đang phát triển</h2>
         <p className="muted mt-3">
-          Route này được tách đúng tên để tránh mở nhầm sang chức năng khác. Khi backend và workflow hoàn chỉnh, menu sẽ được mở lại.
+          Khu vực này đang được phong ấn. Hãy quay lại khi Thiên Đạo mở thêm cơ duyên.
         </p>
         <Link href="/game" className="btn btn-secondary mt-5">Về Tổng Quan</Link>
       </section>

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { getItemEconomy, itemStackKey, progressionItemCatalog, stockForSystemMarketItem } from "../src/items.js";
 
 describe("item progression economy", () => {
@@ -13,6 +15,19 @@ describe("item progression economy", () => {
     const variants = progressionItemCatalog.filter((item) => item.itemFamily === "truc-co-dan");
     expect(variants.map((item) => item.key).sort()).toEqual(["truc-co-dan-ha", "truc-co-dan-thuong", "truc-co-dan-trung"]);
     expect(variants.map((item) => item.rarity).sort()).toEqual(["HA", "THUONG", "TRUNG"]);
+  });
+
+  it("has a dedicated visual asset for every baseline progression item", () => {
+    const keys = progressionItemCatalog.map((item) => item.key);
+    expect(new Set(keys).size).toBe(30);
+    for (const key of keys) {
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${key}.svg`)), key).toBe(true);
+    }
+    expect(["truc-co-dan-ha", "truc-co-dan-trung", "truc-co-dan-thuong"].map((key) => `${key}.svg`)).toEqual([
+      "truc-co-dan-ha.svg",
+      "truc-co-dan-trung.svg",
+      "truc-co-dan-thuong.svg"
+    ]);
   });
 
   it("enables system market stock only for low and mid grade baseline items", () => {

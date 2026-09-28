@@ -6,6 +6,7 @@ import { ActionAlert } from "@/components/ActionAlert";
 import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
+import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 import { BookOpen, Boxes, Building2, Castle, Crown, Gem, Landmark, Leaf, Pickaxe, ScrollText, Shield, Sparkles, Users } from "lucide-react";
 
 const tabs = [
@@ -367,9 +368,13 @@ function StorageTab({ sect, characterItems, selectedStorageId, canManageTreasury
           <div className="item-storage-detail mt-4">
             <ItemDetailPanel
               template={selectedStorage.template}
-              quantityLabel={`Kho còn ${selectedStorage.quantity.toLocaleString("vi-VN")}`}
-              source="Kho Tông Môn"
-              condition={canManageStorage ? "Có quyền quản lý kho" : "Cần đủ cống hiến cá nhân để đổi"}
+              details={[
+                { label: "Kho", value: selectedStorage.quantity.toLocaleString("vi-VN") },
+                { label: "Giá", value: `${formatCurrency(getSectItemContributionPrice(selectedStorage.template))} Cống Hiến / cái` },
+                { label: "Cống hiến vào kho", value: `Nhận ${formatCurrency(getItemEconomy(selectedStorage.template).donationContributionValue)} Cống Hiến / cái` },
+                { label: "Điều kiện", value: canManageStorage ? "Có quyền quản lý kho" : "Cần đủ cống hiến cá nhân để đổi" }
+              ]}
+              showModifiers={false}
               action={<SectWithdrawItemForm sectId={sect.id} item={selectedStorage} canManageStorage={canManageStorage} />}
             />
           </div>
@@ -407,8 +412,7 @@ function SectWithdrawItemForm({ sectId, item, canManageStorage }: { sectId: stri
     <form action={withdrawSectItemAction} className="item-card-action">
       <input type="hidden" name="sectId" value={sectId} />
       <input type="hidden" name="storageId" value={item.id} />
-      <input className="field item-qty-field" name="quantity" defaultValue="1" inputMode="numeric" min="1" max={item.quantity} aria-label="Số lượng" />
-      <button className="btn btn-secondary" type="submit">{canManageStorage ? "Rút" : "Đổi"}</button>
+      <ItemQuantityControl max={item.quantity} unitPrice={String(getSectItemContributionPrice(item.template))} unitLabel="Cống Hiến" submitLabel={canManageStorage ? "Rút" : "Đổi"} />
     </form>
   );
 }

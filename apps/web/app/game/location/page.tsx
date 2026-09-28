@@ -328,6 +328,7 @@ function SituationPanel({
 }
 
 type ItemTemplateReward = {
+  key?: string;
   name: string;
   category: string;
   rarity: string;

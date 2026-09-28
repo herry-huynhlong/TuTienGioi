@@ -1,9 +1,10 @@
-import { formatEquipmentSlot, formatItemCategory, formatRarity } from "@/lib/format";
+import { formatItemCategory, formatRarity } from "@/lib/format";
 import { getItemEconomy, jsonRecord } from "@ttg/game";
 import { Box, Gem, Hammer, Leaf, Pill, ScrollText, Shield, Shirt, Sparkles, Swords } from "lucide-react";
 import Link from "next/link";
 
 type ItemTemplateLike = {
+  key?: string;
   name: string;
   category: string;
   rarity: string;
@@ -33,11 +34,10 @@ export function ItemSummaryCard({
   action?: React.ReactNode;
 }) {
   const economy = getItemEconomy(template);
-  const Icon = iconFor(economy.icon);
   const content = (
     <>
       <div className="item-card-visual">
-        <span className={`item-icon grade-${template.rarity.toLowerCase()}`}><Icon size={34} aria-hidden /></span>
+        <ItemVisual template={template} size="card" />
         <span className="item-stock-badge">{quantityLabel}</span>
       </div>
       <div className="item-card-body">
@@ -67,21 +67,29 @@ export function ItemDetailPanel({
   quantityLabel,
   source,
   condition,
+  details,
+  showModifiers = true,
   action
 }: {
   template: ItemTemplateLike;
   quantityLabel?: string;
   source?: string;
   condition?: string;
+  details?: Array<{ label: string; value: React.ReactNode }>;
+  showModifiers?: boolean;
   action?: React.ReactNode;
 }) {
   const economy = getItemEconomy(template);
-  const Icon = iconFor(economy.icon);
   const modifiers = Object.entries(jsonRecord(template.baseModifiers)).filter(([, value]) => typeof value === "number" || typeof value === "string" || typeof value === "boolean");
+  const rows = details ?? [
+    ...(quantityLabel ? [{ label: "Số lượng", value: quantityLabel }] : []),
+    { label: "Điều kiện", value: condition ?? formatCondition(economy.requiredRealmOrder, economy.requiredSectRank) },
+    ...(source ? [{ label: "Nguồn", value: source }] : [])
+  ];
   return (
     <div className="item-detail">
       <div className="item-detail-head">
-        <span className={`item-icon item-icon-large grade-${template.rarity.toLowerCase()}`}><Icon size={40} aria-hidden /></span>
+        <ItemVisual template={template} size="detail" />
         <div>
           <h3>{template.name}</h3>
           <p>{formatRarity(template.rarity)} Phẩm · {economy.subType || formatItemCategory(template.category)}</p>
@@ -97,18 +105,13 @@ export function ItemDetailPanel({
         <p>{economy.usage}</p>
       </section>
 
-      <div className="info-table mt-4">
-        {quantityLabel ? <div><span>Số lượng</span><b>{quantityLabel}</b></div> : null}
-        <div><span>Dòng vật phẩm</span><b>{economy.itemFamily ?? "Riêng lẻ"}</b></div>
-        <div><span>Giá hệ thống</span><b>{formatCurrency(economy.systemBasePrice)} Linh Thạch</b></div>
-        <div><span>Vạn Bảo Lâu thu mua</span><b>{economy.sellableToNpc ? `${formatCurrency(economy.npcBuyPrice)} Linh Thạch` : "Không thu mua"}</b></div>
-        <div><span>Đổi Tông Môn</span><b>{economy.sectExchangeEnabled ? `${formatCurrency(economy.sectContributionPrice)} Cống Hiến` : "Không đổi"}</b></div>
-        <div><span>Cống hiến vào kho</span><b>{economy.sectExchangeEnabled ? `${formatCurrency(economy.donationContributionValue)} Cống Hiến` : "Không nhận"}</b></div>
-        <div><span>Nguồn</span><b>{source ?? "Lịch luyện, chợ, nhiệm vụ hoặc tông môn"}</b></div>
-        <div><span>Điều kiện</span><b>{condition ?? formatCondition(economy.requiredRealmOrder, economy.requiredSectRank)}</b></div>
-      </div>
+      {rows.length > 0 ? (
+        <div className="info-table mt-4">
+          {rows.map((row) => <div key={row.label}><span>{row.label}</span><b>{row.value}</b></div>)}
+        </div>
+      ) : null}
 
-      {modifiers.length > 0 ? (
+      {showModifiers && modifiers.length > 0 ? (
         <div className="item-stat-list">
           {modifiers.map(([key, value]) => <span key={key}>{formatModifier(key)} <b>{formatModifierValue(value)}</b></span>)}
         </div>
@@ -121,6 +124,23 @@ export function ItemDetailPanel({
 
 export function formatCurrency(value: bigint | number) {
   return value.toLocaleString("vi-VN");
+}
+
+function ItemVisual({ template, size }: { template: ItemTemplateLike; size: "card" | "detail" }) {
+  const economy = getItemEconomy(template);
+  const src = visualSrc(template);
+  const className = `item-visual ${size === "detail" ? "item-visual-large" : ""} grade-${template.rarity.toLowerCase()}`;
+  if (src) return <img className={className} src={src} alt="" aria-hidden />;
+  const Icon = iconFor(economy.icon);
+  return <span className={className}><Icon size={size === "detail" ? 44 : 34} aria-hidden /></span>;
+}
+
+function visualSrc(template: ItemTemplateLike) {
+  const meta = jsonRecord(template.bindRules);
+  if (typeof meta.imageUrl === "string" && meta.imageUrl) return meta.imageUrl;
+  if (typeof meta.visualKey === "string" && meta.visualKey) return `/items/${meta.visualKey}.svg`;
+  if (template.key) return `/items/${template.key}.svg`;
+  return "";
 }
 
 function formatCondition(requiredRealmOrder: number | null, requiredSectRank: number | null) {

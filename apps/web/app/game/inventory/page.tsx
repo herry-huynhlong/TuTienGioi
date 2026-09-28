@@ -145,9 +145,12 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
   return (
     <ItemDetailPanel
       template={item.template}
-      quantityLabel={`x${item.quantity}`}
       source="Túi Đồ"
-      condition={item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch"}
+      details={[
+        { label: "Số lượng", value: `x${item.quantity}` },
+        { label: "Điều kiện", value: item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch" },
+        ...(item.equippedSlot ? [{ label: "Đang trang bị", value: formatEquipmentSlot(item.equippedSlot) }] : [])
+      ]}
       action={(
         <>
           {activeListing ? <p className="badge">Đang bày bán: {formatCurrency(activeListing.price)} Linh Thạch</p> : null}

@@ -313,6 +313,8 @@ async function main() {
     const bindRules = {
       subType,
       icon,
+      visualKey: key,
+      imageUrl: `/items/${key}.svg`,
       usage,
       systemBasePrice,
       npcBuyPrice: Math.floor(systemBasePrice * 0.7),

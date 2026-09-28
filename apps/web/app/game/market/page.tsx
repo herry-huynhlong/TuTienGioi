@@ -7,6 +7,7 @@ import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, re
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
+import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
 const categories = [
   ["", "Tất cả"],
@@ -24,7 +25,7 @@ const gradeFilters = [
   ["THUONG", "Thượng Phẩm"]
 ] as const;
 
-export default async function MarketPage({ searchParams }: { searchParams?: Promise<{ q?: string; category?: string; grade?: string; error?: string; tab?: string; sellItem?: string; detail?: string }> }) {
+export default async function MarketPage({ searchParams }: { searchParams?: Promise<{ q?: string; category?: string; grade?: string; error?: string; ok?: string; tab?: string; sellItem?: string; detail?: string }> }) {
   const user = await getUser();
   if (!user) redirect("/");
   const params = await searchParams;
@@ -93,6 +94,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         <p className="muted mt-2">Mua bán vật phẩm, đổi chiến lợi phẩm lấy Linh Thạch và bày hàng cho người chơi khác.</p>
       </header>
       <ActionAlert message={params?.error} />
+      <ActionAlert message={params?.ok === "system-buy" ? "Đã mua vật phẩm từ Chợ Linh Bảo." : params?.ok === "npc-sell" ? "Đã bán vật phẩm cho Vạn Bảo Lâu." : params?.ok === "listed" ? "Đã bày bán vật phẩm." : undefined} />
       {!atMarket ? (
         <section className="panel rounded-lg p-5">
           <h2 className="text-xl font-bold text-gold">Bạn chưa ở Chợ Linh Bảo</h2>
@@ -141,8 +143,11 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
         <section className="panel rounded-lg p-5 mt-3">
           <ItemDetailPanel
             template={selectedSystem.template}
-            quantityLabel={`Còn ${selectedSystem.stock}`}
-            source="Chợ Linh Bảo"
+            details={[
+              { label: "Còn lại", value: selectedSystem.stock.toLocaleString("vi-VN") },
+              { label: "Giá", value: `${formatCurrency(selectedSystem.price)} Linh Thạch / cái` }
+            ]}
+            showModifiers={false}
             action={<SystemBuyForm stock={selectedSystem} balance={linhThach} disabled={disabled} />}
           />
         </section>
@@ -151,8 +156,12 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
         <section className="panel rounded-lg p-5 mt-3">
           <ItemDetailPanel
             template={selectedListing.item.template}
-            quantityLabel={`x${selectedListing.quantity}`}
-            source={`Người chơi ${selectedListing.seller.name}`}
+            details={[
+              { label: "Người bán", value: selectedListing.seller.name },
+              { label: "Số lượng", value: selectedListing.quantity.toLocaleString("vi-VN") },
+              { label: "Giá", value: `${formatCurrency(selectedListing.price)} Linh Thạch / cái` }
+            ]}
+            showModifiers={false}
             action={<PlayerBuyForm listing={selectedListing} balance={linhThach} disabled={disabled} />}
           />
         </section>
@@ -171,11 +180,12 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
 }
 
 function SystemBuyForm({ stock, balance, disabled }: { stock: any; balance: bigint; disabled: boolean }) {
+  const affordable = stock.price > 0n ? Number(balance / stock.price) : stock.stock;
+  const maxQuantity = Math.max(0, Math.min(stock.stock, 99, affordable));
   return (
     <form action={buySystemMarketItemAction} className="item-card-action">
       <input type="hidden" name="stockId" value={stock.id} />
-      <input className="field item-qty-field" name="quantity" type="number" min="1" max={Math.min(stock.stock, 99)} defaultValue="1" aria-label="Số lượng" />
-      <button className="btn btn-secondary" disabled={disabled || balance < stock.price}>Mua</button>
+      <ItemQuantityControl max={maxQuantity} unitPrice={stock.price.toString()} submitLabel="Mua" disabled={disabled || maxQuantity < 1} />
     </form>
   );
 }
@@ -244,34 +254,34 @@ function SellSelectedItem({ item, disabled }: { item: any; disabled: boolean }) 
   const economy = getItemEconomy(item.template);
   const maxQuantity = marketListingMaxQuantity(item.quantity);
   return (
-    <div className="sell-panel">
-      <h2>{item.template.name}</h2>
-      <div className="info-table mt-4">
-        <div><span>Sở hữu</span><b>{item.quantity}</b></div>
-        <div><span>Giá hệ thống</span><b>{formatCurrency(economy.systemBasePrice)} Linh thạch</b></div>
-        <div><span>Vạn Bảo Lâu thu mua</span><b>{economy.sellableToNpc ? `${formatCurrency(economy.npcBuyPrice)} Linh thạch` : "Không thu mua"}</b></div>
-        <div><span>Rao tối đa</span><b>{maxQuantity} / lần</b></div>
-      </div>
-
+    <ItemDetailPanel
+      template={item.template}
+      details={[
+        { label: "Sở hữu", value: item.quantity.toLocaleString("vi-VN") },
+        { label: "Vạn Bảo Lâu thu mua", value: economy.sellableToNpc ? `${formatCurrency(economy.npcBuyPrice)} Linh Thạch / cái` : "Không thu mua" },
+        { label: "Rao tối đa", value: `${maxQuantity} / lần` }
+      ]}
+      showModifiers={false}
+      action={(
       <div className="sell-mode-grid mt-5">
         <form action={sellItemToNpcAction} className="sell-mode-card">
           <input type="hidden" name="itemId" value={item.id} />
           <h3>Bán cho Vạn Bảo Lâu</h3>
           <p className="muted">Nhận Linh Thạch ngay theo giá thu mua của hệ thống.</p>
-          <label>Số lượng<input className="field" name="quantity" type="number" min="1" max={item.quantity} defaultValue="1" /></label>
-          <button className="btn w-full" disabled={disabled || !economy.sellableToNpc}>Bán ngay</button>
+          <ItemQuantityControl max={item.quantity} unitPrice={economy.npcBuyPrice.toString()} submitLabel="Bán" disabled={disabled || !economy.sellableToNpc} />
         </form>
 
         <form action={sellItemAction} className="sell-mode-card">
           <input type="hidden" name="itemId" value={item.id} />
           <h3>Bày bán cho người chơi</h3>
           <p className="muted">Bạn tự đặt đơn giá. Giá hệ thống chỉ là tham khảo.</p>
-          <label>Số lượng<input className="field" name="quantity" type="number" min="1" max={maxQuantity} defaultValue="1" /></label>
+          <ItemQuantityControl max={maxQuantity} disabled={disabled || maxQuantity < 1} />
           <label>Giá mỗi món<input className="field" name="price" inputMode="numeric" pattern="[0-9]+" min="1" defaultValue={economy.systemBasePrice.toString()} /></label>
           <button className="btn btn-secondary w-full" disabled={disabled || maxQuantity < 1}>Bày hàng</button>
         </form>
       </div>
-    </div>
+      )}
+    />
   );
 }
 

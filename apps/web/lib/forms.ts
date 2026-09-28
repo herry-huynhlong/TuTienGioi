@@ -424,7 +424,7 @@ export async function buySystemMarketItemAction(formData: FormData) {
   } catch (error) {
     redirectGameError(error, "/game/market");
   }
-  redirect("/game/market");
+  redirect("/game/market?ok=system-buy");
 }
 
 export async function sellItemAction(formData: FormData) {
@@ -439,7 +439,7 @@ export async function sellItemAction(formData: FormData) {
   } catch (error) {
     redirectGameError(error, "/game/market?tab=sell");
   }
-  redirect("/game/market?tab=my");
+  redirect("/game/market?tab=my&ok=listed");
 }
 
 export async function sellItemToNpcAction(formData: FormData) {
@@ -450,7 +450,7 @@ export async function sellItemToNpcAction(formData: FormData) {
   } catch (error) {
     redirectGameError(error, "/game/market?tab=sell");
   }
-  redirect("/game/market?tab=sell");
+  redirect("/game/market?tab=sell&ok=npc-sell");
 }
 
 export async function cancelMarketListingAction(formData: FormData) {

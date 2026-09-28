@@ -3,6 +3,7 @@ import { calculateCultivationReward, cultivationActivityOptions, cultivationBase
 import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
+import { progressQuestEvent } from "./quests.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -112,6 +113,7 @@ async function resolveMonsterLoot(tx: Tx, characterId: string, monster: { key: s
     if (!template) continue;
     const quantity = dropQuantity(data, rng);
     await grantStackableItem(tx, characterId, template.id, quantity);
+    await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: key, amount: quantity });
     items.push({ key, name: template.name, quantity });
   }
   if (linhThach > 0n) await creditWallet(tx, characterId, Currency.LINH_THACH, linhThach, WalletTxType.REWARD, "Monster", monster.key, `monster-loot:${monster.key}:${seed}`);
@@ -364,6 +366,7 @@ async function advanceExplorationActivityTx(tx: Tx, characterId: string, activit
     if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
     await progressSectMissionEvent(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: roll.key, amount: 1 });
+    await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: roll.key, amount: 1 });
     await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: inputJson({ mode, item: roll.key, quantity: 1 }) } });
     const verb = mode === "gather" ? "Thu thập" : "Khám phá";
     await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
@@ -425,6 +428,7 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
     await progressSectMissionEvent(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: roll.key, amount: 1 });
+    await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: roll.key, amount: 1 });
     const verb = mode === "gather" ? "Thu thập" : "Khám phá";
     await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
@@ -486,7 +490,10 @@ export async function attackExplorationEncounter(db: Db, characterId: string, ac
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
     if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
     await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward } });
-    if (result.winner === "player") await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, locationId: typeof pending.locationId === "string" ? pending.locationId : null, amount: 1 });
+    if (result.winner === "player") {
+      await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, locationId: typeof pending.locationId === "string" ? pending.locationId : null, amount: 1 });
+      await progressQuestEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, locationId: typeof pending.locationId === "string" ? pending.locationId : null, amount: 1 });
+    }
     const session = parseJsonRecord(pending.session);
     if (Object.keys(session).length > 0) {
       const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
@@ -571,6 +578,7 @@ export async function claimTravel(db: Db, characterId: string, travelId: string,
       data: { currentLocationId: travel.destinationId, locationId: travel.route.destination.zoneId }
     });
     await progressSectMissionEvent(tx, { characterId, eventType: "LOCATION_VISITED", locationId: travel.destinationId, amount: 1 });
+    await progressQuestEvent(tx, { characterId, eventType: "ENTER_LOCATION", locationId: travel.destinationId, amount: 1 });
     await tx.gameLog.create({ data: { characterId, type: "travel", message: `Đã tới ${travel.route.destination.name}. ${encounterResult.message}`, metadata: { encounter: encounter.key, result: encounterResult } } });
     await recordOnboardingEvent(tx, characterId, "TRAVEL_COMPLETED");
     return { destinationName: travel.route.destination.name, encounter: encounter.key, result: encounterResult };
@@ -582,6 +590,7 @@ async function resolveTravelEncounter(tx: Tx, characterId: string, encounterKey:
     const template = await tx.itemTemplate.findFirst({ where: { key: { in: ["thanh-linh-thao", "ngung-lo-thao", "hac-thiet-quang", "yeu-dan-cap-thap"] } }, orderBy: { key: "asc" } });
     if (!template) return { kind: encounterKey, message: "Bạn phát hiện dấu vết tài nguyên nhưng không thu được gì." };
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
+    await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: template.key, amount: 1 });
     return { kind: encounterKey, itemTemplateId: template.id, itemName: template.name, quantity: 1, message: `Bạn tìm thấy ${template.name}.` };
   }
 
@@ -599,7 +608,10 @@ async function resolveTravelEncounter(tx: Tx, characterId: string, encounterKey:
     await tx.character.update({ where: { id: characterId }, data: { hp: remainingHp } });
     await addCultivationClamped(tx, characterId, cultivationReward);
     await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward: { source: "travel", cultivation: cultivationReward.toString() } } });
-    if (result.winner === "player") await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, amount: 1 });
+    if (result.winner === "player") {
+      await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, amount: 1 });
+      await progressQuestEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, amount: 1 });
+    }
     return { kind: encounterKey, monsterKey: monster.key, monsterName: monster.name, winner: result.winner, cultivation: cultivationReward.toString(), message: result.winner === "player" ? `Bạn đánh lui ${monster.name} và nhận ${cultivationReward.toString()} tu vi.` : `${monster.name} cản đường, bạn bị thương nhưng vẫn thoát được.` };
   }
 
@@ -634,7 +646,10 @@ export async function fightMonster(db: Db, characterId: string, monsterKey: stri
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
     if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
     await tx.combat.create({ data: { characterId, monsterKey, winner: result.winner, log: result.log, reward } });
-    if (result.winner === "player") await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey, amount: 1 });
+    if (result.winner === "player") {
+      await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey, amount: 1 });
+      await progressQuestEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey, amount: 1 });
+    }
     await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
     if (result.winner === "player") await recordOnboardingEvent(tx, characterId, "MONSTER_DEFEATED");
     return { ...result, reward, monsterName: monster.name };
@@ -696,6 +711,7 @@ export async function purchaseSystemMarketItem(db: Db, buyerId: string, stockId:
     if (claimed.count !== 1) throw new GameError("SYSTEM_STOCK_EMPTY", "Hàng hệ thống đã được mua hết.");
     await debitWallet(tx, buyerId, Currency.LINH_THACH, totalPrice, WalletTxType.MARKET, "SystemMarketStock", stockId, `system-buy:${stockId}:${buyerId}:${quantity}:${now.getTime()}`);
     await grantStackableItem(tx, buyerId, stock.templateId, quantity);
+    await progressQuestEvent(tx, { characterId: buyerId, eventType: "ITEM_OBTAINED", itemKey: stock.template.key, amount: quantity });
     await tx.marketTransaction.create({ data: { listingId: `system:${stockId}`, buyerId, sellerId: "SYSTEM", itemTemplateId: stock.templateId, quantity, price: totalPrice, tax: 0n } });
     await tx.gameLog.create({ data: { characterId: buyerId, type: "market", message: `Mua ${stock.template.name} x${quantity} từ Chợ Linh Bảo, trả ${totalPrice.toString()} Linh Thạch.` } });
     return { itemName: stock.template.name, quantity, totalPrice };

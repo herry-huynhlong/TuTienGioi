@@ -23,7 +23,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
       explorations: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
       travels: { where: { status: "ACTIVE" }, include: { route: { include: { origin: true, destination: true } } }, orderBy: { endsAt: "desc" } },
       sect: true,
-      items: { take: 5, include: { template: true }, orderBy: { createdAt: "desc" } }
+      items: { take: 5, include: { template: true }, orderBy: { createdAt: "desc" } },
+      quests: { where: { status: { in: ["ACTIVE", "READY_TO_TURN_IN"] } }, include: { template: { include: { turnInNpc: true } } }, orderBy: [{ status: "desc" }, { updatedAt: "desc" }], take: 5 }
     }
   });
   const [news, logs, next, onboarding] = await Promise.all([
@@ -64,6 +65,26 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
       <section className="dashboard-grid">
         <Panel title="Dẫn Đạo" className="lg:col-span-2">
           <div className="quest-tracker">
+            {c.quests.length > 0 ? (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold text-gold">Nhiệm vụ đang theo</p>
+                    <p className="muted mt-1 text-sm">NPC và thế giới sẽ tự cập nhật khi bạn di chuyển, săn yêu hoặc nhặt vật phẩm.</p>
+                  </div>
+                  <Link href="/game/quests" className="status-pill">Mở</Link>
+                </div>
+                <div className="mt-4 grid gap-2">
+                  {c.quests.slice(0, 3).map((quest) => (
+                    <Link key={quest.id} href={quest.status === "READY_TO_TURN_IN" && quest.template.turnInNpc ? `/game/npc/${quest.template.turnInNpc.key}` : "/game/quests"} className="objective-row">
+                      {quest.status === "READY_TO_TURN_IN" ? <Check size={16} aria-hidden /> : <Circle size={16} aria-hidden />}
+                      <span>{quest.template.title} · {quest.status === "READY_TO_TURN_IN" ? "Có thể nộp" : `${quest.progress}/${quest.targetCount}`}</span>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-bold text-gold">{onboarding.currentChapter.title}</p>
@@ -82,6 +103,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             <Link href={onboarding.nextObjective.href} className="btn mt-4 w-full sm:w-auto">
               <Compass size={16} aria-hidden /> {onboarding.nextObjective.cta}
             </Link>
+              </>
+            )}
           </div>
         </Panel>
 

@@ -38,6 +38,8 @@ services:
       HOSTNAME: 0.0.0.0
     ports:
       - "127.0.0.1:3020:3000"
+    volumes:
+      - admin-uploads:/app/apps/web/public/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,3 +65,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  admin-uploads:

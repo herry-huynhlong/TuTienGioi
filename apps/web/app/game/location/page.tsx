@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
 import { formatCurrency, ItemSummaryCard } from "@/components/ItemCard";
-import { Compass, Home, Landmark, Mail, Route, ScrollText, Shield, ShoppingBag, Swords, Trees } from "lucide-react";
+import { Compass, Home, Landmark, Mail, MessageCircle, Route, ScrollText, Shield, ShoppingBag, Swords, Trees, UserRound } from "lucide-react";
 
 const activityLabels: Record<string, string> = {
   market: "Chợ",
@@ -45,8 +45,9 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
       explorations: { where: { status: { in: ["ACTIVE", "COMPLETED", "CLAIMED"] } }, orderBy: [{ status: "asc" }, { endsAt: "desc" }], take: 6 },
       cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
       travels: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
-      currentLocation: { include: { zone: { include: { region: true } }, routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } } } },
-      location: true
+      currentLocation: { include: { zone: { include: { region: true } }, routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } }, npcs: { where: { active: true }, include: { questStarts: true, questTurnIns: true }, orderBy: { name: "asc" } } } },
+      location: true,
+      quests: { where: { status: { in: ["ACTIVE", "READY_TO_TURN_IN", "COMPLETED"] } }, include: { template: true } }
     }
   });
   await recordOnboardingEvent(prisma, c.id, "VIEW_WORLD");
@@ -114,6 +115,14 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
             </Panel>
           ) : null}
 
+          {location?.npcs.length ? (
+            <Panel title="Nhân vật">
+              <div className="npc-grid">
+                {location.npcs.map((npc) => <NpcCard key={npc.id} npc={npc} quests={c.quests} />)}
+              </div>
+            </Panel>
+          ) : null}
+
           {routes.length > 0 ? (
             <Panel title="Tuyến đường">
               <div className="route-grid">
@@ -163,6 +172,34 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
         </Panel>
       </section>
     </div>
+  );
+}
+
+function NpcCard({
+  npc,
+  quests
+}: {
+  npc: { key: string; name: string; title: string; description: string; portraitUrl: string | null; iconKey: string; questStarts: Array<{ id: string }>; questTurnIns: Array<{ id: string }> };
+  quests: Array<{ status: string; templateId: string; template: { startNpcId: string | null; turnInNpcId: string | null } }>;
+}) {
+  const ready = quests.some((quest) => quest.status === "READY_TO_TURN_IN" && npc.questTurnIns.some((template) => template.id === quest.templateId));
+  const active = quests.some((quest) => quest.status === "ACTIVE" && (npc.questStarts.some((template) => template.id === quest.templateId) || npc.questTurnIns.some((template) => template.id === quest.templateId)));
+  const completed = new Set(quests.filter((quest) => quest.status === "COMPLETED").map((quest) => quest.templateId));
+  const hasNew = npc.questStarts.some((template) => !completed.has(template.id) && !quests.some((quest) => quest.templateId === template.id));
+  const badge = ready ? "?" : hasNew ? "!" : active ? "..." : "";
+  return (
+    <article className="npc-card">
+      <div className="npc-portrait">
+        {npc.portraitUrl ? <img src={npc.portraitUrl} alt="" /> : <UserRound size={30} aria-hidden />}
+        {badge ? <span className={`npc-badge npc-badge-${ready ? "ready" : hasNew ? "new" : "active"}`}>{badge}</span> : null}
+      </div>
+      <div>
+        <b>{npc.name}</b>
+        <small>{npc.title}</small>
+        <p>{npc.description}</p>
+        <Link href={`/game/npc/${npc.key}`} className="btn btn-secondary mt-3 w-full"><MessageCircle size={16} aria-hidden /> Trò chuyện</Link>
+      </div>
+    </article>
   );
 }
 

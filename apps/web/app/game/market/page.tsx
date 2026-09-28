@@ -94,7 +94,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         <p className="muted mt-2">Mua bán vật phẩm, đổi chiến lợi phẩm lấy Linh Thạch và bày hàng cho người chơi khác.</p>
       </header>
       <ActionAlert message={params?.error} />
-      <ActionAlert message={params?.ok === "system-buy" ? "Đã mua vật phẩm từ Chợ Linh Bảo." : params?.ok === "npc-sell" ? "Đã bán vật phẩm cho Vạn Bảo Lâu." : params?.ok === "listed" ? "Đã bày bán vật phẩm." : undefined} />
+      <ActionAlert message={params?.ok === "npc-sell" ? "Đã bán vật phẩm cho Vạn Bảo Lâu." : params?.ok === "listed" ? "Đã bày bán vật phẩm." : params?.ok} />
       {!atMarket ? (
         <section className="panel rounded-lg p-5">
           <h2 className="text-xl font-bold text-gold">Bạn chưa ở Chợ Linh Bảo</h2>
@@ -182,10 +182,11 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
 function SystemBuyForm({ stock, balance, disabled }: { stock: any; balance: bigint; disabled: boolean }) {
   const affordable = stock.price > 0n ? Number(balance / stock.price) : stock.stock;
   const maxQuantity = Math.max(0, Math.min(stock.stock, 99, affordable));
+  const disabledReason = disabled ? "Bạn phải đứng tại Chợ Linh Bảo để giao dịch." : stock.stock <= 0 ? "Đã hết hàng." : affordable < 1 ? "Không đủ Linh Thạch." : "";
   return (
     <form action={buySystemMarketItemAction} className="item-card-action">
       <input type="hidden" name="stockId" value={stock.id} />
-      <ItemQuantityControl max={maxQuantity} unitPrice={stock.price.toString()} submitLabel="Mua" disabled={disabled || maxQuantity < 1} />
+      <ItemQuantityControl max={maxQuantity} unitPrice={stock.price.toString()} submitLabel="Mua" disabled={disabled || maxQuantity < 1} disabledReason={disabledReason} />
     </form>
   );
 }

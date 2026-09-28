@@ -62,6 +62,7 @@ const navGroups: NavGroup[] = [
       { href: "/game", label: "Tu Luyện", icon: Compass, status: "implemented", featureKey: "cultivation" },
       { href: "/game/training", label: "Rèn Luyện", icon: Dumbbell, status: "coming_soon", featureKey: "character" },
       { href: "/game/location", label: "Lịch Luyện", icon: Mountain, status: "partial", featureKey: "exploration" },
+      { href: "/game/quests", label: "Nhiệm Vụ", icon: ScrollText, status: "partial", featureKey: "world" },
       { href: "/game/inventory", label: "Túi Đồ", icon: Backpack, status: "partial", featureKey: "character" },
       { href: "/game/techniques", label: "Công Pháp", icon: BookOpen, status: "partial", featureKey: "character" },
       { href: "/game/bestiary", label: "Đồ Giám", icon: Swords, status: "partial", featureKey: "bestiary" }

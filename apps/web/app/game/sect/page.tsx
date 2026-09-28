@@ -3,7 +3,7 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { applyToSectAction, cancelSectApplicationAction, createSectAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
-import { getSectRank, sectAlignments, sectCreateCost } from "@ttg/game";
+import { getSectRank, progressQuestEvent, sectAlignments, sectCreateCost } from "@ttg/game";
 import { BadgeCheck, Castle, Crown, Search, Shield, Sparkles, Users } from "lucide-react";
 
 const rankFilters = ["5", "4", "3", "2", "1"] as const;
@@ -19,6 +19,7 @@ export default async function SectLobbyPage({ searchParams }: { searchParams?: P
     }
   });
   if (character.sectId) redirect(`/game/sect/${character.sectId}`);
+  await progressQuestEvent(prisma, { characterId: character.id, eventType: "VISIT_SECT_PAGE", amount: 1 });
 
   const tab = params?.tab === "create" ? "create" : "list";
   const q = params?.q?.trim() ?? "";

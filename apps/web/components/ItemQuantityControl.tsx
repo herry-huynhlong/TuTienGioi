@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 
 export function ItemQuantityControl({
   name = "quantity",
@@ -10,6 +11,7 @@ export function ItemQuantityControl({
   unitPrice,
   unitLabel = "Linh Thạch",
   submitLabel,
+  disabledReason,
   disabled = false
 }: {
   name?: string;
@@ -19,8 +21,10 @@ export function ItemQuantityControl({
   unitPrice?: string;
   unitLabel?: string;
   submitLabel?: string;
+  disabledReason?: string;
   disabled?: boolean;
 }) {
+  const { pending } = useFormStatus();
   const safeMax = Math.max(0, Math.floor(max));
   const safeMin = safeMax > 0 ? Math.max(1, Math.floor(min)) : 0;
   const initial = safeMax > 0 ? clamp(defaultValue, safeMin, safeMax) : 0;
@@ -30,7 +34,8 @@ export function ItemQuantityControl({
     return (BigInt(unitPrice) * BigInt(quantity)).toLocaleString("vi-VN");
   }, [quantity, unitPrice]);
 
-  const locked = disabled || safeMax < 1;
+  const locked = disabled || safeMax < 1 || pending;
+  const reason = disabledReason ?? (safeMax < 1 ? "Không thể thực hiện" : "");
   return (
     <div className="quantity-purchase">
       <div className="quantity-control" aria-label="Số lượng">
@@ -48,7 +53,8 @@ export function ItemQuantityControl({
         <button type="button" disabled={locked || quantity >= safeMax} onClick={() => setQuantity((value) => clamp(value + 1, safeMin, safeMax))}>+</button>
       </div>
       {total ? <b className="quantity-total">Tổng: {total} {unitLabel}</b> : null}
-      {submitLabel ? <button className="btn btn-secondary" disabled={locked}>{submitLabel} {quantity > 0 ? quantity : ""}</button> : null}
+      {reason && (disabled || safeMax < 1) ? <small className="quantity-disabled-reason">{reason}</small> : null}
+      {submitLabel ? <button type="submit" className="btn btn-secondary" disabled={locked}>{pending ? "Đang xử lý..." : `${submitLabel} ${quantity > 0 ? quantity : ""}`}</button> : null}
     </div>
   );
 }

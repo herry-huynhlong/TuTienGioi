@@ -276,6 +276,71 @@ async function main() {
     data: { currentLocationId: locationByKey.get("thanh-van-dong-thanh")! }
   });
 
+  async function dialogue(key: string, title: string, speaker: string, text: string, choices: string[]) {
+    const set = await prisma.dialogueSet.upsert({
+      where: { key },
+      update: { title, active: true },
+      create: { key, title, description: `${title} dialogue`, active: true }
+    });
+    const node = await prisma.dialogueNode.upsert({
+      where: { dialogueSetId_key: { dialogueSetId: set.id, key: "root" } },
+      update: { speaker, text, sortOrder: 0 },
+      create: { dialogueSetId: set.id, key: "root", speaker, text, sortOrder: 0 }
+    });
+    await prisma.dialogueChoice.deleteMany({ where: { dialogueNodeId: node.id } });
+    for (const [index, label] of choices.entries()) {
+      await prisma.dialogueChoice.create({ data: { dialogueNodeId: node.id, label, action: index === 0 ? "QUEST" : null, sortOrder: index } });
+    }
+    return set;
+  }
+
+  const lucMinhDialogue = await dialogue("dlg-luc-minh", "Lục Minh", "Lục Minh", "Ngươi vừa đặt chân tới Thanh Vân Vực? Nếu chưa biết bắt đầu từ đâu, hãy thử ra ngoài thành nhìn một chút.", ["Nhận nhiệm vụ", "Hỏi về Thanh Vân Vực", "Rời đi"]);
+  const emissaryDialogue = await dialogue("dlg-thanh-van-su-gia", "Thanh Vân Sứ Giả", "Thanh Vân Sứ Giả", "Các sơn môn quanh đây đang tuyển người. Nếu muốn đi xa hơn trên tiên lộ, ngươi nên tìm hiểu, nhưng không cần vội bái nhập.", ["Tìm hiểu sơn môn", "Hỏi về tông môn", "Rời đi"]);
+  const merchantDialogue = await dialogue("dlg-van-bao-lau", "Vạn Bảo Lâu Quản Sự", "Quản Sự", "Vật phẩm có giá trị nếu đặt đúng nơi. Biết mua, biết bán, biết giữ lại mới là cách sống lâu.", ["Hỏi về Chợ Linh Bảo", "Rời đi"]);
+  const herbFarmerDialogue = await dialogue("dlg-duoc-nong", "Dược Nông", "Dược Nông", "Thanh Trúc Lâm còn nhiều Thanh Linh Thảo. Người mới nếu cẩn thận vẫn có thể hái được.", ["Hỏi về linh thảo", "Rời đi"]);
+  const woundedDialogue = await dialogue("dlg-tu-si-bi-thuong", "Tu Sĩ Bị Thương", "Tu Sĩ Bị Thương", "Ta bị yêu lang cắn ở bìa rừng. Nếu ngươi tìm được Thanh Linh Thảo, có thể cứu ta một mạng.", ["Nhận nhiệm vụ", "Bỏ qua"]);
+  const wandererDialogue = await dialogue("dlg-du-phuong-dao-nhan", "Du Phương Đạo Nhân", "Du Phương Đạo Nhân", "Đường tu tiên không chỉ là cảnh giới. Có lúc một câu hỏi đúng còn quý hơn một viên đan.", ["Hỏi đạo", "Rời đi"]);
+  const sectMissionDialogue = await dialogue("dlg-nhiem-vu-chap-su", "Nhiệm Vụ Chấp Sự", "Nhiệm Vụ Chấp Sự", "Nhiệm Vụ Đường ghi nhận công lao của đệ tử. Việc nhỏ tích lại cũng thành uy danh sơn môn.", ["Hỏi về nhiệm vụ", "Rời đi"]);
+  const teachingDialogue = await dialogue("dlg-truyen-cong-truong-lao", "Truyền Công Trưởng Lão", "Truyền Công Trưởng Lão", "Công pháp không nằm ở trang giấy, mà ở cách ngươi vận chuyển từng hơi thở.", ["Hỏi về công pháp", "Rời đi"]);
+
+  const npcData = [
+    ["luc-minh", "Lục Minh", "Dẫn Lộ Nhân", "Một tán tu từng nhiều năm dẫn người mới qua cửa Đông Thành.", "guide", "thanh-van-dong-thanh", lucMinhDialogue.id, ["GUIDE", "QUEST"], true, false, true],
+    ["thanh-van-su-gia", "Thanh Vân Sứ Giả", "Sứ Giả Sơn Môn", "Người đưa tin giữa các sơn môn quanh Thanh Vân Vực.", "sect-disciple", "thanh-van-dong-thanh", emissaryDialogue.id, ["SECT", "QUEST"], true, false, true],
+    ["van-bao-lau-quan-su", "Vạn Bảo Lâu Quản Sự", "Chưởng Quầy", "Quản sự chợ, nắm giá linh thảo, khoáng vật và chiến lợi phẩm phổ thông.", "merchant", "cho-linh-bao", merchantDialogue.id, ["MERCHANT", "LORE"], false, true, true],
+    ["duoc-nong", "Dược Nông", "Người hái thuốc", "Lão nông quen từng vạt linh thảo ở rìa Thanh Trúc Lâm.", "elder", "thanh-truc-lam", herbFarmerDialogue.id, ["LORE", "QUEST"], false, false, true],
+    ["tu-si-bi-thuong", "Tu Sĩ Bị Thương", "Tán tu gặp nạn", "Một tu sĩ trẻ đang dựa vào gốc trúc, hơi thở rối loạn.", "wandering-cultivator", "thanh-truc-lam", woundedDialogue.id, ["WANDERER", "QUEST"], true, false, false],
+    ["du-phuong-dao-nhan", "Du Phương Đạo Nhân", "Khách lữ hành", "Đạo nhân đi qua nhiều vùng, thường xuất hiện khi cơ duyên vừa chớm.", "wandering-cultivator", "thanh-truc-lam", wandererDialogue.id, ["WANDERER", "LORE"], false, false, false],
+    ["ngoai-mon-chap-su", "Ngoại Môn Chấp Sự", "Thanh Linh Sơn Môn", "Chấp sự phụ trách tiếp dẫn người ngoài sơn môn.", "sect-disciple", "thanh-linh-son-mon", emissaryDialogue.id, ["SECT", "QUEST"], true, false, true],
+    ["nhiem-vu-chap-su", "Nhiệm Vụ Chấp Sự", "Nhiệm Vụ Đường", "NPC chức năng giải thích và dẫn tới hệ nhiệm vụ tông môn.", "sect-disciple", "thanh-linh-son-mon", sectMissionDialogue.id, ["SECT", "QUEST"], true, false, true],
+    ["truyen-cong-truong-lao", "Truyền Công Trưởng Lão", "Tàng Kinh Các", "Trưởng lão trông coi truyền công và công pháp nhập môn.", "elder", "thanh-linh-son-mon", teachingDialogue.id, ["ELDER", "SECT", "LORE"], false, false, true]
+  ] as const;
+
+  const npcByKey = new Map<string, string>();
+  for (const [key, name, title, description, iconKey, locationKey, dialogueSetId, npcTypes, questProvider, shopProvider, serviceProvider] of npcData) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { key: locationKey } });
+    const npc = await prisma.npc.upsert({
+      where: { key },
+      update: { name, title, description, iconKey, locationId: location.id, regionId: location.zoneId ? (await prisma.zone.findUnique({ where: { id: location.zoneId } }))?.regionId ?? null : null, dialogueSetId, npcTypes: [...npcTypes] as never, questProvider, shopProvider, serviceProvider, active: true },
+      create: { key, name, title, description, iconKey, locationId: location.id, regionId: location.zoneId ? (await prisma.zone.findUnique({ where: { id: location.zoneId } }))?.regionId ?? null : null, dialogueSetId, npcTypes: [...npcTypes] as never, questProvider, shopProvider, serviceProvider, active: true }
+    });
+    npcByKey.set(key, npc.id);
+  }
+
+  const onboardingQuests = [
+    ["buoc-dau-tien", "Bước Đầu Tiên", "Ra khỏi Đông Thành và tới Thanh Trúc Lâm để hiểu cách di chuyển ngoài thành.", "MAIN", "VISIT_LOCATION", { targetKey: "thanh-truc-lam", requireTurnIn: true }, 1, "TALK_TO_NPC", "luc-minh", "luc-minh", null, "san-yeu-dau-tien", { cultivation: 100, linhThach: 50 }, ["met_intro_guide"]],
+    ["san-yeu-dau-tien", "Săn Yêu Thú Đầu Tiên", "Đánh bại 3 yêu thú yếu trong lúc lịch luyện hoặc săn bắn.", "MAIN", "KILL_MONSTER", { targetKey: "yeu-lang", requireTurnIn: true }, 3, "MONSTER_KILLED", "luc-minh", "luc-minh", "buoc-dau-tien", "thu-thap-linh-thao", { cultivation: 120, linhThach: 80 }, ["completed_first_hunt"]],
+    ["thu-thap-linh-thao", "Thu Thập Linh Thảo", "Mang về 5 Thanh Linh Thảo từ các khu vực tài nguyên quanh Hắc Sơn.", "MAIN", "COLLECT_ITEM", { targetKey: "thanh-linh-thao", requireTurnIn: true }, 5, "ITEM_OBTAINED", "tu-si-bi-thuong", "tu-si-bi-thuong", "san-yeu-dau-tien", "tim-hieu-son-mon", { cultivation: 90, linhThach: 60, items: [{ key: "hoi-khi-dan", quantity: 1 }] }, ["helped_wounded_cultivator"]],
+    ["tim-hieu-son-mon", "Tìm Hiểu Sơn Môn", "Mở danh sách Tông Môn hoặc ghé sơn môn để biết con đường tu hành theo thế lực.", "MAIN", "VISIT_SECT_PAGE", { requireTurnIn: true }, 1, "MANUAL", "thanh-van-su-gia", "thanh-van-su-gia", "thu-thap-linh-thao", null, { cultivation: 100, linhThach: 100 }, ["unlocked_sect_intro", "unlocked_market_intro"]]
+  ] as const;
+
+  for (const [key, title, description, type, objectiveType, objective, targetCount, triggerType, startNpcKey, turnInNpcKey, prerequisiteKey, nextQuestKey, reward, flags] of onboardingQuests) {
+    await prisma.questTemplate.upsert({
+      where: { key },
+      update: { title, description, type: type as never, objectiveType: objectiveType as never, objective, targetCount, triggerType: triggerType as never, startNpcId: npcByKey.get(startNpcKey), turnInNpcId: npcByKey.get(turnInNpcKey), prerequisiteKey, nextQuestKey, reward, flagsOnComplete: [...flags], active: true },
+      create: { key, title, description, type: type as never, objectiveType: objectiveType as never, objective, targetCount, triggerType: triggerType as never, startNpcId: npcByKey.get(startNpcKey), turnInNpcId: npcByKey.get(turnInNpcKey), prerequisiteKey, nextQuestKey, reward, flagsOnComplete: [...flags], active: true }
+    });
+  }
+
   const progressionItems = [
     ["thanh-linh-thao", null, "Thanh Linh Thảo", "MATERIAL", "HA", "Linh Thảo", "herb", "Linh thảo phổ biến ở nơi linh khí mỏng.", "Luyện đan cơ bản, nhiệm vụ thu thập, Linh Điền và giao dịch.", 20, 10, true, {}, null, null, false],
     ["ngung-khi-thao", null, "Ngưng Khí Thảo", "MATERIAL", "HA", "Linh Thảo", "herb", "Lá cỏ ngưng tụ khí tức nhẹ, hợp với giai đoạn nhập môn.", "Nguyên liệu đan dược và tu luyện giai đoạn đầu.", 35, 15, true, {}, null, null, false],

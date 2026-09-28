@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, cancelCultivation, cancelExploration, cancelMarketListing, cancelSectApplication, claimCultivation, claimExploration, claimSectMining, claimTravel, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, leaveExplorationEncounter, plantSectCrop, purchaseMarketListing, purchaseSystemMarketItem, rejectSectApplication, SectError, sellItemToNpc, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTravel, unassignSectCave, unequipItem, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
+import { acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, cancelCultivation, cancelExploration, cancelMarketListing, cancelSectApplication, claimCultivation, claimExploration, claimSectMining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectSectApplication, SectError, sellItemToNpc, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTravel, talkToNpc, unassignSectCave, unequipItem, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -69,7 +69,7 @@ async function characterId() {
 }
 
 function redirectGameError(error: unknown, path: string): never {
-  if (error instanceof GameError || error instanceof SectError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
+  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
   throw error;
 }
 
@@ -163,6 +163,45 @@ export async function startTravelAction(formData: FormData) {
     redirectGameError(error, "/game/world");
   }
   redirect("/game/world");
+}
+
+export async function visitSectPageAction() {
+  try {
+    await progressQuestEvent(prisma, { characterId: await characterId(), eventType: "VISIT_SECT_PAGE", amount: 1 });
+  } catch (error) {
+    redirectGameError(error, "/game/sect");
+  }
+  redirect("/game/sect");
+}
+
+export async function talkToNpcAction(formData: FormData) {
+  const npcKey = String(formData.get("npcKey") ?? "");
+  try {
+    await talkToNpc(prisma, await characterId(), npcKey);
+  } catch (error) {
+    redirectGameError(error, `/game/npc/${encodeURIComponent(npcKey)}`);
+  }
+  redirect(`/game/npc/${encodeURIComponent(npcKey)}`);
+}
+
+export async function acceptQuestAction(formData: FormData) {
+  const npcKey = String(formData.get("npcKey") ?? "");
+  try {
+    await acceptQuest(prisma, await characterId(), String(formData.get("questKey")));
+  } catch (error) {
+    redirectGameError(error, `/game/npc/${encodeURIComponent(npcKey)}`);
+  }
+  redirect(`/game/npc/${encodeURIComponent(npcKey)}?ok=accepted`);
+}
+
+export async function completeQuestAction(formData: FormData) {
+  const npcKey = String(formData.get("npcKey") ?? "");
+  try {
+    await completeQuest(prisma, await characterId(), String(formData.get("questId")));
+  } catch (error) {
+    redirectGameError(error, `/game/npc/${encodeURIComponent(npcKey)}`);
+  }
+  redirect(`/game/npc/${encodeURIComponent(npcKey)}?ok=completed`);
 }
 
 export async function claimTravelAction(formData: FormData) {
@@ -418,13 +457,13 @@ export async function buyMarketListingAction(formData: FormData) {
 
 export async function buySystemMarketItemAction(formData: FormData) {
   const rawQuantity = String(formData.get("quantity") ?? "1").trim();
-  if (!/^\d+$/.test(rawQuantity)) redirect("/game/market");
+  if (!/^\d+$/.test(rawQuantity)) redirect("/game/market?error=Số lượng không hợp lệ.");
   try {
-    await purchaseSystemMarketItem(prisma, await characterId(), String(formData.get("stockId")), Number(rawQuantity));
+    const result = await purchaseSystemMarketItem(prisma, await characterId(), String(formData.get("stockId")), Number(rawQuantity));
+    redirect(`/game/market?ok=${encodeURIComponent(`Đã mua ${result.quantity} ${result.itemName} với giá ${result.totalPrice.toLocaleString("vi-VN")} Linh Thạch.`)}`);
   } catch (error) {
     redirectGameError(error, "/game/market");
   }
-  redirect("/game/market?ok=system-buy");
 }
 
 export async function sellItemAction(formData: FormData) {

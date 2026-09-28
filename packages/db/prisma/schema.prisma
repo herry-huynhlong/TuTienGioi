@@ -206,6 +206,69 @@ enum RouteSecurityLevel {
   NONE
 }
 
+enum NpcType {
+  GUIDE
+  SECT
+  QUEST
+  MERCHANT
+  CRAFTSMAN
+  GUARD
+  ELDER
+  WANDERER
+  EVENT
+  LORE
+}
+
+enum NpcSpawnMode {
+  STATIC
+  RANDOM
+  EVENT
+}
+
+enum QuestType {
+  MAIN
+  SIDE
+  NPC
+  SECT
+  WORLD
+  EVENT
+}
+
+enum QuestStatus {
+  AVAILABLE
+  ACTIVE
+  READY_TO_TURN_IN
+  COMPLETED
+  CANCELLED
+}
+
+enum QuestObjectiveType {
+  TALK_TO_NPC
+  VISIT_LOCATION
+  KILL_MONSTER
+  COLLECT_ITEM
+  DELIVER_ITEM
+  MINE_RESOURCE
+  HARVEST_CROP
+  BUY_ITEM
+  SELL_ITEM
+  JOIN_SECT
+  REACH_REALM
+  VISIT_SECT_PAGE
+}
+
+enum QuestTriggerType {
+  TALK_TO_NPC
+  ENTER_LOCATION
+  MONSTER_KILLED
+  ITEM_OBTAINED
+  REALM_REACHED
+  SECT_JOINED
+  WORLD_EVENT
+  RANDOM_ENCOUNTER
+  MANUAL
+}
+
 model User {
   id            String        @id @default(cuid())
   username      String        @unique
@@ -301,6 +364,8 @@ model Character {
   chatMessages    ChatMessage[]
   logs            GameLog[]
   onboarding      OnboardingProgress[]
+  quests          CharacterQuest[]
+  questFlags      CharacterQuestFlag[]
   @@index([realmStageId])
   @@index([sectId])
   @@index([locationId])
@@ -456,6 +521,7 @@ model Region {
   climate     String?
   lawLevel    RouteSecurityLevel @default(MEDIUM)
   zones       Zone[]
+  npcs        Npc[]
   @@index([worldId, order])
 }
 
@@ -494,6 +560,7 @@ model Location {
   routesFrom   Route[] @relation("RouteOrigin")
   routesTo     Route[] @relation("RouteDestination")
   characters   Character[]
+  npcs         Npc[]
   @@index([zoneId])
   @@index([securityLevel])
 }
@@ -773,6 +840,7 @@ model Sect {
   libraryTechniques SectLibraryTechnique[]
   relationsA  SectRelation[] @relation("SectA")
   relationsB  SectRelation[] @relation("SectB")
+  npcs         Npc[]
   @@index([rank, recruiting])
   @@index([reputation])
 }
@@ -1078,6 +1146,139 @@ model WorldEvent {
   modifiers Json
   createdAt DateTime @default(now())
   @@index([startsAt, endsAt])
+}
+
+model Npc {
+  id              String @id @default(cuid())
+  key             String @unique
+  name            String
+  title           String
+  description     String
+  portraitUrl     String?
+  iconKey         String @default("user")
+  regionId        String?
+  region          Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  locationId      String
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  npcTypes        NpcType[]
+  sectId          String?
+  sect            Sect? @relation(fields: [sectId], references: [id], onDelete: SetNull)
+  realm           String?
+  roleTitle       String?
+  dialogueSetId   String?
+  dialogueSet     DialogueSet? @relation(fields: [dialogueSetId], references: [id], onDelete: SetNull)
+  questProvider   Boolean @default(false)
+  shopProvider    Boolean @default(false)
+  serviceProvider Boolean @default(false)
+  active          Boolean @default(true)
+  spawnMode       NpcSpawnMode @default(STATIC)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  questStarts     QuestTemplate[] @relation("QuestStartNpc")
+  questTurnIns    QuestTemplate[] @relation("QuestTurnInNpc")
+  @@index([locationId, active])
+  @@index([sectId])
+}
+
+model DialogueSet {
+  id          String @id @default(cuid())
+  key         String @unique
+  title       String
+  description String @default("")
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  npcs        Npc[]
+  nodes       DialogueNode[]
+}
+
+model DialogueNode {
+  id            String @id @default(cuid())
+  dialogueSetId String
+  dialogueSet   DialogueSet @relation(fields: [dialogueSetId], references: [id], onDelete: Cascade)
+  key           String
+  speaker       String
+  text          String
+  sortOrder     Int @default(0)
+  conditions    Json?
+  actions       Json?
+  choices       DialogueChoice[]
+  @@unique([dialogueSetId, key])
+  @@index([dialogueSetId, sortOrder])
+}
+
+model DialogueChoice {
+  id             String @id @default(cuid())
+  dialogueNodeId String
+  dialogueNode   DialogueNode @relation(fields: [dialogueNodeId], references: [id], onDelete: Cascade)
+  label          String
+  nextNodeKey    String?
+  action         String?
+  metadata       Json?
+  sortOrder      Int @default(0)
+  @@index([dialogueNodeId, sortOrder])
+}
+
+model QuestTemplate {
+  id                 String @id @default(cuid())
+  key                String @unique
+  type               QuestType @default(NPC)
+  title              String
+  description        String
+  difficulty         Int @default(1)
+  objectiveType      QuestObjectiveType
+  objective          Json @default("{}")
+  targetCount        Int @default(1)
+  triggerType        QuestTriggerType @default(TALK_TO_NPC)
+  startNpcId         String?
+  startNpc           Npc? @relation("QuestStartNpc", fields: [startNpcId], references: [id], onDelete: SetNull)
+  turnInNpcId        String?
+  turnInNpc          Npc? @relation("QuestTurnInNpc", fields: [turnInNpcId], references: [id], onDelete: SetNull)
+  prerequisiteKey    String?
+  nextQuestKey       String?
+  reward             Json @default("{}")
+  flagsOnComplete    String[]
+  active             Boolean @default(true)
+  repeatable         Boolean @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  characterQuests    CharacterQuest[]
+  @@index([type, active])
+  @@index([startNpcId])
+  @@index([turnInNpcId])
+  @@index([prerequisiteKey])
+}
+
+model CharacterQuest {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  templateId  String
+  template    QuestTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  status      QuestStatus @default(ACTIVE)
+  progress    Int @default(0)
+  targetCount Int @default(1)
+  state       Json @default("{}")
+  startedAt   DateTime @default(now())
+  readyAt     DateTime?
+  completedAt DateTime?
+  updatedAt   DateTime @updatedAt
+  @@unique([characterId, templateId])
+  @@index([characterId, status])
+  @@index([templateId, status])
+}
+
+model CharacterQuestFlag {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  key         String
+  value       Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([characterId, key])
+  @@index([characterId])
 }
 
 model WorldNews {

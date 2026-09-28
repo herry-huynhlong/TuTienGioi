@@ -1,33 +1,44 @@
-import { redirect } from "next/navigation";
-import { getUser } from "@/lib/auth";
+import Link from "next/link";
 import { prisma } from "@ttg/db";
 
 export default async function AdminPage() {
-  const user = await getUser();
-  if (user?.role !== "ADMIN") redirect("/game");
-  const [users, supply, txs, reports] = await Promise.all([
+  const [users, characters, items, marketStock, sects, missions, audits] = await Promise.all([
     prisma.user.count(),
-    prisma.character.aggregate({ _sum: { linhThach: true, tienNgoc: true }, _max: { linhThach: true } }),
-    prisma.walletTransaction.findMany({ take: 20, orderBy: { createdAt: "desc" }, include: { character: true } }),
-    prisma.report.findMany({ take: 20, orderBy: { createdAt: "desc" } })
+    prisma.character.count(),
+    prisma.itemTemplate.count(),
+    prisma.systemMarketStock.count({ where: { stock: { gt: 0 } } }),
+    prisma.sect.count(),
+    prisma.sectMission.count({ where: { status: "ACTIVE" } }),
+    prisma.adminAuditLog.findMany({ take: 10, orderBy: { createdAt: "desc" }, include: { actor: true } })
   ]);
   return (
-    <div className="p-5 lg:p-8">
-      <h1 className="text-3xl font-black">Admin</h1>
-      <section className="mt-6 grid gap-4 md:grid-cols-4">
-        <Box label="Users" value={String(users)} />
-        <Box label="Tổng Linh Thạch" value={supply._sum.linhThach?.toString() ?? "0"} />
-        <Box label="Top Wealth" value={supply._max.linhThach?.toString() ?? "0"} />
-        <Box label="Reports" value={String(reports.length)} />
+    <div>
+      <header className="admin-page-head">
+        <div>
+          <p className="eyebrow">Control Panel</p>
+          <h1>Admin Dashboard</h1>
+        </div>
+        <Link href="/admin/items/new" className="btn">Thêm vật phẩm</Link>
+      </header>
+      <section className="admin-stat-grid">
+        <Stat label="Users" value={users} />
+        <Stat label="Characters" value={characters} />
+        <Stat label="Item templates" value={items} />
+        <Stat label="Market stock" value={marketStock} />
+        <Stat label="Tông Môn" value={sects} />
+        <Stat label="Mission active" value={missions} />
       </section>
-      <section className="panel mt-6 rounded-lg p-6">
-        <h2 className="text-xl font-bold text-gold">Ledger gần đây</h2>
-        <div className="mt-4 space-y-2">{txs.map((tx) => <p key={tx.id} className="muted">{tx.character.name} · {tx.type} · {tx.amount.toString()} · {tx.currency}</p>)}</div>
+      <section className="panel rounded-lg p-5 mt-5">
+        <h2 className="text-xl font-bold text-gold">Admin actions gần đây</h2>
+        <div className="admin-log-list mt-4">
+          {audits.map((log) => <p key={log.id}><b>{log.action}</b><span>{log.actor.username} · {log.target} · {log.createdAt.toLocaleString("vi-VN")}</span></p>)}
+          {audits.length === 0 ? <p className="muted">Chưa có audit log.</p> : null}
+        </div>
       </section>
     </div>
   );
 }
 
-function Box({ label, value }: { label: string; value: string }) {
-  return <div className="panel rounded-lg p-4"><p className="muted text-sm">{label}</p><p className="font-bold">{value}</p></div>;
+function Stat({ label, value }: { label: string; value: number }) {
+  return <div className="panel rounded-lg p-4"><p className="muted text-sm">{label}</p><b className="admin-stat-value">{value.toLocaleString("vi-VN")}</b></div>;
 }

@@ -124,7 +124,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
       realmStage: { include: { realm: true } }
     }
   });
-  const [worlds, featureUnlocks, itemTemplates, monsters] = await Promise.all([
+  const [worlds, featureUnlocks, itemTemplates, monsters, activeSectMissions] = await Promise.all([
     prisma.world.findMany({
       orderBy: { createdAt: "asc" },
       include: {
@@ -149,7 +149,13 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
     }),
     getFeatureUnlockState(prisma, c.id),
     prisma.itemTemplate.findMany({ select: { key: true, name: true } }),
-    prisma.monster.findMany({ select: { key: true, name: true } })
+    prisma.monster.findMany({ select: { key: true, name: true } }),
+    prisma.sectMissionParticipant.findMany({
+      where: { characterId: c.id, status: { in: ["ACTIVE", "READY_TO_TURN_IN"] } },
+      include: { mission: true },
+      orderBy: { startedAt: "desc" },
+      take: 3
+    })
   ]);
   await recordOnboardingEvent(prisma, c.id, "VIEW_WORLD");
 
@@ -182,6 +188,12 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
   const travelBlockedByActivity = c.cultivationJobs.length + c.explorations.length + c.travels.length > 0;
   const itemNames = new Map(itemTemplates.map((item) => [item.key, item.name]));
   const monsterNames = new Map(monsters.map((monster) => [monster.key, monster.name]));
+  const sectMissionByLocation = new Map<string, typeof activeSectMissions>();
+  for (const mission of activeSectMissions) {
+    const locationId = mission.mission?.locationId;
+    if (!locationId) continue;
+    sectMissionByLocation.set(locationId, [...(sectMissionByLocation.get(locationId) ?? []), mission]);
+  }
 
   return (
     <div className="world-directory-page p-5 lg:p-8">
@@ -226,6 +238,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
                             location={location}
                             selected={selectedLocation?.id === location.id}
                             state={state}
+                            missionCount={sectMissionByLocation.get(location.id)?.length ?? 0}
                           />
                         );
                       })}
@@ -254,6 +267,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
             </section>
 
             <section className="location-detail-panel">
+              {activeSectMissions.length > 0 ? <SectMissionTracker missions={activeSectMissions} /> : null}
               {c.travels.length > 0 ? (
                 <TravelStatus travels={c.travels} />
               ) : selectedLocation ? (
@@ -298,12 +312,14 @@ function LocationRow({
   activeRegionKey,
   location,
   selected,
-  state
+  state,
+  missionCount
 }: {
   activeRegionKey: string;
   location: { key: string; name: string; kind: string; services: string[] };
   selected: boolean;
   state: DiscoveryState;
+  missionCount: number;
 }) {
   if (state === "unknown") {
     return (
@@ -327,7 +343,30 @@ function LocationRow({
       </span>
       {state === "current" ? <small className="directory-location-status">Hiện tại</small> : null}
       {state === "locked" ? <small className="directory-location-status">Khóa</small> : null}
+      {missionCount > 0 ? <small className="directory-location-status">Nhiệm vụ</small> : null}
     </Link>
+  );
+}
+
+function SectMissionTracker({ missions }: { missions: Array<{ id: string; progress: number; targetCount: number; status: string; mission: { title: string; locationId: string | null; objective: unknown } | null }> }) {
+  return (
+    <div className="panel mb-4 rounded-lg p-4">
+      <p className="text-xs font-bold uppercase text-jade">Nhiệm vụ Tông Môn</p>
+      <div className="mt-2 grid gap-2">
+        {missions.map((entry) => {
+          const objective = entry.mission?.objective && typeof entry.mission.objective === "object" && !Array.isArray(entry.mission.objective) ? entry.mission.objective as Record<string, unknown> : {};
+          return (
+            <div key={entry.id} className="route-card">
+              <div>
+                <b>{entry.mission?.title ?? "Nhiệm vụ"}</b>
+                <small>{objective.locationName as string || "Theo địa đồ"} · {entry.progress}/{entry.targetCount}</small>
+              </div>
+              <span className="text-xs font-bold text-gold">{entry.status === "READY_TO_TURN_IN" ? "Có thể nộp" : "Đang làm"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

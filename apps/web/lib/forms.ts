@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, cancelCultivation, cancelExploration, cancelMarketListing, cancelSectApplication, claimCultivation, claimExploration, claimSectMining, claimTravel, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, leaveExplorationEncounter, plantSectCrop, purchaseMarketListing, rejectSectApplication, SectError, sellItemToNpc, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTravel, unassignSectCave, unequipItem, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
+import { acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, cancelCultivation, cancelExploration, cancelMarketListing, cancelSectApplication, claimCultivation, claimExploration, claimSectMining, claimTravel, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, leaveExplorationEncounter, plantSectCrop, purchaseMarketListing, purchaseSystemMarketItem, rejectSectApplication, SectError, sellItemToNpc, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTravel, unassignSectCave, unequipItem, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -410,6 +410,17 @@ export async function exchangeSectTechniqueAction(formData: FormData) {
 export async function buyMarketListingAction(formData: FormData) {
   try {
     await purchaseMarketListing(prisma, await characterId(), String(formData.get("listingId")));
+  } catch (error) {
+    redirectGameError(error, "/game/market");
+  }
+  redirect("/game/market");
+}
+
+export async function buySystemMarketItemAction(formData: FormData) {
+  const rawQuantity = String(formData.get("quantity") ?? "1").trim();
+  if (!/^\d+$/.test(rawQuantity)) redirect("/game/market");
+  try {
+    await purchaseSystemMarketItem(prisma, await characterId(), String(formData.get("stockId")), Number(rawQuantity));
   } catch (error) {
     redirectGameError(error, "/game/market");
   }

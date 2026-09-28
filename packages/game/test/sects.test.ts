@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Currency, SectRoleName, WalletTxType } from "@ttg/db";
-import { depositSectCurrency, withdrawSectCurrency } from "../src/sects.js";
+import { calculateSectMissionReward, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, previewSectFarmReward, previewSectMineReward, sectFacilityConfig, depositSectCurrency, withdrawSectCurrency } from "../src/sects.js";
 
 function fakeSectDb(role: SectRoleName, characterBalance = 10_000n, treasury = 1_000n) {
   const state = {
@@ -112,5 +112,53 @@ describe("sect economy services", () => {
 
     await expect(withdrawSectCurrency(fake.db as never, "char_1", 101n)).rejects.toMatchObject({ code: "INSUFFICIENT_TREASURY" });
     expect(fake.state.sect.treasury).toBe(100n);
+  });
+
+  it("keeps rank config as the source of sect capacity unlocks", () => {
+    expect(getSectRank(5).capacities.farm).toBeGreaterThanOrEqual(sectFacilityConfig.defaults.FARM);
+    expect(getSectRank(4).capacities.mine).toBeGreaterThan(getSectRank(5).capacities.mine);
+    expect(getSectRank(3).maxMembers).toBeGreaterThan(getSectRank(4).maxMembers);
+  });
+
+  it("calculates farm reward split and rejects locked crops in backend", () => {
+    const reward = previewSectFarmReward(5, "thanh-linh-thao");
+
+    expect(reward.totalYield).toBe(10);
+    expect(reward.split).toEqual({ personal: 7, sect: 3 });
+    expect(reward.contribution).toBeGreaterThan(0);
+    expect(() => previewSectFarmReward(5, "hoa-linh-chi")).toThrowError(/chưa mở/);
+  });
+
+  it("calculates mine reward split from backend config", () => {
+    const reward = previewSectMineReward(4, "han-thiet-mach");
+
+    expect(reward.totalYield).toBe(22);
+    expect(reward.split).toEqual({ personal: 8, sect: 14 });
+    expect(reward.reputation).toBeGreaterThan(0);
+  });
+
+  it("scales generated mission rewards by difficulty and world danger", () => {
+    const easy = calculateSectMissionReward({ difficulty: 1, locationDanger: 1, targetStrength: 0, sectRank: 5 });
+    const hard = calculateSectMissionReward({ difficulty: 4, locationDanger: 6, targetStrength: 3, sectRank: 3 });
+
+    expect(hard.cultivation).toBeGreaterThan(easy.cultivation);
+    expect(hard.contribution).toBeGreaterThan(easy.contribution);
+    expect(hard.reputation).toBeGreaterThan(easy.reputation);
+  });
+
+  it("derives cave benefits from role and sect rank without manual assignment", () => {
+    const outer = getSectCaveBenefit(SectRoleName.OUTER, 5);
+    const elderHighRank = getSectCaveBenefit(SectRoleName.ELDER, 2);
+
+    expect(outer.cultivationBonusBps).toBe(500);
+    expect(elderHighRank.cultivationBonusBps).toBeGreaterThan(outer.cultivationBonusBps);
+  });
+
+  it("prices sect storage exchange from backend item economy", () => {
+    const materialPrice = getSectItemContributionPrice({ category: "MATERIAL", rarity: "HA", bindRules: { systemBasePrice: 40 }, baseModifiers: {} });
+    const equipmentPrice = getSectItemContributionPrice({ category: "EQUIPMENT", rarity: "TRUNG", bindRules: { systemBasePrice: 200 }, baseModifiers: { attack: 5 } });
+
+    expect(materialPrice).toBeGreaterThan(0);
+    expect(equipmentPrice).toBeGreaterThan(materialPrice);
   });
 });

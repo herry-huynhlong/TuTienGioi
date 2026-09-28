@@ -21,6 +21,7 @@ type InventoryItem = {
     name: string;
     category: string;
     rarity: string;
+    itemFamily?: string | null;
     description: string;
     equipSlot: string | null;
     tradeable: boolean;
@@ -45,10 +46,10 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
       }
     }
   });
-  const selected = c.items.find((item) => item.id === params?.item) ?? c.items.find((item) => !item.equippedSlot) ?? c.items[0];
   const filter = params?.filter ?? "ALL";
   const equipped = c.items.filter((item) => item.equippedSlot);
-  const inventory = c.items.filter((item) => !item.equippedSlot && (filter === "ALL" || item.template.category === filter));
+  const inventory = groupInventoryItems(c.items.filter((item) => !item.equippedSlot && (filter === "ALL" || item.template.category === filter)));
+  const selected = inventory.find((item) => item.id === params?.item) ?? inventory[0] ?? c.items.find((item) => item.equippedSlot);
   const atMarket = c.currentLocation?.key === "cho-linh-bao";
 
   return (
@@ -128,9 +129,9 @@ function ItemTile({ item, selected }: { item: InventoryItem; selected: boolean }
   const Icon = iconFor(economy.icon);
   return (
     <Link href={`/game/inventory?item=${item.id}`} className={`inventory-tile ${selected ? "selected" : ""}`} title={`${item.template.name}\n${economy.usage}\nGiá hệ thống: ${economy.systemBasePrice.toString()} Linh thạch`}>
-      <span className="item-icon"><Icon size={22} aria-hidden /></span>
+      <span className={`item-icon grade-${item.template.rarity.toLowerCase()}`}><Icon size={22} aria-hidden /></span>
       <b>{item.template.name}</b>
-      <small>{formatSubType(economy.subType, item.template.category)} · {formatRarity(item.template.rarity)} phẩm</small>
+      <small>{formatRarity(item.template.rarity)} Phẩm · {formatSubType(economy.subType, item.template.category)}</small>
       <em>x{item.quantity}</em>
     </Link>
   );
@@ -147,18 +148,23 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
   return (
     <div className="item-detail">
       <div className="item-detail-head">
-        <span className="item-icon item-icon-large"><Icon size={30} aria-hidden /></span>
+        <span className={`item-icon item-icon-large grade-${item.template.rarity.toLowerCase()}`}><Icon size={30} aria-hidden /></span>
         <div>
           <h3>{item.template.name}</h3>
-          <p>{formatItemCategory(item.template.category)} · {formatSubType(economy.subType, item.template.category)}</p>
+          <p>{formatRarity(item.template.rarity)} Phẩm · {formatSubType(economy.subType, item.template.category)}</p>
         </div>
       </div>
 
       <div className="info-table mt-4">
-        <div><span>Phẩm cấp</span><b>{formatRarity(item.template.rarity)} phẩm</b></div>
+        <div><span>Phẩm chất</span><b>{formatRarity(item.template.rarity)} Phẩm</b></div>
+        <div><span>Dòng vật phẩm</span><b>{economy.itemFamily ?? "Riêng lẻ"}</b></div>
+        <div><span>Loại</span><b>{formatSubType(economy.subType, item.template.category)}</b></div>
         <div><span>Số lượng</span><b>{item.quantity}</b></div>
         <div><span>Giá hệ thống</span><b>{economy.systemBasePrice.toString()} Linh thạch</b></div>
         <div><span>Vạn Bảo Lâu thu mua</span><b>{economy.sellableToNpc ? `${economy.npcBuyPrice.toString()} / cái` : "Không thu mua"}</b></div>
+        <div><span>Đổi Tông Môn</span><b>{economy.sectExchangeEnabled ? `${economy.sectContributionPrice} Cống Hiến` : "Không đổi"}</b></div>
+        <div><span>Cống hiến vào kho</span><b>{economy.sectExchangeEnabled ? `${economy.donationContributionValue} Cống Hiến` : "Không nhận"}</b></div>
+        <div><span>Điều kiện cảnh giới</span><b>{economy.requiredRealmOrder === null ? "Không" : `Bậc ${economy.requiredRealmOrder}+`}</b></div>
         <div><span>Giao dịch</span><b>{item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch"}</b></div>
         {item.equippedSlot ? <div><span>Đang trang bị</span><b>{formatEquipmentSlot(item.equippedSlot)}</b></div> : null}
       </div>
@@ -201,10 +207,16 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
 
 function iconFor(icon: string) {
   return ({
+    herb: Leaf,
     leaf: Leaf,
     ore: Hammer,
     wood: Leaf,
     core: Sparkles,
+    crystal: Gem,
+    hide: Shirt,
+    fang: Swords,
+    bone: Box,
+    silk: Sparkles,
     sword: Swords,
     armor: Shirt,
     boots: Shield,
@@ -216,6 +228,30 @@ function iconFor(icon: string) {
     gem: Gem,
     box: Box
   } as const)[icon] ?? Box;
+}
+
+function groupInventoryItems(items: InventoryItem[]) {
+  const groups = new Map<string, InventoryItem>();
+  for (const item of items) {
+    const key = JSON.stringify({
+      template: item.template.name,
+      rarity: item.template.rarity,
+      category: item.template.category,
+      bound: item.bound,
+      quality: item.quality,
+      enhancement: item.enhancement,
+      equippedSlot: item.equippedSlot,
+      modifiers: jsonRecord(item.template.baseModifiers)
+    });
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { ...item, listings: [...item.listings] });
+      continue;
+    }
+    existing.quantity += item.quantity;
+    existing.listings.push(...item.listings);
+  }
+  return [...groups.values()];
 }
 
 function formatSubType(value: string, category: string) {

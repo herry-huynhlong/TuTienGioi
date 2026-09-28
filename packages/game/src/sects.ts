@@ -15,6 +15,7 @@ import {
 } from "@ttg/db";
 import { creditWallet, debitWallet } from "./services.js";
 import { cultivationBaseReward, cultivationEnergyCost, currentEnergy } from "./rules.js";
+import { getItemEconomy } from "./items.js";
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -87,6 +88,14 @@ export const sectEconomyConfig = {
   withdrawContributionCostPerNpcValue: 2
 };
 
+export function getSectItemContributionPrice(template: { category: string; rarity: string; bindRules?: unknown; baseModifiers?: unknown }) {
+  return getItemEconomy(template as never).sectContributionPrice;
+}
+
+export function getSectItemDonationValue(template: { category: string; rarity: string; bindRules?: unknown; baseModifiers?: unknown }) {
+  return getItemEconomy(template as never).donationContributionValue;
+}
+
 export const sectFacilityConfig = {
   defaults: {
     [SectFacilityType.FARM]: 1,
@@ -124,6 +133,15 @@ export const sectMineConfig = {
 } as const;
 
 export const sectCaveConfig = {
+  roleBaseBps: {
+    [SectRoleName.OUTER]: { name: "Ngoại Môn Động Phủ", cultivationBonusBps: 500, breakthroughBonusBps: 0 },
+    [SectRoleName.INNER]: { name: "Nội Môn Động Phủ", cultivationBonusBps: 1000, breakthroughBonusBps: 100 },
+    [SectRoleName.OFFICER]: { name: "Chấp Sự Động Phủ", cultivationBonusBps: 1200, breakthroughBonusBps: 150 },
+    [SectRoleName.ELDER]: { name: "Trưởng Lão Động Phủ", cultivationBonusBps: 1800, breakthroughBonusBps: 300 },
+    [SectRoleName.VICE_LEADER]: { name: "Phó Tông Chủ Động Phủ", cultivationBonusBps: 2200, breakthroughBonusBps: 400 },
+    [SectRoleName.LEADER]: { name: "Tông Chủ Động Phủ", cultivationBonusBps: 2500, breakthroughBonusBps: 500 }
+  },
+  rankMultiplierBps: { 5: 10000, 4: 11000, 3: 12000, 2: 13500, 1: 15000 } as Record<number, number>,
   qualities: {
     [SectCaveQuality.COMMON]: { label: "Phổ Thông", cultivationBonusBps: 500, breakthroughBonusBps: 0, requiredRole: SectRoleName.OUTER },
     [SectCaveQuality.SPIRIT]: { label: "Linh Động", cultivationBonusBps: 1000, breakthroughBonusBps: 100, requiredRole: SectRoleName.INNER },
@@ -148,6 +166,29 @@ export const sectLibraryConfig = {
     TIEN: 30000
   } as Record<string, number>
 };
+
+export type SectMissionType = "HUNT" | "COLLECT" | "EXPLORE" | "DELIVER" | "PATROL" | "MINE" | "FARM" | "DONATE";
+export type SectMissionEventType = "MONSTER_KILLED" | "ITEM_COLLECTED" | "LOCATION_VISITED" | "RESOURCE_MINED" | "ITEM_DONATED" | "FARM_HARVESTED";
+
+export const sectMissionConfig = {
+  refreshHours: 6,
+  difficultyMultipliers: { 1: 1, 2: 1.5, 3: 2.2, 4: 3.2, 5: 5 },
+  rankDifficulty: {
+    5: [1, 2],
+    4: [1, 2, 3],
+    3: [2, 3, 4],
+    2: [3, 4, 5],
+    1: [4, 5]
+  } as Record<number, number[]>,
+  targetCountByDifficulty: {
+    1: [3, 5],
+    2: [5, 10],
+    3: [10, 20],
+    4: [20, 30],
+    5: [1, 3]
+  } as Record<number, [number, number]>,
+  baseReward: { cultivation: 500, linhThach: 120, contribution: 25, reputation: 6 }
+} as const;
 
 export const sectMissionDefinitions = [
   {
@@ -251,6 +292,39 @@ function missionDefinition(key: string) {
   return mission;
 }
 
+function currentMissionPeriodKey(now = new Date()) {
+  const slot = now.getUTCHours() < 6 ? "00" : now.getUTCHours() < 12 ? "06" : now.getUTCHours() < 18 ? "12" : "18";
+  return `${now.toISOString().slice(0, 10)}-${slot}`;
+}
+
+function missionDifficultyForRank(rank: number, seed: number) {
+  const options = sectMissionConfig.rankDifficulty[rank] ?? sectMissionConfig.rankDifficulty[5]!;
+  return options[seed % options.length]!;
+}
+
+function missionTargetCount(difficulty: number, seed: number) {
+  const [min, max] = sectMissionConfig.targetCountByDifficulty[difficulty] ?? sectMissionConfig.targetCountByDifficulty[1]!;
+  return min + (seed % (max - min + 1));
+}
+
+export function calculateSectMissionReward(input: { difficulty: number; targetStrength?: number; locationDanger?: number; sectRank: number }) {
+  const multiplier = sectMissionConfig.difficultyMultipliers[input.difficulty as keyof typeof sectMissionConfig.difficultyMultipliers] ?? 1;
+  const dangerFactor = 1 + Math.max(0, input.locationDanger ?? 0) * 0.12;
+  const strengthFactor = 1 + Math.max(0, input.targetStrength ?? 0) * 0.08;
+  const rankFactor = 1 + (5 - input.sectRank) * 0.08;
+  const scale = multiplier * dangerFactor * strengthFactor * rankFactor;
+  return {
+    cultivation: Math.floor(sectMissionConfig.baseReward.cultivation * scale),
+    linhThach: Math.floor(sectMissionConfig.baseReward.linhThach * scale),
+    contribution: Math.floor(sectMissionConfig.baseReward.contribution * scale),
+    reputation: Math.floor(sectMissionConfig.baseReward.reputation * scale)
+  };
+}
+
+function objectiveRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function rankAllows(currentRank: number, requiredRank: number) {
   return currentRank <= requiredRank;
 }
@@ -276,8 +350,33 @@ function splitYield(total: number, personalShareBps: number) {
   return { personal, sect: Math.max(0, total - personal) };
 }
 
+export function previewSectFarmReward(rank: number, cropKey: string) {
+  const crop = cropDefinition(cropKey);
+  assertUnlocked(rank, crop.requiredRank, "Linh Điền");
+  const totalYield = Math.max(1, Math.floor(crop.baseYield * (1 + (5 - rank) * 0.12)));
+  return { crop, totalYield, split: splitYield(totalYield, sectFarmConfig.personalShareBps), contribution: crop.contribution, reputation: crop.reputation };
+}
+
+export function previewSectMineReward(rank: number, mineKey: string) {
+  const mine = mineDefinition(mineKey);
+  assertUnlocked(rank, mine.requiredRank, "Linh Khoáng");
+  const totalYield = Math.max(1, Math.floor(mine.baseYield * (1 + (5 - rank) * 0.1)));
+  return { mine, totalYield, split: splitYield(totalYield, sectMineConfig.personalShareBps), contribution: mine.contribution, reputation: mine.reputation };
+}
+
 function qualityForRank(rank: number) {
   return getSectRank(rank).caveQualities.at(-1) ?? SectCaveQuality.COMMON;
+}
+
+export function getSectCaveBenefit(role: SectRoleName, sectRank: number) {
+  const base = sectCaveConfig.roleBaseBps[role] ?? sectCaveConfig.roleBaseBps[SectRoleName.OUTER];
+  const rankMultiplier = sectCaveConfig.rankMultiplierBps[sectRank] ?? 10000;
+  return {
+    name: base.name,
+    cultivationBonusBps: Math.floor((base.cultivationBonusBps * rankMultiplier) / 10000),
+    breakthroughBonusBps: Math.floor((base.breakthroughBonusBps * rankMultiplier) / 10000),
+    rankMultiplierBps: rankMultiplier
+  };
 }
 
 async function ensureFacility(tx: Tx, sectId: string, rank: number, facilityType: SectFacilityType) {
@@ -542,7 +641,9 @@ export async function depositSectItem(db: Db, characterId: string, itemId: strin
       update: { quantity: { increment: quantity } },
       create: { sectId: member.sectId, templateId: item.templateId, quantity, quality: item.quality, enhancement: item.enhancement, bound: item.bound }
     });
-    const contribution = Math.max(1, quantity * sectEconomyConfig.itemContributionPerNpcValue);
+    const economy = getItemEconomy(item.template as never);
+    if (!economy.sectExchangeEnabled) throw new SectError("ITEM_NOT_DONATABLE", "Vật phẩm này không nhận vào kho tông môn.");
+    const contribution = Math.max(1, quantity * economy.donationContributionValue);
     await mutateContribution(tx, member.sectId, characterId, contribution, "DONATION", reason, "SectInventoryItem", storage.id, `sect:item-donate:${itemId}:${quantity}:${Date.now()}`);
     await tx.sectInventoryLog.create({ data: { sectId: member.sectId, characterId, templateId: item.templateId, type: SectInventoryLogType.DEPOSIT, quantity, beforeQuantity: before, afterQuantity: before + quantity, reason } });
     await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.INVENTORY, message: `Gửi ${item.template.name} x${quantity} vào Kho Tông Môn.` } });
@@ -556,8 +657,15 @@ export async function withdrawSectItem(db: Db, actorId: string, storageId: strin
     const member = await assertSectMember(tx, actorId);
     const storage = await tx.sectInventoryItem.findUnique({ where: { id: storageId }, include: { template: true } });
     if (!storage || storage.sectId !== member.sectId) throw new SectError("STORAGE_NOT_FOUND", "Không tìm thấy vật phẩm trong kho.");
+    const economy = getItemEconomy(storage.template as never);
+    if (!economy.sectExchangeEnabled) throw new SectError("ITEM_NOT_EXCHANGEABLE", "Vật phẩm này không mở đổi bằng cống hiến.");
+    if (economy.requiredSectRank && member.sect.rank > economy.requiredSectRank) throw new SectError("SECT_RANK_REQUIRED", "Phẩm cấp tông môn chưa đủ để đổi vật phẩm này.");
+    if (economy.requiredRealmOrder !== null) {
+      const character = await tx.character.findUniqueOrThrow({ where: { id: actorId }, include: { realmStage: { include: { realm: true } } } });
+      if (character.realmStage.realm.order < economy.requiredRealmOrder) throw new SectError("REALM_REQUIREMENT_NOT_MET", "Cảnh giới chưa đủ để đổi vật phẩm này.");
+    }
     const hasPermission = hasSectPermission(member.role, "MANAGE_STORAGE");
-    const contributionCost = hasPermission ? 0 : Math.max(1, quantity * sectEconomyConfig.withdrawContributionCostPerNpcValue);
+    const contributionCost = hasPermission ? 0 : getSectItemContributionPrice(storage.template) * quantity;
     if (contributionCost > 0) await mutateContribution(tx, member.sectId, actorId, -contributionCost, "ITEM_EXCHANGE", `Đổi ${storage.template.name}`, "SectInventoryItem", storage.id, `sect:item-withdraw:${storage.id}:${actorId}:${quantity}:${Date.now()}`);
     const updated = await tx.sectInventoryItem.updateMany({ where: { id: storage.id, quantity: { gte: quantity } }, data: { quantity: { decrement: quantity } } });
     if (updated.count !== 1) throw new SectError("INSUFFICIENT_STORAGE", "Kho tông môn không đủ vật phẩm.");
@@ -568,56 +676,168 @@ export async function withdrawSectItem(db: Db, actorId: string, storageId: strin
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function acceptSectMission(db: Db, characterId: string, missionKey: string, now = new Date()) {
-  const definition = missionDefinition(missionKey);
+export async function refreshSectMissionPool(db: Db | Tx, sectId: string, now = new Date()) {
+  const periodKey = currentMissionPeriodKey(now);
+  const run = async (tx: Tx) => {
+    const sect = await tx.sect.findUniqueOrThrow({ where: { id: sectId } });
+    const existing = await tx.sectMission.findMany({ where: { sectId, periodKey, status: SectMissionStatus.ACTIVE }, orderBy: [{ difficulty: "asc" }, { title: "asc" }] });
+    if (existing.length >= 6) return existing;
+    const [locations, monsters, itemTemplates] = await Promise.all([
+      tx.location.findMany({ where: { active: true, minimumRealmOrder: { lte: Math.max(0, 6 - sect.rank) } }, include: { zone: true }, orderBy: [{ minimumRealmOrder: "asc" }, { name: "asc" }], take: 12 }),
+      tx.monster.findMany({ where: { realmOrder: { lte: Math.max(0, 6 - sect.rank) } }, orderBy: [{ realmOrder: "asc" }, { name: "asc" }], take: 12 }),
+      tx.itemTemplate.findMany({ where: { category: "MATERIAL" }, orderBy: { name: "asc" }, take: 18 })
+    ]);
+    const created = [];
+    const safeLocations = locations.length ? locations : await tx.location.findMany({ where: { active: true }, include: { zone: true }, take: 3 });
+    for (let index = existing.length; index < Math.min(12, 6 + Math.max(0, 5 - sect.rank) * 2); index++) {
+      const location = safeLocations[index % safeLocations.length];
+      if (!location) break;
+      const difficulty = missionDifficultyForRank(sect.rank, index + location.zone.dangerLevel);
+      const monster = monsters[(index + location.zone.dangerLevel) % Math.max(1, monsters.length)];
+      const resourceTable = Array.isArray(location.zone.resourceTable) ? location.zone.resourceTable : [];
+      const resourceKey = objectiveRecord(resourceTable[index % Math.max(1, resourceTable.length)]).key;
+      const template = itemTemplates.find((item) => item.key === resourceKey) ?? itemTemplates[index % Math.max(1, itemTemplates.length)];
+      const type: SectMissionType = index % 3 === 0 && monster ? "HUNT" : index % 3 === 1 && template ? "COLLECT" : "EXPLORE";
+      const targetCount = type === "EXPLORE" ? 1 : missionTargetCount(difficulty, index + sect.rank + location.zone.dangerLevel);
+      const reward = calculateSectMissionReward({ difficulty, targetStrength: monster?.realmOrder ?? 0, locationDanger: location.zone.dangerLevel, sectRank: sect.rank });
+      const key = `${type.toLowerCase()}:${location.key}:${monster?.key ?? template?.key ?? "visit"}:${difficulty}`;
+      const title = type === "HUNT" && monster ? `Săn ${monster.name}` : type === "COLLECT" && template ? `Thu thập ${template.name}` : `Tuần tra ${location.name}`;
+      const objective = {
+        eventType: type === "HUNT" ? "MONSTER_KILLED" : type === "COLLECT" ? "ITEM_COLLECTED" : "LOCATION_VISITED",
+        monsterKey: type === "HUNT" ? monster?.key : null,
+        itemKey: type === "COLLECT" ? template?.key : null,
+        locationId: location.id,
+        locationKey: location.key,
+        locationName: location.name
+      };
+      created.push(await tx.sectMission.upsert({
+        where: { sectId_periodKey_key: { sectId, periodKey, key } },
+        update: {},
+        create: {
+          sectId,
+          periodKey,
+          key,
+          type,
+          title,
+          description: `${title} tại ${location.name}. Nhiệm vụ được Thiên Cơ Bảng sinh từ địa đồ hiện tại.`,
+          difficulty,
+          durationMinutes: 0,
+          maxParticipants: 99,
+          locationId: location.id,
+          objective: objective as Prisma.InputJsonValue,
+          targetCount,
+          reward: reward as Prisma.InputJsonValue,
+          status: SectMissionStatus.ACTIVE
+        }
+      }));
+    }
+    return [...existing, ...created];
+  };
+  return "$transaction" in db ? db.$transaction((tx) => run(tx), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }) : run(db);
+}
+
+export async function acceptSectMission(db: Db, characterId: string, missionIdOrKey: string, now = new Date()) {
   return db.$transaction(async (tx) => {
     const member = await assertSectMember(tx, characterId);
     const active = await tx.sectMissionParticipant.findFirst({ where: { characterId, status: SectMissionStatus.ACTIVE } });
     if (active) throw new SectError("ACTIVE_MISSION", "Bạn đang có nhiệm vụ tông môn chưa hoàn thành.");
-    const mission = await tx.sectMission.upsert({
-      where: { id: `${member.sectId}:${definition.key}` },
-      update: {},
-      create: {
-        id: `${member.sectId}:${definition.key}`,
-        sectId: member.sectId,
-        key: definition.key,
-        title: definition.title,
-        description: definition.description,
-        difficulty: definition.difficulty,
-        durationMinutes: definition.durationMinutes,
-        maxParticipants: 99,
-        reward: definition.reward as Prisma.InputJsonValue
-      }
-    });
+    await refreshSectMissionPool(tx, member.sectId, now);
+    let mission = await tx.sectMission.findFirst({ where: { id: missionIdOrKey, sectId: member.sectId, status: SectMissionStatus.ACTIVE } });
+    if (!mission) mission = await tx.sectMission.findFirst({ where: { key: missionIdOrKey, sectId: member.sectId, status: SectMissionStatus.ACTIVE }, orderBy: { createdAt: "desc" } });
+    if (!mission) {
+      const definition = missionDefinition(missionIdOrKey);
+      mission = await tx.sectMission.upsert({
+        where: { id: `${member.sectId}:${definition.key}` },
+        update: {},
+        create: {
+          id: `${member.sectId}:${definition.key}`,
+          sectId: member.sectId,
+          key: definition.key,
+          type: "PATROL",
+          title: definition.title,
+          description: definition.description,
+          difficulty: definition.difficulty,
+          durationMinutes: definition.durationMinutes,
+          maxParticipants: 99,
+          objective: { eventType: "LOCATION_VISITED" },
+          targetCount: 1,
+          reward: definition.reward as Prisma.InputJsonValue
+        }
+      });
+    }
     const participant = await tx.sectMissionParticipant.create({
-      data: { sectId: member.sectId, missionId: mission.id, missionKey: definition.key, characterId, endsAt: new Date(now.getTime() + definition.durationMinutes * 60_000), idempotencyKey: `mission:${definition.key}:${characterId}:${now.getTime()}` }
+      data: { sectId: member.sectId, missionId: mission.id, missionKey: mission.key, characterId, progress: 0, targetCount: mission.targetCount, endsAt: new Date(now.getTime() + mission.durationMinutes * 60_000), idempotencyKey: `mission:${mission.id}:${characterId}:${now.getTime()}` }
     });
-    await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.MISSION, message: `Nhận nhiệm vụ "${definition.title}".` } });
+    await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.MISSION, message: `Nhận nhiệm vụ "${mission.title}".` } });
     return participant;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+export async function progressSectMissionObjective(db: Db | Tx, input: { characterId: string; eventType: SectMissionEventType; targetId?: string; locationId?: string | null; itemKey?: string; monsterKey?: string; amount?: number }) {
+  const run = async (tx: Tx) => {
+    const amount = Math.max(1, input.amount ?? 1);
+    const active = await tx.sectMissionParticipant.findMany({ where: { characterId: input.characterId, status: SectMissionStatus.ACTIVE }, include: { mission: true } });
+    const progressed = [];
+    for (const participant of active) {
+      const mission = participant.mission;
+      if (!mission) continue;
+      const objective = objectiveRecord(mission.objective);
+      if (objective.eventType !== input.eventType) continue;
+      if (objective.locationId && objective.locationId !== input.locationId) continue;
+      if (objective.monsterKey && objective.monsterKey !== input.monsterKey) continue;
+      if (objective.itemKey && objective.itemKey !== input.itemKey) continue;
+      const nextProgress = Math.min(participant.targetCount, participant.progress + amount);
+      const nextStatus = nextProgress >= participant.targetCount ? SectMissionStatus.READY_TO_TURN_IN : SectMissionStatus.ACTIVE;
+      await tx.sectMissionParticipant.update({ where: { id: participant.id }, data: { progress: nextProgress, status: nextStatus } });
+      progressed.push({ id: participant.id, missionTitle: mission.title, progress: nextProgress, targetCount: participant.targetCount, ready: nextStatus === SectMissionStatus.READY_TO_TURN_IN });
+    }
+    return progressed;
+  };
+  return "$transaction" in db ? db.$transaction((tx) => run(tx)) : run(db);
+}
+
 export async function completeSectMission(db: Db, characterId: string, participantId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
-    const participant = await tx.sectMissionParticipant.findUnique({ where: { id: participantId } });
+    const participant = await tx.sectMissionParticipant.findUnique({ where: { id: participantId }, include: { mission: true } });
     if (!participant || participant.characterId !== characterId) throw new SectError("MISSION_NOT_FOUND", "Không tìm thấy nhiệm vụ.");
     if (participant.status === SectMissionStatus.COMPLETED) return { alreadyCompleted: true, reward: participant.reward };
-    if (participant.status !== SectMissionStatus.ACTIVE) throw new SectError("MISSION_CLOSED", "Nhiệm vụ đã đóng.");
-    if (participant.endsAt > now) throw new SectError("MISSION_NOT_READY", "Nhiệm vụ chưa hoàn thành.");
-    const definition = missionDefinition(participant.missionKey);
-    const reward = definition.reward;
-    const updated = await tx.sectMissionParticipant.updateMany({ where: { id: participantId, status: SectMissionStatus.ACTIVE }, data: { status: SectMissionStatus.COMPLETED, completedAt: now, reward: reward as Prisma.InputJsonValue } });
+    if (participant.status === SectMissionStatus.ACTIVE && participant.progress < participant.targetCount) throw new SectError("MISSION_NOT_READY", "Mục tiêu nhiệm vụ chưa hoàn thành.");
+    if (participant.status !== SectMissionStatus.ACTIVE && participant.status !== SectMissionStatus.READY_TO_TURN_IN) throw new SectError("MISSION_CLOSED", "Nhiệm vụ đã đóng.");
+    const mission = participant.mission;
+    if (!mission) throw new SectError("MISSION_NOT_FOUND", "Không tìm thấy nhiệm vụ.");
+    const reward = objectiveRecord(mission.reward) as { cultivation?: number; linhThach?: number; contribution?: number; reputation?: number; itemKey?: string; itemQuantity?: number };
+    if (mission.type === "COLLECT" || mission.type === "DELIVER" || mission.type === "DONATE") {
+      const objective = objectiveRecord(mission.objective);
+      const itemKey = typeof objective.itemKey === "string" ? objective.itemKey : null;
+      if (itemKey) await consumeCharacterItemForMission(tx, characterId, itemKey, mission.targetCount);
+    }
+    const updated = await tx.sectMissionParticipant.updateMany({ where: { id: participantId, status: { in: [SectMissionStatus.ACTIVE, SectMissionStatus.READY_TO_TURN_IN] } }, data: { status: SectMissionStatus.COMPLETED, completedAt: now, reward: reward as Prisma.InputJsonValue } });
     if (updated.count !== 1) return { alreadyCompleted: true, reward: participant.reward };
-    if (reward.linhThach > 0) await creditWallet(tx, characterId, Currency.LINH_THACH, BigInt(reward.linhThach), WalletTxType.REWARD, "SectMission", participantId, `sect:mission:wallet:${participantId}`);
-    if (reward.contribution > 0) await mutateContribution(tx, participant.sectId, characterId, reward.contribution, "MISSION", definition.title, "SectMissionParticipant", participantId, `sect:mission:contribution:${participantId}`);
-    if (reward.reputation > 0) await tx.sect.update({ where: { id: participant.sectId }, data: { reputation: { increment: reward.reputation } } });
+    if ((reward.cultivation ?? 0) > 0) await tx.character.update({ where: { id: characterId }, data: { cultivation: { increment: BigInt(reward.cultivation!) } } });
+    if ((reward.linhThach ?? 0) > 0) await creditWallet(tx, characterId, Currency.LINH_THACH, BigInt(reward.linhThach!), WalletTxType.REWARD, "SectMission", participantId, `sect:mission:wallet:${participantId}`);
+    if ((reward.contribution ?? 0) > 0) await mutateContribution(tx, participant.sectId, characterId, reward.contribution!, "MISSION", mission.title, "SectMissionParticipant", participantId, `sect:mission:contribution:${participantId}`);
+    if ((reward.reputation ?? 0) > 0) await tx.sect.update({ where: { id: participant.sectId }, data: { reputation: { increment: reward.reputation! } } });
     if ("itemKey" in reward && reward.itemKey && reward.itemQuantity) {
       const template = await tx.itemTemplate.findUnique({ where: { key: reward.itemKey } });
       if (template) await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: reward.itemQuantity } });
     }
-    await tx.sectLog.create({ data: { sectId: participant.sectId, actorId: characterId, type: SectLogType.MISSION, message: `Hoàn thành nhiệm vụ "${definition.title}".` } });
+    await tx.sectLog.create({ data: { sectId: participant.sectId, actorId: characterId, type: SectLogType.MISSION, message: `Nộp nhiệm vụ "${mission.title}".` } });
     return { alreadyCompleted: false, reward };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+async function consumeCharacterItemForMission(tx: Tx, characterId: string, itemKey: string, quantity: number) {
+  const items = await tx.itemInstance.findMany({ where: { ownerId: characterId, template: { key: itemKey }, quantity: { gt: 0 }, equippedSlot: null }, include: { template: true }, orderBy: { createdAt: "asc" } });
+  const total = items.reduce((sum, item) => sum + item.quantity, 0);
+  if (total < quantity) throw new SectError("MISSION_ITEM_REQUIRED", `Không đủ ${items[0]?.template.name ?? itemKey} để nộp nhiệm vụ.`);
+  let remaining = quantity;
+  for (const item of items) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, item.quantity);
+    if (take === item.quantity) await tx.itemInstance.update({ where: { id: item.id }, data: { ownerId: null, quantity: 0 } });
+    else await tx.itemInstance.update({ where: { id: item.id }, data: { quantity: { decrement: take } } });
+    remaining -= take;
+  }
 }
 
 export async function expandSectFacility(db: Db, actorId: string, facilityType: SectFacilityType) {
@@ -695,14 +915,17 @@ export async function harvestSectCrop(db: Db, characterId: string, plotId: strin
     if (plot.status !== SectWorkStatus.ACTIVE) throw new SectError("PLOT_NOT_READY", "Linh Điền chưa sẵn sàng thu hoạch.");
     if (!plot.readyAt || plot.readyAt > now) throw new SectError("PLOT_NOT_READY", "Linh thảo chưa chín.");
     const crop = cropDefinition(plot.cropKey);
-    const totalYield = Math.max(1, Math.floor(crop.baseYield * (1 + (5 - member.sect.rank) * 0.12)));
-    const split = splitYield(totalYield, sectFarmConfig.personalShareBps);
+    const preview = previewSectFarmReward(member.sect.rank, plot.cropKey);
+    const totalYield = preview.totalYield;
+    const split = preview.split;
     const updated = await tx.sectFarmPlot.updateMany({ where: { id: plotId, status: SectWorkStatus.ACTIVE, readyAt: { lte: now } }, data: { status: SectWorkStatus.CLAIMED, harvestedAt: now, reward: { totalYield, split, cropKey: plot.cropKey } } });
     if (updated.count !== 1) return { alreadyClaimed: true, reward: plot.reward };
     const template = await grantItem(tx, characterId, plot.cropKey, split.personal);
     await grantSectItem(tx, member.sectId, characterId, plot.cropKey, split.sect, SectInventoryLogType.FARM_REWARD, `Thu hoạch ${crop.name}`);
     await mutateContribution(tx, member.sectId, characterId, crop.contribution, "FARM_HARVEST", `Thu hoạch ${crop.name}`, "SectFarmPlot", plotId, `sect:farm:${plotId}`);
     await tx.sect.update({ where: { id: member.sectId }, data: { reputation: { increment: crop.reputation } } });
+    await progressSectMissionObjective(tx, { characterId, eventType: "FARM_HARVESTED", itemKey: plot.cropKey, amount: split.personal });
+    await progressSectMissionObjective(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: plot.cropKey, amount: split.personal });
     await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.FARM, message: `Thu hoạch ${totalYield} ${template?.name ?? crop.name}: cá nhân ${split.personal}, kho tông môn ${split.sect}.` } });
     return { alreadyClaimed: false, itemName: template?.name ?? crop.name, totalYield, ...split, contribution: crop.contribution, reputation: crop.reputation };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -733,8 +956,9 @@ export async function claimSectMining(db: Db, characterId: string, workId: strin
     if (work.status === SectWorkStatus.CLAIMED) return { alreadyClaimed: true, reward: work.reward };
     if (work.status !== SectWorkStatus.ACTIVE || work.readyAt > now) throw new SectError("MINE_NOT_READY", "Khoáng mạch chưa khai thác xong.");
     const mine = mineDefinition(work.mineKey);
-    const totalYield = Math.max(1, Math.floor(mine.baseYield * (1 + (5 - member.sect.rank) * 0.1)));
-    const split = splitYield(totalYield, sectMineConfig.personalShareBps);
+    const preview = previewSectMineReward(member.sect.rank, work.mineKey);
+    const totalYield = preview.totalYield;
+    const split = preview.split;
     const rareRewards = [];
     for (const rare of mine.rareDrops) {
       if (deterministicRollBps(`${work.id}:${rare.key}`) < rare.chanceBps) {
@@ -749,6 +973,8 @@ export async function claimSectMining(db: Db, characterId: string, workId: strin
     await grantSectItem(tx, member.sectId, characterId, mine.resourceKey, split.sect, SectInventoryLogType.MINE_REWARD, `Khai thác ${mine.name}`);
     await mutateContribution(tx, member.sectId, characterId, mine.contribution, "MINING_COMPLETE", `Khai thác ${mine.name}`, "SectMineWork", work.id, `sect:mine:${work.id}`);
     await tx.sect.update({ where: { id: member.sectId }, data: { reputation: { increment: mine.reputation } } });
+    await progressSectMissionObjective(tx, { characterId, eventType: "RESOURCE_MINED", itemKey: mine.resourceKey, amount: split.personal });
+    await progressSectMissionObjective(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: mine.resourceKey, amount: split.personal });
     await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.MINE, message: `Khai thác ${totalYield} ${template?.name ?? mine.resourceKey}: cá nhân ${split.personal}, kho tông môn ${split.sect}.` } });
     return { alreadyClaimed: false, itemName: template?.name ?? mine.resourceKey, totalYield, ...split, rareRewards, contribution: mine.contribution, reputation: mine.reputation };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -788,8 +1014,7 @@ export async function unassignSectCave(db: Db, actorId: string, caveId: string) 
 export async function startSectCaveCultivation(db: Db, characterId: string, caveId: string, minutes: number, now = new Date()) {
   return db.$transaction(async (tx) => {
     const member = await assertSectMember(tx, characterId);
-    const cave = await tx.sectCave.findUnique({ where: { id: caveId } });
-    if (!cave || cave.sectId !== member.sectId || cave.assignedCharacterId !== characterId) throw new SectError("CAVE_NOT_ASSIGNED", "Bạn chưa được phân Động Phủ này.");
+    const cave = getSectCaveBenefit(member.role, member.sect.rank);
     const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true, realmStage: { include: { realm: true } } } });
     const energy = currentEnergy(character, now);
     const cost = cultivationEnergyCost(minutes);
@@ -805,7 +1030,7 @@ export async function startSectCaveCultivation(db: Db, characterId: string, cave
         endsAt: new Date(now.getTime() + minutes * 60_000),
         baseReward: cultivationBaseReward(minutes),
         multiplierBps,
-        metadata: { source: "sect_cave", caveId, caveName: cave.name, caveBonusBps: cave.cultivationBonusBps }
+        metadata: { source: "sect_cave", caveId, caveName: cave.name, caveBonusBps: cave.cultivationBonusBps, role: member.role, sectRank: member.sect.rank }
       }
     });
     await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.CAVE, message: `Vào ${cave.name} bế quan, linh khí tăng ${Math.round(cave.cultivationBonusBps / 100)}%.` } });

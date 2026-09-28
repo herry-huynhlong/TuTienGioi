@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory } from "@ttg/db";
 import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationEnergyCost, currentEnergy, locationActivityConfigs, parseEncounterTable, simulateCombat, travelDurationSeconds, type LocationActivityMode } from "./rules.js";
-import { getItemEconomy, marketListingMaxQuantity } from "./items.js";
+import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
 
@@ -111,11 +111,39 @@ async function resolveMonsterLoot(tx: Tx, characterId: string, monster: { key: s
     const template = await tx.itemTemplate.findUnique({ where: { key } });
     if (!template) continue;
     const quantity = dropQuantity(data, rng);
-    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity } });
+    await grantStackableItem(tx, characterId, template.id, quantity);
     items.push({ key, name: template.name, quantity });
   }
   if (linhThach > 0n) await creditWallet(tx, characterId, Currency.LINH_THACH, linhThach, WalletTxType.REWARD, "Monster", monster.key, `monster-loot:${monster.key}:${seed}`);
   return { linhThach: linhThach.toString(), items };
+}
+
+async function grantStackableItem(tx: Tx, characterId: string, templateId: string, quantity: number, options: { quality?: number; enhancement?: number; bound?: boolean; customModifiers?: unknown } = {}) {
+  const quality = options.quality ?? 1;
+  const enhancement = options.enhancement ?? 0;
+  const bound = options.bound ?? false;
+  const customModifiers = parseJsonRecord(options.customModifiers);
+  const candidates = await tx.itemInstance.findMany({
+    where: {
+      ownerId: characterId,
+      templateId,
+      quality,
+      enhancement,
+      bound,
+      equippedSlot: null,
+      durability: null,
+      listings: { none: { status: ListingStatus.ACTIVE } }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+  const existing = candidates.find((item) => JSON.stringify(parseJsonRecord(item.customModifiers)) === JSON.stringify(customModifiers));
+  if (existing) return tx.itemInstance.update({ where: { id: existing.id }, data: { quantity: { increment: quantity } } });
+  return tx.itemInstance.create({ data: { ownerId: characterId, templateId, quantity, quality, enhancement, bound, customModifiers: inputJson(customModifiers) } });
+}
+
+async function progressSectMissionEvent(tx: Tx, input: { characterId: string; eventType: "MONSTER_KILLED" | "ITEM_COLLECTED" | "LOCATION_VISITED" | "RESOURCE_MINED" | "ITEM_DONATED" | "FARM_HARVESTED"; monsterKey?: string; itemKey?: string; locationId?: string | null; amount?: number }) {
+  const { progressSectMissionObjective } = await import("./sects.js");
+  return progressSectMissionObjective(tx, input);
 }
 
 async function mutateWallet(tx: Tx, characterId: string, currency: Currency, amount: bigint, type: WalletTxType, referenceType?: string, referenceId?: string, idempotencyKey?: string) {
@@ -268,14 +296,14 @@ export async function attemptBreakthrough(db: Db, characterId: string, rng = Mat
     });
     if (!next) throw new GameError("MAX_REALM", "Bạn đã chạm đến cực hạn hiện tại.");
     if (character.cultivation < next.requiredCultivation) throw new GameError("NOT_ENOUGH_CULTIVATION", "Bạn chưa đủ tu vi.");
-    const chance = Math.min(9500, character.realmStage.breakthroughChanceBps + character.luck * 30);
+    const chance = Math.min(9500, character.realmStage.breakthroughChanceBps + character.luck * 30 + character.breakthroughBonusBps);
     if (Math.floor(rng() * 10000) < chance) {
-      await tx.character.update({ where: { id: characterId }, data: { realmStageId: next.id, cultivation: 0n, maxHp: next.baseHp, maxQi: next.baseQi, hp: next.baseHp, qi: next.baseQi, lifespan: { increment: next.lifespanBonus } } });
+      await tx.character.update({ where: { id: characterId }, data: { realmStageId: next.id, cultivation: 0n, maxHp: next.baseHp, maxQi: next.baseQi, hp: next.baseHp, qi: next.baseQi, lifespan: { increment: next.lifespanBonus }, breakthroughBonusBps: 0 } });
       await tx.worldNews.create({ data: { title: `${character.name} đột phá ${next.name}`, body: `${character.name} bước sang ${next.name}, đạo tâm vang vọng.`, category: "realm", permanent: true } });
       return { success: true, stage: next.name };
     }
     const loss = character.cultivation / 20n;
-    await tx.character.update({ where: { id: characterId }, data: { cultivation: { decrement: loss }, hp: Math.max(1, Math.floor(character.hp * 0.7)) } });
+    await tx.character.update({ where: { id: characterId }, data: { cultivation: { decrement: loss }, hp: Math.max(1, Math.floor(character.hp * 0.7)), breakthroughBonusBps: 0 } });
     await tx.gameLog.create({ data: { characterId, type: "realm", message: `Đột phá thất bại, hao tổn ${loss.toString()} tu vi.` } });
     return { success: false, loss };
   });
@@ -335,6 +363,7 @@ async function advanceExplorationActivityTx(tx: Tx, characterId: string, activit
     const template = await tx.itemTemplate.findUnique({ where: { key: roll.key } });
     if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
+    await progressSectMissionEvent(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: roll.key, amount: 1 });
     await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: inputJson({ mode, item: roll.key, quantity: 1 }) } });
     const verb = mode === "gather" ? "Thu thập" : "Khám phá";
     await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
@@ -395,6 +424,7 @@ export async function claimExploration(db: Db, characterId: string, activityId: 
     await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: inputJson(nextReward) } });
     if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
     await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
+    await progressSectMissionEvent(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: roll.key, amount: 1 });
     const verb = mode === "gather" ? "Thu thập" : "Khám phá";
     await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
     await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
@@ -456,6 +486,7 @@ export async function attackExplorationEncounter(db: Db, characterId: string, ac
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
     if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
     await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward } });
+    if (result.winner === "player") await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, locationId: typeof pending.locationId === "string" ? pending.locationId : null, amount: 1 });
     const session = parseJsonRecord(pending.session);
     if (Object.keys(session).length > 0) {
       const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
@@ -539,6 +570,7 @@ export async function claimTravel(db: Db, characterId: string, travelId: string,
       where: { id: characterId },
       data: { currentLocationId: travel.destinationId, locationId: travel.route.destination.zoneId }
     });
+    await progressSectMissionEvent(tx, { characterId, eventType: "LOCATION_VISITED", locationId: travel.destinationId, amount: 1 });
     await tx.gameLog.create({ data: { characterId, type: "travel", message: `Đã tới ${travel.route.destination.name}. ${encounterResult.message}`, metadata: { encounter: encounter.key, result: encounterResult } } });
     await recordOnboardingEvent(tx, characterId, "TRAVEL_COMPLETED");
     return { destinationName: travel.route.destination.name, encounter: encounter.key, result: encounterResult };
@@ -567,6 +599,7 @@ async function resolveTravelEncounter(tx: Tx, characterId: string, encounterKey:
     await tx.character.update({ where: { id: characterId }, data: { hp: remainingHp } });
     await addCultivationClamped(tx, characterId, cultivationReward);
     await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward: { source: "travel", cultivation: cultivationReward.toString() } } });
+    if (result.winner === "player") await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, amount: 1 });
     return { kind: encounterKey, monsterKey: monster.key, monsterName: monster.name, winner: result.winner, cultivation: cultivationReward.toString(), message: result.winner === "player" ? `Bạn đánh lui ${monster.name} và nhận ${cultivationReward.toString()} tu vi.` : `${monster.name} cản đường, bạn bị thương nhưng vẫn thoát được.` };
   }
 
@@ -601,6 +634,7 @@ export async function fightMonster(db: Db, characterId: string, monsterKey: stri
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
     if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
     await tx.combat.create({ data: { characterId, monsterKey, winner: result.winner, log: result.log, reward } });
+    if (result.winner === "player") await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey, amount: 1 });
     await recordOnboardingEvent(tx, characterId, "MONSTER_ENCOUNTERED");
     if (result.winner === "player") await recordOnboardingEvent(tx, characterId, "MONSTER_DEFEATED");
     return { ...result, reward, monsterName: monster.name };
@@ -626,6 +660,45 @@ export async function purchaseMarketListing(db: Db, buyerId: string, listingId: 
     await tx.itemInstance.update({ where: { id: listing.itemId }, data: { ownerId: buyerId } });
     await tx.marketTransaction.create({ data: { listingId, buyerId, sellerId: listing.sellerId, itemTemplateId: listing.item.templateId, quantity: listing.quantity, price: totalPrice, tax } });
     return { price: totalPrice, tax };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function refreshSystemMarketStock(db: Db, now = new Date()) {
+  const periodKey = currentSystemMarketPeriod(now);
+  const templates = await db.itemTemplate.findMany({ where: { tradeable: true } });
+  const rows = [];
+  for (const template of templates) {
+    const economy = getItemEconomy(template);
+    if (!economy.systemMarketEnabled) continue;
+    const stock = stockForSystemMarketItem(template.key, template.rarity, now);
+    const price = (economy.systemBasePrice * 10000n) / 10000n;
+    rows.push(await db.systemMarketStock.upsert({
+      where: { periodKey_templateId: { periodKey, templateId: template.id } },
+      update: { price },
+      create: { periodKey, templateId: template.id, stock, price }
+    }));
+  }
+  return rows;
+}
+
+export async function purchaseSystemMarketItem(db: Db, buyerId: string, stockId: string, quantity = 1, now = new Date()) {
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng không hợp lệ.");
+  if (quantity > 99) throw new GameError("INVALID_QUANTITY", "Mỗi lần chỉ mua tối đa 99 vật phẩm.");
+  return db.$transaction(async (tx) => {
+    await assertAtMarket(tx, buyerId);
+    const stock = await tx.systemMarketStock.findUnique({ where: { id: stockId }, include: { template: true } });
+    if (!stock || stock.periodKey !== currentSystemMarketPeriod(now) || stock.stock <= 0) throw new GameError("SYSTEM_STOCK_EMPTY", "Hàng hệ thống đã hết.");
+    const economy = getItemEconomy(stock.template);
+    if (!economy.systemMarketEnabled) throw new GameError("SYSTEM_STOCK_DISABLED", "Vật phẩm này không bán trực tiếp ở Chợ.");
+    if (quantity > stock.stock) throw new GameError("INVALID_QUANTITY", "Chợ không còn đủ số lượng.");
+    const totalPrice = stock.price * BigInt(quantity);
+    const claimed = await tx.systemMarketStock.updateMany({ where: { id: stockId, stock: { gte: quantity } }, data: { stock: { decrement: quantity } } });
+    if (claimed.count !== 1) throw new GameError("SYSTEM_STOCK_EMPTY", "Hàng hệ thống đã được mua hết.");
+    await debitWallet(tx, buyerId, Currency.LINH_THACH, totalPrice, WalletTxType.MARKET, "SystemMarketStock", stockId, `system-buy:${stockId}:${buyerId}:${quantity}:${now.getTime()}`);
+    await grantStackableItem(tx, buyerId, stock.templateId, quantity);
+    await tx.marketTransaction.create({ data: { listingId: `system:${stockId}`, buyerId, sellerId: "SYSTEM", itemTemplateId: stock.templateId, quantity, price: totalPrice, tax: 0n } });
+    await tx.gameLog.create({ data: { characterId: buyerId, type: "market", message: `Mua ${stock.template.name} x${quantity} từ Chợ Linh Bảo, trả ${totalPrice.toString()} Linh Thạch.` } });
+    return { itemName: stock.template.name, quantity, totalPrice };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -754,6 +827,7 @@ export async function consumeItem(db: Db, characterId: string, itemId: string) {
     const hpRestore = modifierValue(item.template.baseModifiers, "hpRestore");
     const qiRestore = modifierValue(item.template.baseModifiers, "qiRestore");
     const cultivation = modifierValue(item.template.baseModifiers, "cultivation");
+    const breakthroughBps = modifierValue(item.template.baseModifiers, "breakthroughBps");
     const updated = await tx.itemInstance.updateMany({
       where: { id: item.id, ownerId: characterId, quantity: { gt: 0 } },
       data: { quantity: { decrement: 1 } }
@@ -762,7 +836,8 @@ export async function consumeItem(db: Db, characterId: string, itemId: string) {
     await tx.itemInstance.deleteMany({ where: { id: item.id, quantity: { lte: 0 } } });
     const data: Prisma.CharacterUpdateInput = {
       hp: Math.min(character.maxHp, character.hp + hpRestore),
-      qi: Math.min(character.maxQi, character.qi + qiRestore)
+      qi: Math.min(character.maxQi, character.qi + qiRestore),
+      ...(breakthroughBps > 0 ? { breakthroughBonusBps: { increment: breakthroughBps } } : {})
     };
     await tx.character.update({
       where: { id: characterId },

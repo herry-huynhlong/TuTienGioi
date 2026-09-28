@@ -1,9 +1,9 @@
 import { ItemCategory, prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { buyMarketListingAction, cancelMarketListingAction, sellItemAction, sellItemToNpcAction } from "@/lib/forms";
+import { buyMarketListingAction, buySystemMarketItemAction, cancelMarketListingAction, sellItemAction, sellItemToNpcAction } from "@/lib/forms";
 import { formatItemCategory, formatRarity } from "@/lib/format";
-import { getItemEconomy, marketListingMaxQuantity, recordOnboardingEvent } from "@ttg/game";
+import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, recordOnboardingEvent, refreshSystemMarketStock } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { Box, Gem, Hammer, Leaf, Pill, ScrollText, Shirt, Sparkles, Swords } from "lucide-react";
@@ -38,7 +38,21 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
   await recordOnboardingEvent(prisma, character.id, "VIEW_MARKET");
   const atMarket = character.currentLocation?.key === "cho-linh-bao";
   const selectedItem = character.items.find((item) => item.id === params?.sellItem) ?? character.items.find((item) => item.template.tradeable && !item.bound && item.listings.length === 0);
-  const [listings, myListings] = await Promise.all([
+  await refreshSystemMarketStock(prisma);
+  const periodKey = currentSystemMarketPeriod();
+  const [systemStocks, listings, myListings] = await Promise.all([
+    prisma.systemMarketStock.findMany({
+      where: {
+        periodKey,
+        stock: { gt: 0 },
+        template: {
+          ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+          ...(category ? { category: category as ItemCategory } : {})
+        }
+      },
+      include: { template: true },
+      orderBy: [{ template: { rarity: "asc" } }, { template: { name: "asc" } }]
+    }),
     prisma.marketListing.findMany({
       where: {
         status: "ACTIVE",
@@ -83,14 +97,14 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         <Link href="/game/market?tab=my" className={tab === "my" ? "active" : ""}>Hàng của tôi</Link>
       </nav>
 
-      {tab === "buy" ? <BuyTab listings={listings} characterId={character.id} linhThach={character.linhThach} disabled={!atMarket} q={q} category={category ?? ""} /> : null}
+      {tab === "buy" ? <BuyTab systemStocks={systemStocks} listings={listings} characterId={character.id} linhThach={character.linhThach} disabled={!atMarket} q={q} category={category ?? ""} /> : null}
       {tab === "sell" ? <SellTab items={character.items} selectedItem={selectedItem} disabled={!atMarket} /> : null}
       {tab === "my" ? <MyListingsTab listings={myListings} /> : null}
     </div>
   );
 }
 
-function BuyTab({ listings, characterId, linhThach, disabled, q, category }: { listings: Array<any>; characterId: string; linhThach: bigint; disabled: boolean; q: string; category: string }) {
+function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, category }: { systemStocks: Array<any>; listings: Array<any>; characterId: string; linhThach: bigint; disabled: boolean; q: string; category: string }) {
   return (
     <>
       <section className="panel rounded-lg p-5">
@@ -103,15 +117,47 @@ function BuyTab({ listings, characterId, linhThach, disabled, q, category }: { l
           <button className="btn">Tìm</button>
         </form>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-          <span className="muted">{listings.length} vật phẩm đang bày bán</span>
+          <span className="muted">{systemStocks.length} hàng hệ thống · {listings.length} hàng người chơi</span>
           <span className="text-gold">Linh thạch: {linhThach.toString()}</span>
         </div>
       </section>
+      <h2 className="mt-5 text-xl font-black text-gold">Hàng hệ thống</h2>
+      <section className="market-card-grid mt-3">
+        {systemStocks.map((stock) => <SystemStockCard key={stock.id} stock={stock} balance={linhThach} disabled={disabled} />)}
+        {systemStocks.length === 0 ? <div className="empty-state panel rounded-lg p-5"><b>Không có hàng hệ thống phù hợp.</b><p>Hạ Phẩm và một phần Trung Phẩm sẽ được bổ sung theo kỳ.</p></div> : null}
+      </section>
+      <h2 className="mt-6 text-xl font-black text-gold">Hàng người chơi</h2>
       <section className="market-card-grid mt-5">
         {listings.map((listing) => <ListingCard key={listing.id} listing={listing} buyerId={characterId} balance={linhThach} disabled={disabled} />)}
         {listings.length === 0 ? <div className="empty-state panel rounded-lg p-5"><b>Chưa có hàng phù hợp.</b><p>Đổi bộ lọc hoặc quay lại sau khi người chơi khác bày hàng.</p></div> : null}
       </section>
     </>
+  );
+}
+
+function SystemStockCard({ stock, balance, disabled }: { stock: any; balance: bigint; disabled: boolean }) {
+  const economy = getItemEconomy(stock.template);
+  const Icon = iconFor(economy.icon);
+  return (
+    <article className="market-listing-card">
+      <span className={`item-icon grade-${stock.template.rarity.toLowerCase()}`}><Icon size={22} aria-hidden /></span>
+      <div>
+        <b>{stock.template.name}</b>
+        <small>{formatRarity(stock.template.rarity)} Phẩm · {economy.subType || formatItemCategory(stock.template.category)}</small>
+      </div>
+      <p className="muted">{economy.usage}</p>
+      <div className="info-table">
+        <div><span>Stock</span><b>{stock.stock}</b></div>
+        <div><span>Giá hệ thống</span><b>{stock.price.toString()} / cái</b></div>
+        <div><span>Vạn Bảo Lâu thu mua</span><b>{economy.npcBuyPrice.toString()} / cái</b></div>
+        <div><span>Nguồn</span><b>Chợ hệ thống</b></div>
+      </div>
+      <form action={buySystemMarketItemAction} className="sect-inline-form">
+        <input type="hidden" name="stockId" value={stock.id} />
+        <input className="field" name="quantity" type="number" min="1" max={Math.min(stock.stock, 99)} defaultValue="1" />
+        <button className="btn btn-secondary" disabled={disabled || balance < stock.price}>Mua</button>
+      </form>
+    </article>
   );
 }
 
@@ -121,16 +167,16 @@ function ListingCard({ listing, buyerId, balance, disabled }: { listing: any; bu
   const Icon = iconFor(economy.icon);
   return (
     <article className="market-listing-card">
-      <span className="item-icon"><Icon size={22} aria-hidden /></span>
+      <span className={`item-icon grade-${listing.item.template.rarity.toLowerCase()}`}><Icon size={22} aria-hidden /></span>
       <div>
         <b>{listing.item.template.name}</b>
-        <small>{formatRarity(listing.item.template.rarity)} phẩm · {formatItemCategory(listing.item.template.category)}</small>
+        <small>{formatRarity(listing.item.template.rarity)} Phẩm · {economy.subType || formatItemCategory(listing.item.template.category)}</small>
       </div>
       <div className="info-table">
         <div><span>Người bán</span><b>{listing.seller.name}</b></div>
         <div><span>Số lượng</span><b>{listing.quantity}</b></div>
         <div><span>Giá người chơi</span><b>{listing.price.toString()} / cái</b></div>
-        <div><span>Giá hệ thống</span><b>{economy.systemBasePrice.toString()}</b></div>
+        <div><span>Giá hệ thống tham khảo</span><b>{economy.systemBasePrice.toString()}</b></div>
       </div>
       {buyerId === listing.sellerId ? <span className="badge">Của bạn</span> : (
         <form action={buyMarketListingAction}>
@@ -152,7 +198,7 @@ function SellTab({ items, selectedItem, disabled }: { items: Array<any>; selecte
           {sellableItems.map((item) => (
             <Link key={item.id} href={`/game/market?tab=sell&sellItem=${item.id}`} className={selectedItem?.id === item.id ? "selected" : ""}>
               <b>{item.template.name}</b>
-              <small>x{item.quantity}</small>
+              <small>{formatRarity(item.template.rarity)} Phẩm · x{item.quantity}</small>
             </Link>
           ))}
           {sellableItems.length === 0 ? <p className="muted">Không có vật phẩm có thể giao dịch.</p> : null}
@@ -227,10 +273,16 @@ function MyListingsTab({ listings }: { listings: Array<any> }) {
 
 function iconFor(icon: string) {
   return ({
+    herb: Leaf,
     leaf: Leaf,
     ore: Hammer,
     wood: Leaf,
     core: Sparkles,
+    crystal: Gem,
+    hide: Shirt,
+    fang: Swords,
+    bone: Box,
+    silk: Sparkles,
     sword: Swords,
     armor: Shirt,
     pill: Pill,

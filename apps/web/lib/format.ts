@@ -44,7 +44,7 @@ export function formatService(value: string) {
 }
 
 export function formatItemCategory(value: string) {
-  return ({ MATERIAL: "Tài nguyên", CONSUMABLE: "Tiêu hao", EQUIPMENT: "Trang bị", TECHNIQUE: "Công pháp", COSMETIC: "Ngoại quan", QUEST: "Nhiệm vụ" } as Record<string, string>)[value] ?? value;
+  return ({ MATERIAL: "Nguyên Liệu", CONSUMABLE: "Đan Dược", EQUIPMENT: "Trang bị", TECHNIQUE: "Công pháp", COSMETIC: "Ngoại quan", QUEST: "Nhiệm vụ" } as Record<string, string>)[value] ?? value;
 }
 
 export function formatRarity(value: string) {

@@ -147,6 +147,7 @@ enum SectInventoryLogType {
 
 enum SectMissionStatus {
   ACTIVE
+  READY_TO_TURN_IN
   COMPLETED
   CANCELLED
   EXPIRED
@@ -255,6 +256,7 @@ model Character {
   luck            Int      @default(5)
   reputation      Int      @default(0)
   karma           Int      @default(0)
+  breakthroughBonusBps Int @default(0)
   energyStored    Int      @default(30)
   energyMax       Int      @default(30)
   energyUpdatedAt DateTime @default(now())
@@ -394,6 +396,7 @@ model CharacterTechnique {
 model ItemTemplate {
   id            String @id @default(cuid())
   key           String @unique
+  itemFamily    String?
   name          String
   category      ItemCategory
   rarity        Rarity
@@ -407,7 +410,10 @@ model ItemTemplate {
   items         ItemInstance[]
   sectInventory SectInventoryItem[]
   sectInventoryLogs SectInventoryLog[]
+  systemMarketStocks SystemMarketStock[]
   recipesOut    Recipe[] @relation("RecipeOutput")
+  @@index([itemFamily])
+  @@index([rarity, category])
 }
 
 model ItemInstance {
@@ -669,6 +675,20 @@ model MarketTransaction {
   price     BigInt
   tax       BigInt
   createdAt DateTime @default(now())
+}
+
+model SystemMarketStock {
+  id         String @id @default(cuid())
+  periodKey String
+  templateId String
+  template   ItemTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  stock      Int
+  price      BigInt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([periodKey, templateId])
+  @@index([periodKey, stock])
+  @@index([templateId])
 }
 
 model Auction {
@@ -991,11 +1011,16 @@ model SectMission {
   sectId      String
   sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
   key         String
+  periodKey   String @default("legacy")
+  type        String @default("PATROL")
   title       String
   description String
   difficulty  Int @default(1)
   durationMinutes Int @default(10)
   maxParticipants Int @default(1)
+  locationId  String?
+  objective   Json @default("{}")
+  targetCount Int @default(1)
   reward      Json
   cost        Json?
   status      SectMissionStatus @default(ACTIVE)
@@ -1004,7 +1029,9 @@ model SectMission {
   expiresAt   DateTime?
   participants SectMissionParticipant[]
   @@index([sectId, status])
+  @@unique([sectId, periodKey, key])
   @@index([key])
+  @@index([locationId])
 }
 
 model SectMissionParticipant {
@@ -1017,6 +1044,8 @@ model SectMissionParticipant {
   characterId String
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   status      SectMissionStatus @default(ACTIVE)
+  progress    Int @default(0)
+  targetCount Int @default(1)
   startedAt   DateTime @default(now())
   endsAt      DateTime
   completedAt DateTime?

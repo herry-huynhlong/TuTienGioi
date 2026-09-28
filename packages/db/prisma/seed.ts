@@ -276,24 +276,61 @@ async function main() {
     data: { currentLocationId: locationByKey.get("thanh-van-dong-thanh")! }
   });
 
-  const materialMeta: Record<string, { subType: string; icon: string; systemBasePrice: number; npcBuyPrice: number; usage: string }> = {
-    "thanh-linh-thao": { subType: "Linh dược", icon: "leaf", systemBasePrice: 20, npcBuyPrice: 14, usage: "Nguyên liệu luyện đan thường gặp ở nơi có linh khí mỏng." },
-    "ngung-lo-thao": { subType: "Linh dược", icon: "leaf", systemBasePrice: 24, npcBuyPrice: 17, usage: "Thảo dược hấp thu sương sớm, thường mọc gần suối." },
-    "hoa-linh-chi": { subType: "Linh dược", icon: "leaf", systemBasePrice: 48, npcBuyPrice: 34, usage: "Linh chi mang hỏa khí nhẹ, dùng cho đan dược sơ cấp." },
-    "hac-thiet-quang": { subType: "Khoáng vật", icon: "ore", systemBasePrice: 35, npcBuyPrice: 25, usage: "Nguyên liệu luyện khí và rèn trang bị." },
-    "yeu-dan-cap-thap": { subType: "Yêu thú", icon: "core", systemBasePrice: 60, npcBuyPrice: 42, usage: "Tinh hoa yêu thú cấp thấp, dùng trong luyện đan và giao dịch." },
-    "lang-nha": { subType: "Yêu thú", icon: "core", systemBasePrice: 32, npcBuyPrice: 22, usage: "Nanh Yêu Lang, vật liệu luyện khí sơ cấp." },
-    "yeu-lang-bi": { subType: "Yêu thú", icon: "core", systemBasePrice: 40, npcBuyPrice: 28, usage: "Da Yêu Lang có thể dùng làm giáp nhẹ hoặc phù liệu." },
-    "linh-moc": { subType: "Linh mộc", icon: "wood", systemBasePrice: 28, npcBuyPrice: 19, usage: "Vật liệu chế phù, trận pháp và luyện khí nhẹ." },
-    "thien-tinh-sa": { subType: "Tinh sa", icon: "ore", systemBasePrice: 45, npcBuyPrice: 32, usage: "Khoáng sa có linh tính, dùng để gia cố pháp khí." }
-  };
-  for (const name of materials) {
-    const key = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll(" ", "-").replaceAll("đ", "d");
-    const meta = materialMeta[key] ?? { subType: "Nguyên liệu", icon: "leaf", systemBasePrice: 25, npcBuyPrice: 17, usage: `${name} dùng trong luyện chế và giao thương.` };
+  const progressionItems = [
+    ["thanh-linh-thao", null, "Thanh Linh Thảo", "MATERIAL", "HA", "Linh Thảo", "herb", "Linh thảo phổ biến ở nơi linh khí mỏng.", "Luyện đan cơ bản, nhiệm vụ thu thập, Linh Điền và giao dịch.", 20, 10, true, {}, null, null, false],
+    ["ngung-khi-thao", null, "Ngưng Khí Thảo", "MATERIAL", "HA", "Linh Thảo", "herb", "Lá cỏ ngưng tụ khí tức nhẹ, hợp với giai đoạn nhập môn.", "Nguyên liệu đan dược và tu luyện giai đoạn đầu.", 35, 15, true, {}, null, null, false],
+    ["hac-thiet-quang", null, "Hắc Thiết Quặng", "MATERIAL", "HA", "Khoáng Vật", "ore", "Khoáng thạch đen nặng, dùng cho luyện khí sơ cấp.", "Luyện khí cơ bản, nhiệm vụ, Tông Môn và Linh Khoáng.", 30, 15, true, {}, null, null, false],
+    ["xich-dong-quang", null, "Xích Đồng Quặng", "MATERIAL", "HA", "Khoáng Vật", "ore", "Quặng đồng đỏ có thể dẫn linh lực yếu.", "Luyện khí, crafting và mission.", 40, 20, true, {}, null, null, false],
+    ["hoi-khi-dan", null, "Hồi Khí Đan", "CONSUMABLE", "HA", "Đan Dược", "pill", "Đan dược hạ phẩm giúp phục hồi chân nguyên.", "Hồi Chân Nguyên khi lịch luyện hoặc chiến đấu.", 80, 40, true, { qiRestore: 60 }, null, null, false],
+    ["duong-the-dan", null, "Dưỡng Thể Đan", "CONSUMABLE", "HA", "Đan Dược", "pill", "Đan dược ôn dưỡng thân thể.", "Hỗ trợ hồi phục Sinh Lực và Thể Lực trong progression hiện tại.", 100, 50, true, { hpRestore: 80 }, null, null, false],
+    ["truc-co-dan-ha", "truc-co-dan", "Trúc Cơ Đan", "CONSUMABLE", "HA", "Đan Dược", "pill", "Trúc Cơ Đan hạ phẩm, dùng cho tu sĩ Luyện Khí chuẩn bị đột phá.", "Tăng nhẹ cơ hội đột phá Trúc Cơ. Đây là Hạ Phẩm dù tên gắn với cảnh giới Trúc Cơ.", 400, 200, true, { breakthroughBps: 400 }, 1, null, false],
+    ["yeu-thu-bi", null, "Yêu Thú Bì", "MATERIAL", "HA", "Nguyên Liệu Yêu Thú", "hide", "Da yêu thú cấp thấp, còn lưu yêu khí mỏng.", "Drop yêu thú, crafting và mission.", 25, 10, true, {}, null, null, false],
+    ["yeu-thu-nha", null, "Yêu Thú Nha", "MATERIAL", "HA", "Nguyên Liệu Yêu Thú", "fang", "Nanh yêu thú cấp thấp.", "Drop yêu thú, crafting và mission.", 30, 10, true, {}, null, null, false],
+    ["linh-moc", null, "Linh Mộc", "MATERIAL", "HA", "Vật Liệu Tông Môn", "wood", "Gỗ thấm linh khí, dùng cho kiến thiết cơ bản.", "Tông Môn, crafting và mission.", 50, 25, true, {}, null, null, false],
+    ["tu-diep-linh-thao", null, "Tử Diệp Linh Thảo", "MATERIAL", "TRUNG", "Linh Thảo", "herb", "Linh thảo lá tím dùng cho đan dược trung cấp.", "Luyện đan trung cấp và mission.", 350, 150, true, {}, null, null, false],
+    ["huyen-thiet", null, "Huyền Thiết", "MATERIAL", "TRUNG", "Khoáng Vật", "ore", "Khoáng thiết cứng và ổn định linh lực.", "Luyện khí, Tông Môn, mission và Linh Khoáng.", 500, 220, true, {}, null, null, false],
+    ["tinh-dong", null, "Tinh Đồng", "MATERIAL", "TRUNG", "Khoáng Vật", "ore", "Đồng đã ngưng luyện, hợp luyện khí.", "Luyện khí và crafting.", 450, 200, true, {}, null, null, false],
+    ["bich-ngoc-tuy", null, "Bích Ngọc Tủy", "MATERIAL", "TRUNG", "Vật Liệu Tu Luyện", "crystal", "Ngọc tủy xanh dịu, chứa linh vận tinh thuần.", "Tu luyện, crafting và mission.", 800, 350, true, {}, null, null, false],
+    ["tu-khi-dan", null, "Tụ Khí Đan", "CONSUMABLE", "TRUNG", "Đan Dược", "pill", "Đan dược trung phẩm giúp tụ khí nhanh hơn.", "Tăng tu vi hoặc hồi Chân Nguyên theo hệ effect hiện tại.", 1000, 450, true, { cultivation: 250, qiRestore: 120 }, null, null, false],
+    ["duong-hon-dan", null, "Dưỡng Hồn Đan", "CONSUMABLE", "TRUNG", "Đan Dược", "pill", "Đan dược dưỡng thần hồn, hiện dùng làm item data.", "Hỗ trợ thần thức khi hệ thống thần hồn mở về sau.", 1200, 500, true, { spirit: 1 }, null, null, false],
+    ["truc-co-dan-trung", "truc-co-dan", "Trúc Cơ Đan · Trung Phẩm", "CONSUMABLE", "TRUNG", "Đan Dược", "pill", "Trúc Cơ Đan trung phẩm, độ tinh luyện tốt hơn.", "Tăng cơ hội đột phá Trúc Cơ tốt hơn bản Hạ Phẩm.", 1800, 800, true, { breakthroughBps: 800 }, 1, null, false],
+    ["yeu-dan-nhat-giai", null, "Yêu Đan Nhất Giai", "MATERIAL", "TRUNG", "Vật Liệu Tu Luyện", "core", "Yêu đan của yêu thú mạnh hơn bình thường.", "Drop yêu thú mạnh, tu luyện, crafting và mission.", 1500, 650, true, {}, null, null, false],
+    ["huyen-thu-cot", null, "Huyền Thú Cốt", "MATERIAL", "TRUNG", "Nguyên Liệu Yêu Thú", "bone", "Xương yêu thú đã hấp thu linh khí lâu năm.", "Crafting và mission.", 700, 300, true, {}, null, null, false],
+    ["tu-linh-thach", null, "Tụ Linh Thạch", "MATERIAL", "TRUNG", "Vật Liệu Tu Luyện", "crystal", "Linh thạch đặc biệt giúp tụ linh trong động phủ.", "Hỗ trợ tu luyện, Động Phủ, Tông Môn và crafting.", 2000, 900, true, {}, null, null, false],
+    ["thien-linh-thao", null, "Thiên Linh Thảo", "MATERIAL", "THUONG", "Linh Thảo", "herb", "Linh thảo thượng phẩm cực hiếm.", "Luyện đan cao cấp, nhiệm vụ khó và sự kiện.", 5000, 2000, false, {}, null, 3, false],
+    ["huyen-tinh", null, "Huyền Tinh", "MATERIAL", "THUONG", "Khoáng Vật", "crystal", "Tinh thể huyền quang, sinh ra trong khoáng mạch hiếm.", "Luyện khí cao cấp và Tông Môn.", 8000, 3000, false, {}, null, 3, true],
+    ["xich-viem-tinh-kim", null, "Xích Viêm Tinh Kim", "MATERIAL", "THUONG", "Khoáng Vật", "ore", "Tinh kim đỏ rực mang địa hỏa.", "Luyện khí thượng phẩm.", 12000, 4500, false, {}, null, 3, true],
+    ["ngoc-tuy-tinh-hoa", null, "Ngọc Tủy Tinh Hoa", "MATERIAL", "THUONG", "Vật Liệu Tu Luyện", "crystal", "Tinh hoa ngọc tủy đã kết tụ nhiều năm.", "Tu luyện, crafting và nhiệm vụ khó.", 15000, 5000, false, {}, null, 2, true],
+    ["truc-co-dan-thuong", "truc-co-dan", "Trúc Cơ Đan · Thượng Phẩm", "CONSUMABLE", "THUONG", "Đan Dược", "pill", "Trúc Cơ Đan thượng phẩm, tinh luyện cao.", "Tăng mạnh cơ hội đột phá Trúc Cơ, không đồng nghĩa người dùng phải ở cảnh giới cao.", 10000, 4000, false, { breakthroughBps: 1400 }, 1, 3, true],
+    ["tay-tuy-dan", null, "Tẩy Tủy Đan", "CONSUMABLE", "THUONG", "Đan Dược", "pill", "Đan dược tẩy luyện kinh mạch.", "Vật phẩm hiếm, hiệu ứng sâu hơn sẽ mở về sau.", 18000, 6000, false, { hpRestore: 200, qiRestore: 200 }, null, 2, true],
+    ["yeu-dan-nhi-giai", null, "Yêu Đan Nhị Giai", "MATERIAL", "THUONG", "Vật Liệu Tu Luyện", "core", "Yêu đan nhị giai chứa yêu lực dày.", "Tu luyện, crafting và mission khó.", 14000, 5000, false, {}, null, 2, true],
+    ["thien-tam-ti", null, "Thiên Tàm Ti", "MATERIAL", "THUONG", "Vật liệu crafting", "silk", "Sợi tằm trời bền nhẹ, dùng chế tạo pháp y.", "Crafting cao cấp và nhiệm vụ.", 9000, 3500, false, {}, null, 3, true],
+    ["dia-mach-linh-tinh", null, "Địa Mạch Linh Tinh", "MATERIAL", "THUONG", "Vật Liệu Tu Luyện", "crystal", "Tinh thể sinh trong địa mạch nồng đậm.", "Động Phủ, Tông Môn, tu luyện và crafting.", 22000, 7000, false, {}, null, 2, true],
+    ["tu-linh-ngoc", null, "Tụ Linh Ngọc", "MATERIAL", "THUONG", "Vật Liệu Tu Luyện", "gem", "Ngọc tụ linh thượng phẩm, giá trị cao.", "Hỗ trợ tu luyện, Động Phủ, Tông Môn và crafting.", 28000, 8000, false, {}, null, 1, true]
+  ] as const;
+
+  for (const [key, itemFamily, name, category, rarity, subType, icon, description, usage, systemBasePrice, sectContributionPrice, systemMarketEnabled, baseModifiers, requiredRealmOrder, requiredSectRank, auctionEligible] of progressionItems) {
+    const bindRules = {
+      subType,
+      icon,
+      usage,
+      systemBasePrice,
+      npcBuyPrice: Math.floor(systemBasePrice * 0.7),
+      sellableToNpc: true,
+      marketEnabled: true,
+      systemMarketEnabled,
+      sectExchangeEnabled: true,
+      sectContributionPrice,
+      donationContributionValue: Math.max(1, Math.floor(sectContributionPrice * 0.4)),
+      auctionEligible,
+      itemFamily,
+      requiredRealmOrder,
+      requiredSectRank
+    };
     await prisma.itemTemplate.upsert({
       where: { key },
-      update: { bindRules: { ...meta, sellableToNpc: true } },
-      create: { key, name, category: ItemCategory.MATERIAL, rarity: Rarity.HA, description: meta.usage, stackable: true, maxStack: 999, baseModifiers: {}, bindRules: { ...meta, sellableToNpc: true } }
+      update: { itemFamily, name, category: category as ItemCategory, rarity: rarity as Rarity, description, stackable: true, maxStack: 999, tradeable: true, baseModifiers, bindRules },
+      create: { key, itemFamily, name, category: category as ItemCategory, rarity: rarity as Rarity, description, stackable: true, maxStack: 999, tradeable: true, baseModifiers, bindRules }
     });
   }
 
@@ -313,13 +350,12 @@ async function main() {
     });
   }
   for (const [key, name, mods] of [
-    ["hoi-khi-dan", "Hồi Khí Đan", { qiRestore: 60 }],
     ["hoi-xuan-dan", "Hồi Xuân Đan", { hpRestore: 80 }],
     ["tu-linh-dan", "Tụ Linh Đan", { cultivation: 250 }],
     ["pha-canh-dan", "Phá Cảnh Đan", { breakthroughBps: 900 }],
     ["giai-doc-dan", "Giải Độc Đan", { cleanse: true }]
   ] as const) {
-    await prisma.itemTemplate.upsert({ where: { key }, update: { bindRules: { subType: "Đan dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.` } }, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods, bindRules: { subType: "Đan dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.` } } });
+    await prisma.itemTemplate.upsert({ where: { key }, update: { bindRules: { subType: "Đan Dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 } }, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods, bindRules: { subType: "Đan Dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 } } });
   }
 
   for (const [key, name, type, mod] of [

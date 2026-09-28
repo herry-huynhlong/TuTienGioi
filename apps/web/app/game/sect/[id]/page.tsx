@@ -1,9 +1,10 @@
 import { prisma, SectFacilityType, SectWorkStatus, type SectRoleName } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { acceptSectMissionAction, approveSectApplicationAction, assignSectCaveAction, claimSectMiningAction, completeSectMissionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectSectApplicationAction, startSectCaveCultivationAction, startSectMiningAction, unassignSectCaveAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
+import { acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, completeSectMissionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectSectApplicationAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
-import { getNextSectRank, getSectRank, hasSectPermission, sectAlignments, sectCaveConfig, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectMissionDefinitions, sectRankProgress, sectRoles } from "@ttg/game";
+import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
+import { formatItemCategory, formatRarity } from "@/lib/format";
 import { BookOpen, Boxes, Building2, Castle, Crown, Gem, Landmark, Leaf, Pickaxe, ScrollText, Shield, Sparkles, Users } from "lucide-react";
 
 const tabs = [
@@ -34,6 +35,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
   if (!character.sectId) redirect(`/game/sect?sect=${id}`);
   if (character.sectId !== id) redirect(`/game/sect/${character.sectId}`);
 
+  await refreshSectMissionPool(prisma, id);
   const sect = await prisma.sect.findUniqueOrThrow({
     where: { id },
     include: {
@@ -53,6 +55,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       inventoryItems: { where: { quantity: { gt: 0 } }, include: { template: true }, orderBy: { updatedAt: "desc" } },
       inventoryLogs: { orderBy: { createdAt: "desc" }, take: 12, include: { character: true, template: true } },
       contributionTransactions: { orderBy: { createdAt: "desc" }, take: 8, include: { character: true } },
+      missions: { where: { status: "ACTIVE" }, orderBy: [{ difficulty: "asc" }, { title: "asc" }], take: 12 },
       missionParticipants: { where: { characterId: character.id }, orderBy: { startedAt: "desc" }, take: 8 },
       facilityExpansions: true,
       farmPlots: { orderBy: { plotIndex: "asc" }, include: { planter: true } },
@@ -108,9 +111,9 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       </nav>
 
       {activeTab === "members" ? <MembersTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_MEMBERS")} /> : null}
-      {activeTab === "missions" ? <MissionsTab sectId={sect.id} participants={sect.missionParticipants} /> : null}
+      {activeTab === "missions" ? <MissionsTab sect={sect} /> : null}
       {activeTab === "domain" ? <DomainTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_BUILDINGS")} canRankUp={hasSectPermission(selfMember?.role, "UPGRADE_SECT")} /> : null}
-      {activeTab === "caves" ? <CavesTab sect={sect} characterId={character.id} canManage={hasSectPermission(selfMember?.role, "MANAGE_CAVES")} /> : null}
+      {activeTab === "caves" ? <CavesTab sect={sect} role={selfMember?.role} /> : null}
       {activeTab === "library" ? <LibraryTab sect={sect} selfRole={selfMember?.role} contribution={selfMember?.contribution ?? 0} ownedTechniqueIds={character.techniques.map((item) => item.techniqueId)} /> : null}
       {activeTab === "storage" ? <StorageTab sect={sect} characterItems={character.items} canManageTreasury={hasSectPermission(selfMember?.role, "MANAGE_TREASURY")} canManageStorage={hasSectPermission(selfMember?.role, "MANAGE_STORAGE")} /> : null}
       {activeTab === "mine" ? <MineTab sect={sect} characterId={character.id} /> : null}
@@ -182,33 +185,42 @@ function MembersTab({ sect, canManage }: { sect: any; canManage: boolean }) {
   );
 }
 
-function MissionsTab({ sectId, participants }: { sectId: string; participants: any[] }) {
+function MissionsTab({ sect }: { sect: any }) {
   return (
     <section className="sect-two-col">
-      {sectMissionDefinitions.map((mission) => {
-        const active = participants.find((entry) => entry.missionKey === mission.key && entry.status === "ACTIVE");
-        const completed = participants.find((entry) => entry.missionKey === mission.key && entry.status === "COMPLETED");
-        const reward = mission.reward;
+      {sect.missions.map((mission: any) => {
+        const active = sect.missionParticipants.find((entry: any) => entry.missionId === mission.id && (entry.status === "ACTIVE" || entry.status === "READY_TO_TURN_IN"));
+        const completed = sect.missionParticipants.find((entry: any) => entry.missionId === mission.id && entry.status === "COMPLETED");
+        const reward = mission.reward ?? {};
+        const objective = mission.objective ?? {};
         return (
-          <article key={mission.key} className="panel sect-feature-card">
+          <article key={mission.id} className="panel sect-feature-card">
             <div className="sect-feature-head">
               <ScrollText />
               <b>{mission.title}</b>
               <span>{"★".repeat(mission.difficulty)}</span>
             </div>
             <p>{mission.description}</p>
-            <p className="muted">{mission.durationMinutes} phút · +{reward.contribution} cống hiến · +{reward.reputation} Uy Danh · {reward.linhThach} Linh Thạch</p>
-            {active ? (
+            <div className="sect-mission-meta">
+              <span>Loại <b>{formatMissionType(mission.type)}</b></span>
+              <span>Địa điểm <b>{objective.locationName ?? "Theo địa đồ"}</b></span>
+              <span>Mục tiêu <b>{formatMissionObjective(mission, objective)}</b></span>
+              <span>Tiến độ <b>{active ? `${active.progress}/${active.targetCount}` : completed ? `${completed.targetCount}/${completed.targetCount}` : `0/${mission.targetCount}`}</b></span>
+            </div>
+            <p className="muted">Thưởng: +{reward.cultivation ?? 0} Tu Vi · +{reward.linhThach ?? 0} Linh Thạch · +{reward.contribution ?? 0} Cống Hiến · +{reward.reputation ?? 0} Uy Danh</p>
+            {active?.status === "READY_TO_TURN_IN" ? (
               <form action={completeSectMissionAction}>
-                <input type="hidden" name="sectId" value={sectId} />
+                <input type="hidden" name="sectId" value={sect.id} />
                 <input type="hidden" name="participantId" value={active.id} />
-                <button className="btn" type="submit">Nhận thưởng</button>
+                <button className="btn" type="submit">Nộp nhiệm vụ</button>
               </form>
+            ) : active ? (
+              <a className="btn btn-secondary" href={mission.locationId ? `/game/world?location=${objective.locationKey ?? ""}` : "/game/world"}>Đi tới khu vực</a>
             ) : (
               <form action={acceptSectMissionAction}>
-                <input type="hidden" name="sectId" value={sectId} />
-                <input type="hidden" name="missionKey" value={mission.key} />
-                <button className="btn btn-secondary" type="submit">{completed ? "Làm lại nhiệm vụ" : "Nhận nhiệm vụ"}</button>
+                <input type="hidden" name="sectId" value={sect.id} />
+                <input type="hidden" name="missionKey" value={mission.id} />
+                <button className="btn btn-secondary" type="submit">{completed ? "Nhận lại nhiệm vụ" : "Nhận nhiệm vụ"}</button>
               </form>
             )}
           </article>
@@ -216,6 +228,26 @@ function MissionsTab({ sectId, participants }: { sectId: string; participants: a
       })}
     </section>
   );
+}
+
+function formatMissionType(type: string) {
+  return ({
+    HUNT: "Săn Yêu",
+    COLLECT: "Thu Thập",
+    EXPLORE: "Thám Hiểm",
+    DELIVER: "Giao Vật",
+    PATROL: "Tuần Tra",
+    MINE: "Khai Khoáng",
+    FARM: "Linh Điền",
+    DONATE: "Cống Hiến"
+  } as Record<string, string>)[type] ?? "Nhiệm vụ";
+}
+
+function formatMissionObjective(mission: any, objective: Record<string, unknown>) {
+  if (mission.type === "HUNT") return `${objective.monsterKey ?? "Yêu thú"} ${mission.targetCount}`;
+  if (mission.type === "COLLECT") return `${objective.itemKey ?? "Tài nguyên"} ${mission.targetCount}`;
+  if (mission.type === "EXPLORE" || mission.type === "PATROL") return objective.locationName ? `Tới ${objective.locationName}` : "Khảo sát địa điểm";
+  return `${mission.targetCount} mục tiêu`;
 }
 
 function facilityOf(sect: any, facilityType: SectFacilityType) {
@@ -229,7 +261,7 @@ function DomainTab({ sect, canManage, canRankUp }: { sect: any; canManage: boole
   const next = getNextSectRank(sect.rank);
   const cards = [
     { type: null, href: `/game/sect/${sect.id}`, icon: <Castle />, title: "Tông Môn Đại Điện", meta: rank.shortLabel, body: "Trung tâm quản trị, thành viên, thông báo và uy danh." },
-    { type: null, href: `/game/sect/${sect.id}?tab=missions`, icon: <ScrollText />, title: "Nhiệm Vụ Đường", meta: `${sectMissionDefinitions.length} nhiệm vụ`, body: "Đệ tử nhận việc, tạo cống hiến và tăng Uy Danh." },
+    { type: null, href: `/game/sect/${sect.id}?tab=missions`, icon: <ScrollText />, title: "Nhiệm Vụ Đường", meta: `${sect.missions.length} nhiệm vụ`, body: "Đệ tử nhận việc, tạo cống hiến và tăng Uy Danh." },
     { type: SectFacilityType.STORAGE, href: `/game/sect/${sect.id}?tab=storage`, icon: <Boxes />, title: "Kho Tông Môn", meta: `${sect.inventoryItems.length} loại vật phẩm`, body: "Tài nguyên chung dùng cho thăng phẩm, mở rộng và crafting sau này." },
     { type: SectFacilityType.FARM, href: `/game/sect/${sect.id}?tab=farm`, icon: <Leaf />, title: "Linh Điền", meta: `${sect.farmPlots.length}/${facilityOf(sect, SectFacilityType.FARM).maxCapacity} ô`, body: "Trồng linh thảo, chia sản lượng cho người trồng và kho tông môn." },
     { type: SectFacilityType.MINE, href: `/game/sect/${sect.id}?tab=mine`, icon: <Pickaxe />, title: "Linh Khoáng", meta: `${facilityOf(sect, SectFacilityType.MINE).currentCapacity}/${facilityOf(sect, SectFacilityType.MINE).maxCapacity} mạch`, body: "Khai thác khoáng vật, tạo dòng tài nguyên cho tông môn." },
@@ -256,7 +288,7 @@ function DomainTab({ sect, canManage, canRankUp }: { sect: any; canManage: boole
                   {facility && canManage && facility.currentCapacity < facility.maxCapacity ? (
                     <form action={expandSectFacilityAction}>
                       <input type="hidden" name="sectId" value={sect.id} />
-                      <input type="hidden" name="facilityType" value={card.type} />
+                      <input type="hidden" name="facilityType" value={card.type ?? ""} />
                       <button className="btn" type="submit">Mở rộng</button>
                     </form>
                   ) : null}
@@ -316,7 +348,10 @@ function StorageTab({ sect, characterItems, canManageTreasury, canManageStorage 
           <form action={depositSectItemAction} className="sect-inline-form">
             <input type="hidden" name="sectId" value={sect.id} />
             <select className="field" name="itemId">
-              {characterItems.filter((item) => item.listings.length === 0).map((item) => <option key={item.id} value={item.id}>{item.template.name} x{item.quantity}</option>)}
+              {characterItems.filter((item) => item.listings.length === 0).map((item) => {
+                const economy = getItemEconomy(item.template);
+                return <option key={item.id} value={item.id}>{item.template.name} · {formatRarity(item.template.rarity)} Phẩm · x{item.quantity} · +{economy.donationContributionValue}/cái</option>;
+              })}
             </select>
             <input className="field" name="quantity" defaultValue="1" inputMode="numeric" />
             <button className="btn" type="submit">Gửi kho</button>
@@ -325,23 +360,28 @@ function StorageTab({ sect, characterItems, canManageTreasury, canManageStorage 
       </div>
 
       <div className="panel sect-board large">
-        <h2>Vật phẩm trong kho</h2>
-        <div className="sect-storage-list">
-          {sect.inventoryItems.length === 0 ? <p className="muted">Kho tông môn chưa có vật phẩm.</p> : sect.inventoryItems.map((item: any) => (
-            <article key={item.id} className="sect-storage-row">
-              <div>
+        <h2>Cửa hàng cống hiến</h2>
+        <div className="sect-domain-grid compact">
+          {sect.inventoryItems.length === 0 ? <p className="muted">Kho tông môn chưa có vật phẩm.</p> : sect.inventoryItems.map((item: any) => {
+            const economy = getItemEconomy(item.template);
+            return (
+            <article key={item.id} className="sect-domain-card">
+              <div className="sect-feature-head">
+                <Boxes />
                 <b>{item.template.name}</b>
-                <span>{item.template.category} · {item.template.rarity}</span>
+                <span>{formatRarity(item.template.rarity)} Phẩm</span>
               </div>
-              <span>x{item.quantity}</span>
-              <form action={withdrawSectItemAction}>
+              <p>{economy.subType || formatItemCategory(item.template.category)} · Kho còn {item.quantity.toLocaleString("vi-VN")}</p>
+              <p className="muted">Đổi: {getSectItemContributionPrice(item.template).toLocaleString("vi-VN")} Cống Hiến / cái · Donate nhận {economy.donationContributionValue.toLocaleString("vi-VN")}</p>
+              <p className="muted">{economy.usage}</p>
+              <form action={withdrawSectItemAction} className="sect-inline-form">
                 <input type="hidden" name="sectId" value={sect.id} />
                 <input type="hidden" name="storageId" value={item.id} />
                 <input className="field" name="quantity" defaultValue="1" inputMode="numeric" />
-                <button className="btn btn-secondary" type="submit">{canManageStorage ? "Rút" : "Đổi bằng cống hiến"}</button>
+                <button className="btn btn-secondary" type="submit">{canManageStorage ? "Quản lý / rút" : "Đổi bằng cống hiến"}</button>
               </form>
             </article>
-          ))}
+          );})}
         </div>
       </div>
 
@@ -444,49 +484,25 @@ function MineTab({ sect, characterId }: { sect: any; characterId: string }) {
   );
 }
 
-function CavesTab({ sect, characterId, canManage }: { sect: any; characterId: string; canManage: boolean }) {
+function CavesTab({ sect, role }: { sect: any; role?: SectRoleName | undefined }) {
+  const effectiveRole = role ?? "OUTER";
+  const cave = getSectCaveBenefit(effectiveRole, sect.rank);
   return (
     <section className="sect-dashboard-grid">
       <div className="panel sect-board large">
-        <h2>Động Phủ</h2>
-        <div className="sect-domain-grid compact">
-          {sect.caves.length === 0 ? <p className="muted">Chưa có Động Phủ. Vào Sơn Môn để mở rộng.</p> : sect.caves.map((cave: any) => {
-            const quality = sectCaveConfig.qualities[cave.quality as keyof typeof sectCaveConfig.qualities];
-            const mine = cave.assignedCharacterId === characterId;
-            return (
-              <article key={cave.id} className="sect-domain-card">
-                <div className="sect-feature-head"><Landmark /><b>{cave.name}</b><span>{quality.label}</span></div>
-                <p>Linh khí +{Math.round(cave.cultivationBonusBps / 100)}% · Đột phá +{Math.round(cave.breakthroughBonusBps / 100)}%</p>
-                <p className="muted">Người sử dụng: {cave.assignedCharacter?.name ?? "Chưa phân phối"}</p>
-                {mine ? (
-                  <form action={startSectCaveCultivationAction} className="sect-inline-form">
-                    <input type="hidden" name="sectId" value={sect.id} />
-                    <input type="hidden" name="caveId" value={cave.id} />
-                    <select className="field" name="minutes"><option value="1">1 phút</option><option value="3">3 phút</option><option value="5">5 phút</option><option value="10">10 phút</option></select>
-                    <button className="btn" type="submit">Bế quan</button>
-                  </form>
-                ) : null}
-                {canManage ? (
-                  <form action={assignSectCaveAction} className="sect-inline-form">
-                    <input type="hidden" name="sectId" value={sect.id} />
-                    <input type="hidden" name="caveId" value={cave.id} />
-                    <select className="field" name="targetCharacterId">
-                      {sect.members.map((member: any) => <option key={member.characterId} value={member.characterId}>{member.character.name}</option>)}
-                    </select>
-                    <button className="btn btn-secondary" type="submit">Phân phối</button>
-                  </form>
-                ) : null}
-                {canManage && cave.assignedCharacterId ? (
-                  <form action={unassignSectCaveAction}>
-                    <input type="hidden" name="sectId" value={sect.id} />
-                    <input type="hidden" name="caveId" value={cave.id} />
-                    <button className="btn btn-secondary" type="submit">Thu hồi</button>
-                  </form>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
+        <h2>Động Phủ của bạn</h2>
+        <article className="sect-domain-card">
+          <div className="sect-feature-head"><Landmark /><b>{cave.name}</b><span>{getSectRank(sect.rank).shortLabel}</span></div>
+          <p>Thân phận: {sectRoles[effectiveRole].label}</p>
+          <p>Linh khí +{Math.round(cave.cultivationBonusBps / 100)}% · Đột phá +{Math.round(cave.breakthroughBonusBps / 100)}%</p>
+          <p className="muted">Bonus tự đổi theo chức vụ và phẩm cấp tông môn. Không cần Tông Chủ phân phối thủ công.</p>
+          <form action={startSectCaveCultivationAction} className="sect-inline-form">
+            <input type="hidden" name="sectId" value={sect.id} />
+            <input type="hidden" name="caveId" value="auto" />
+            <select className="field" name="minutes"><option value="1">1 phút</option><option value="3">3 phút</option><option value="5">5 phút</option><option value="10">10 phút</option></select>
+            <button className="btn" type="submit">Bế quan tu luyện</button>
+          </form>
+        </article>
       </div>
     </section>
   );

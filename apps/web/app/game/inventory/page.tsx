@@ -2,11 +2,11 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { consumeItemAction, equipItemAction, unequipItemAction } from "@/lib/forms";
-import { formatEquipmentSlot, formatItemCategory, formatRarity } from "@/lib/format";
+import { formatEquipmentSlot } from "@/lib/format";
 import { getItemEconomy, jsonRecord } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
-import { Box, Gem, Hammer, Leaf, Pill, ScrollText, Shield, Shirt, Sparkles, Swords } from "lucide-react";
+import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 
 const equipmentSlots = ["WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "TALISMAN", "ARTIFACT"] as const;
 
@@ -126,60 +126,31 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function ItemTile({ item, selected }: { item: InventoryItem; selected: boolean }) {
   const economy = getItemEconomy(item.template);
-  const Icon = iconFor(economy.icon);
   return (
-    <Link href={`/game/inventory?item=${item.id}`} className={`inventory-tile ${selected ? "selected" : ""}`} title={`${item.template.name}\n${economy.usage}\nGiá hệ thống: ${economy.systemBasePrice.toString()} Linh thạch`}>
-      <span className={`item-icon grade-${item.template.rarity.toLowerCase()}`}><Icon size={22} aria-hidden /></span>
-      <b>{item.template.name}</b>
-      <small>{formatRarity(item.template.rarity)} Phẩm · {formatSubType(economy.subType, item.template.category)}</small>
-      <em>x{item.quantity}</em>
-    </Link>
+    <ItemSummaryCard
+      template={item.template}
+      quantityLabel={`x${item.quantity}`}
+      priceLabel={`${formatCurrency(economy.systemBasePrice)} Linh Thạch`}
+      href={`/game/inventory?item=${item.id}`}
+      selected={selected}
+    />
   );
 }
 
 function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean }) {
-  const economy = getItemEconomy(item.template);
-  const Icon = iconFor(economy.icon);
   const activeListing = item.listings[0];
   const canEquip = item.template.category === "EQUIPMENT" && Boolean(item.template.equipSlot) && !activeListing;
   const canConsume = item.template.category === "CONSUMABLE" && !activeListing;
   const canSell = item.template.tradeable && !item.bound && !activeListing;
-  const modifiers = Object.entries(jsonRecord(item.template.baseModifiers)).filter(([, value]) => typeof value === "number" || typeof value === "string" || typeof value === "boolean");
   return (
-    <div className="item-detail">
-      <div className="item-detail-head">
-        <span className={`item-icon item-icon-large grade-${item.template.rarity.toLowerCase()}`}><Icon size={30} aria-hidden /></span>
-        <div>
-          <h3>{item.template.name}</h3>
-          <p>{formatRarity(item.template.rarity)} Phẩm · {formatSubType(economy.subType, item.template.category)}</p>
-        </div>
-      </div>
-
-      <div className="info-table mt-4">
-        <div><span>Phẩm chất</span><b>{formatRarity(item.template.rarity)} Phẩm</b></div>
-        <div><span>Dòng vật phẩm</span><b>{economy.itemFamily ?? "Riêng lẻ"}</b></div>
-        <div><span>Loại</span><b>{formatSubType(economy.subType, item.template.category)}</b></div>
-        <div><span>Số lượng</span><b>{item.quantity}</b></div>
-        <div><span>Giá hệ thống</span><b>{economy.systemBasePrice.toString()} Linh thạch</b></div>
-        <div><span>Vạn Bảo Lâu thu mua</span><b>{economy.sellableToNpc ? `${economy.npcBuyPrice.toString()} / cái` : "Không thu mua"}</b></div>
-        <div><span>Đổi Tông Môn</span><b>{economy.sectExchangeEnabled ? `${economy.sectContributionPrice} Cống Hiến` : "Không đổi"}</b></div>
-        <div><span>Cống hiến vào kho</span><b>{economy.sectExchangeEnabled ? `${economy.donationContributionValue} Cống Hiến` : "Không nhận"}</b></div>
-        <div><span>Điều kiện cảnh giới</span><b>{economy.requiredRealmOrder === null ? "Không" : `Bậc ${economy.requiredRealmOrder}+`}</b></div>
-        <div><span>Giao dịch</span><b>{item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch"}</b></div>
-        {item.equippedSlot ? <div><span>Đang trang bị</span><b>{formatEquipmentSlot(item.equippedSlot)}</b></div> : null}
-      </div>
-
-      {modifiers.length > 0 ? (
-        <div className="item-stat-list">
-          {modifiers.map(([key, value]) => <span key={key}>{formatModifier(key)} <b>{formatModifierValue(value)}</b></span>)}
-        </div>
-      ) : null}
-
-      <p className="muted mt-4">{item.template.description}</p>
-      <p className="muted mt-2">{economy.usage}</p>
-      {activeListing ? <p className="badge mt-4">Đang bày bán: {activeListing.price.toString()} Linh thạch / cái</p> : null}
-
-      <div className="item-actions mt-4">
+    <ItemDetailPanel
+      template={item.template}
+      quantityLabel={`x${item.quantity}`}
+      source="Túi Đồ"
+      condition={item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch"}
+      action={(
+        <>
+          {activeListing ? <p className="badge">Đang bày bán: {formatCurrency(activeListing.price)} Linh Thạch</p> : null}
         {item.equippedSlot ? (
           <form action={unequipItemAction}>
             <input type="hidden" name="itemId" value={item.id} />
@@ -200,34 +171,10 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
         ) : null}
         {canSell && atMarket ? <Link href={`/game/market?tab=sell&sellItem=${item.id}`} className="btn w-full">Rao bán</Link> : null}
         {canSell && !atMarket ? <Link href="/game/world?error=Bạn cần tới Chợ Linh Bảo để giao dịch." className="btn w-full">Tới Chợ Linh Bảo</Link> : null}
-      </div>
-    </div>
+        </>
+      )}
+    />
   );
-}
-
-function iconFor(icon: string) {
-  return ({
-    herb: Leaf,
-    leaf: Leaf,
-    ore: Hammer,
-    wood: Leaf,
-    core: Sparkles,
-    crystal: Gem,
-    hide: Shirt,
-    fang: Swords,
-    bone: Box,
-    silk: Sparkles,
-    sword: Swords,
-    armor: Shirt,
-    boots: Shield,
-    ring: Gem,
-    talisman: ScrollText,
-    pill: Pill,
-    manual: ScrollText,
-    scroll: ScrollText,
-    gem: Gem,
-    box: Box
-  } as const)[icon] ?? Box;
 }
 
 function groupInventoryItems(items: InventoryItem[]) {
@@ -254,18 +201,3 @@ function groupInventoryItems(items: InventoryItem[]) {
   return [...groups.values()];
 }
 
-function formatSubType(value: string, category: string) {
-  if (["WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "TALISMAN", "ARTIFACT"].includes(value)) return formatEquipmentSlot(value);
-  if (value === category) return formatItemCategory(category);
-  return value;
-}
-
-function formatModifier(key: string) {
-  return ({ attack: "Công kích", defense: "Phòng ngự", speed: "Tốc độ", spirit: "Thần thức", hp: "Sinh lực", qi: "Chân nguyên", hpRestore: "Hồi sinh lực", qiRestore: "Hồi chân nguyên", cultivation: "Tu vi", cultivationBps: "Tốc độ tu luyện" } as Record<string, string>)[key] ?? key;
-}
-
-function formatModifierValue(value: unknown) {
-  if (typeof value === "number") return value > 0 ? `+${value}` : value.toString();
-  if (typeof value === "boolean") return value ? "Có" : "Không";
-  return String(value);
-}

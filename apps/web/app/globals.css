@@ -662,7 +662,7 @@ button, input, select, textarea {
 
 @media (min-width: 768px) {
   .market-toolbar {
-    grid-template-columns: minmax(0, 1fr) 14rem auto;
+    grid-template-columns: minmax(14rem, 1fr) 11rem 13rem auto;
   }
 }
 
@@ -1349,8 +1349,8 @@ select.field option {
 .inventory-grid,
 .market-card-grid {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
 .inventory-tile,
@@ -1362,6 +1362,138 @@ select.field option {
   color: rgba(244, 239, 227, 0.78);
   min-height: 8.5rem;
   padding: 0.8rem;
+  min-width: 0;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.item-shop-card {
+  gap: 0.8rem;
+  min-height: 260px;
+  padding: 0.95rem;
+}
+
+.item-shop-card.selected {
+  border-color: rgba(214, 178, 94, 0.55);
+  background: rgba(214, 178, 94, 0.1);
+}
+
+.item-card-link {
+  color: inherit;
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.item-card-link:hover .item-name {
+  color: #d6b25e;
+}
+
+.item-card-visual {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.item-stock-badge {
+  justify-self: end;
+  border: 1px solid rgba(214, 178, 94, 0.22);
+  background: rgba(214, 178, 94, 0.09);
+  color: #e8ce86;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0.26rem 0.45rem;
+  white-space: nowrap;
+}
+
+.item-card-body {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.item-name {
+  color: #f4efe3;
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.25;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-meta {
+  align-items: center;
+  color: rgba(244, 239, 227, 0.62);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.item-grade {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.045);
+  color: #f4efe3;
+  padding: 0.2rem 0.42rem;
+  white-space: nowrap;
+}
+
+.item-grade.grade-ha {
+  border-color: rgba(214, 178, 94, 0.36);
+  color: #e7c985;
+}
+
+.item-grade.grade-trung {
+  border-color: rgba(103, 211, 255, 0.32);
+  color: #a7e7ff;
+}
+
+.item-grade.grade-thuong {
+  border-color: rgba(159, 122, 234, 0.36);
+  color: #e5d2ff;
+}
+
+.item-seller {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-card-footer {
+  align-items: end;
+  display: flex;
+  min-height: 2rem;
+}
+
+.item-price {
+  color: #d6b25e;
+  font-size: 1rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.item-card-action {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 4.5rem minmax(6rem, 1fr);
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.item-card-action.single {
+  grid-template-columns: 1fr;
+}
+
+.item-qty-field {
+  min-width: 0;
+  text-align: center;
 }
 
 .inventory-tile.selected,
@@ -1404,6 +1536,11 @@ select.field option {
   width: 2.45rem;
 }
 
+.item-shop-card .item-icon {
+  height: 72px;
+  width: 72px;
+}
+
 .item-icon.grade-ha {
   background: rgba(173, 130, 72, 0.16);
   border-color: rgba(214, 178, 94, 0.35);
@@ -1429,8 +1566,8 @@ select.field option {
 }
 
 .item-icon-large {
-  height: 3.2rem;
-  width: 3.2rem;
+  height: 5rem;
+  width: 5rem;
 }
 
 .item-detail,
@@ -1451,6 +1588,47 @@ select.field option {
   color: #d6b25e;
   font-size: 1.35rem;
   font-weight: 950;
+}
+
+.item-detail-section {
+  border-left: 2px solid rgba(214, 178, 94, 0.32);
+  display: grid;
+  gap: 0.28rem;
+  padding-left: 0.75rem;
+}
+
+.item-detail-section h4 {
+  color: #d6b25e;
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.item-detail-section p {
+  color: rgba(244, 239, 227, 0.76);
+  line-height: 1.55;
+}
+
+.item-storage-detail {
+  border: 1px solid rgba(214, 178, 94, 0.22);
+  background: rgba(214, 178, 94, 0.06);
+  padding: 1rem;
+}
+
+.reward-item-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.reward-fallback-item {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(244, 239, 227, 0.78);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.7rem;
 }
 
 .sell-mode-grid {

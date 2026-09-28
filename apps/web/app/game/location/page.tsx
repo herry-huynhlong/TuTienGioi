@@ -2,11 +2,12 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { attackEncounterAction, cancelExploreAction, exploreAction, leaveEncounterAction, startTravelAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { advanceExplorationActivity, currentEnergy, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
+import { advanceExplorationActivity, currentEnergy, getItemEconomy, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
+import { formatCurrency, ItemSummaryCard } from "@/components/ItemCard";
 import { Compass, Home, Landmark, Mail, Route, ScrollText, Shield, ShoppingBag, Swords, Trees } from "lucide-react";
 
 const activityLabels: Record<string, string> = {
@@ -71,10 +72,10 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
     take: 6,
     orderBy: { createdAt: "desc" }
     }),
-    prisma.itemTemplate.findMany({ select: { key: true, name: true } }),
+    prisma.itemTemplate.findMany(),
     prisma.monster.findMany({ select: { key: true, name: true, hp: true, realmOrder: true } })
   ]);
-  const itemNames = new Map(itemTemplates.map((item) => [item.key, item.name]));
+  const itemTemplatesByKey = new Map(itemTemplates.map((item) => [item.key, item]));
   const monsterByKey = new Map(monsters.map((monster) => [monster.key, monster]));
 
   return (
@@ -158,7 +159,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
         </div>
 
         <Panel title="Tình huống hiện tại">
-          <SituationPanel active={activeExploration} pending={pendingEncounter} latest={latestResolved} logs={logs} itemNames={itemNames} monsterByKey={monsterByKey} />
+          <SituationPanel active={activeExploration} pending={pendingEncounter} latest={latestResolved} logs={logs} itemTemplatesByKey={itemTemplatesByKey} monsterByKey={monsterByKey} />
         </Panel>
       </section>
     </div>
@@ -218,14 +219,14 @@ function SituationPanel({
   pending,
   latest,
   logs,
-  itemNames,
+  itemTemplatesByKey,
   monsterByKey
 }: {
   active: { id: string; startedAt: Date; endsAt: Date; reward: unknown } | undefined;
   pending: { id: string; reward: unknown } | undefined;
   latest: { id: string; eventKey: string | null; reward: unknown; claimedAt: Date | null } | undefined;
   logs: Array<{ id: string; message: string; createdAt: Date }>;
-  itemNames: Map<string, string>;
+  itemTemplatesByKey: Map<string, ItemTemplateReward>;
   monsterByKey: Map<string, { key: string; name: string; hp: number; realmOrder: number }>;
 }) {
   if (active) {
@@ -283,20 +284,31 @@ function SituationPanel({
     const combatReward = parseReward(combat.reward);
     const loot = parseReward(combatReward.loot);
     const lootItems = Array.isArray(loot.items) ? loot.items : [];
-    const itemName = typeof reward.item === "string" ? itemNames.get(reward.item) ?? reward.item : null;
+    const rewardTemplate = typeof reward.item === "string" ? itemTemplatesByKey.get(reward.item) : null;
+    const itemName = typeof reward.item === "string" ? rewardTemplate?.name ?? reward.item : null;
     const mode = activityModeFromReward(latest.reward);
     return (
       <div className="situation-card">
         <p className="text-xs font-bold uppercase text-jade">Kết quả gần nhất</p>
         <h3>{activityCopy[mode].title} hoàn thành</h3>
-        {itemName ? <p className="mt-2"><b className="text-gold">{itemName}</b> x{typeof reward.quantity === "number" ? reward.quantity : 1}</p> : null}
+        {rewardTemplate ? (
+          <div className="reward-item-grid mt-3">
+            <RewardItemCard template={rewardTemplate} quantity={typeof reward.quantity === "number" ? reward.quantity : 1} source={activityCopy[mode].title} />
+          </div>
+        ) : itemName ? <p className="mt-2"><b className="text-gold">{itemName}</b> x{typeof reward.quantity === "number" ? reward.quantity : 1}</p> : null}
         {combat.winner ? <p className="mt-2">{combat.winner === "player" ? "Bạn đã đánh bại yêu thú." : "Bạn rút khỏi trận chiến sau khi bị thương."}</p> : null}
         {typeof loot.linhThach === "string" && loot.linhThach !== "0" ? <p className="mt-2 text-gold">Linh thạch +{loot.linhThach}</p> : null}
         {lootItems.length > 0 ? (
-          <div className="item-stat-list mt-3">
+          <div className="reward-item-grid mt-3">
             {lootItems.map((entry, index) => {
               const row = parseReward(entry);
-              return <span key={index}>{String(row.name ?? row.key ?? "Chiến lợi phẩm")} <b>x{String(row.quantity ?? 1)}</b></span>;
+              const key = typeof row.key === "string" ? row.key : "";
+              const template = key ? itemTemplatesByKey.get(key) : null;
+              return template ? (
+                <RewardItemCard key={`${key}-${index}`} template={template} quantity={quantityFromReward(row.quantity)} source="Chiến lợi phẩm" />
+              ) : (
+                <span key={index} className="reward-fallback-item">{String(row.name ?? row.key ?? "Chiến lợi phẩm")} <b>x{String(row.quantity ?? 1)}</b></span>
+              );
             })}
           </div>
         ) : null}
@@ -313,6 +325,36 @@ function SituationPanel({
       </div>
     </div>
   );
+}
+
+type ItemTemplateReward = {
+  name: string;
+  category: string;
+  rarity: string;
+  description: string;
+  equipSlot?: string | null;
+  tradeable: boolean;
+  itemFamily?: string | null;
+  baseModifiers: unknown;
+  bindRules: unknown;
+};
+
+function RewardItemCard({ template, quantity, source }: { template: ItemTemplateReward; quantity: number; source: string }) {
+  const economy = getItemEconomy(template);
+  return (
+    <ItemSummaryCard
+      template={template}
+      quantityLabel={`x${quantity}`}
+      priceLabel={`${formatCurrency(economy.systemBasePrice)} Linh Thạch`}
+      sellerLabel={source}
+    />
+  );
+}
+
+function quantityFromReward(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(1, Math.floor(value));
+  if (typeof value === "string" && /^\d+$/.test(value)) return Math.max(1, Number(value));
+  return 1;
 }
 
 function parseReward(value: unknown): Record<string, unknown> {

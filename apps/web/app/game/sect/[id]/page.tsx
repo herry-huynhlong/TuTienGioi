@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, completeSectMissionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectSectApplicationAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
 import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
-import { formatItemCategory, formatRarity } from "@/lib/format";
+import { formatRarity } from "@/lib/format";
+import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { BookOpen, Boxes, Building2, Castle, Crown, Gem, Landmark, Leaf, Pickaxe, ScrollText, Shield, Sparkles, Users } from "lucide-react";
 
 const tabs = [
@@ -20,7 +21,7 @@ const tabs = [
   ["admin", "Quản Trị"]
 ] as const;
 
-export default async function SectHomePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ tab?: string; error?: string; created?: string; ok?: string }> }) {
+export default async function SectHomePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ tab?: string; error?: string; created?: string; ok?: string; storageItem?: string }> }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const user = await getUser();
   if (!user) redirect("/");
@@ -115,7 +116,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       {activeTab === "domain" ? <DomainTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_BUILDINGS")} canRankUp={hasSectPermission(selfMember?.role, "UPGRADE_SECT")} /> : null}
       {activeTab === "caves" ? <CavesTab sect={sect} role={selfMember?.role} /> : null}
       {activeTab === "library" ? <LibraryTab sect={sect} selfRole={selfMember?.role} contribution={selfMember?.contribution ?? 0} ownedTechniqueIds={character.techniques.map((item) => item.techniqueId)} /> : null}
-      {activeTab === "storage" ? <StorageTab sect={sect} characterItems={character.items} canManageTreasury={hasSectPermission(selfMember?.role, "MANAGE_TREASURY")} canManageStorage={hasSectPermission(selfMember?.role, "MANAGE_STORAGE")} /> : null}
+      {activeTab === "storage" ? <StorageTab sect={sect} characterItems={character.items} selectedStorageId={query?.storageItem ?? ""} canManageTreasury={hasSectPermission(selfMember?.role, "MANAGE_TREASURY")} canManageStorage={hasSectPermission(selfMember?.role, "MANAGE_STORAGE")} /> : null}
       {activeTab === "mine" ? <MineTab sect={sect} characterId={character.id} /> : null}
       {activeTab === "farm" ? <FarmTab sect={sect} /> : null}
       {activeTab === "admin" && canAdmin ? <AdminTab sect={sect} /> : null}
@@ -318,7 +319,8 @@ function DomainTab({ sect, canManage, canRankUp }: { sect: any; canManage: boole
   );
 }
 
-function StorageTab({ sect, characterItems, canManageTreasury, canManageStorage }: { sect: any; characterItems: any[]; canManageTreasury: boolean; canManageStorage: boolean }) {
+function StorageTab({ sect, characterItems, selectedStorageId, canManageTreasury, canManageStorage }: { sect: any; characterItems: any[]; selectedStorageId: string; canManageTreasury: boolean; canManageStorage: boolean }) {
+  const selectedStorage = sect.inventoryItems.find((item: any) => item.id === selectedStorageId) ?? null;
   return (
     <section className="sect-dashboard-grid">
       <div className="panel sect-board">
@@ -361,26 +363,29 @@ function StorageTab({ sect, characterItems, canManageTreasury, canManageStorage 
 
       <div className="panel sect-board large">
         <h2>Cửa hàng cống hiến</h2>
-        <div className="sect-domain-grid compact">
+        {selectedStorage ? (
+          <div className="item-storage-detail mt-4">
+            <ItemDetailPanel
+              template={selectedStorage.template}
+              quantityLabel={`Kho còn ${selectedStorage.quantity.toLocaleString("vi-VN")}`}
+              source="Kho Tông Môn"
+              condition={canManageStorage ? "Có quyền quản lý kho" : "Cần đủ cống hiến cá nhân để đổi"}
+              action={<SectWithdrawItemForm sectId={sect.id} item={selectedStorage} canManageStorage={canManageStorage} />}
+            />
+          </div>
+        ) : null}
+        <div className="market-card-grid mt-4">
           {sect.inventoryItems.length === 0 ? <p className="muted">Kho tông môn chưa có vật phẩm.</p> : sect.inventoryItems.map((item: any) => {
-            const economy = getItemEconomy(item.template);
             return (
-            <article key={item.id} className="sect-domain-card">
-              <div className="sect-feature-head">
-                <Boxes />
-                <b>{item.template.name}</b>
-                <span>{formatRarity(item.template.rarity)} Phẩm</span>
-              </div>
-              <p>{economy.subType || formatItemCategory(item.template.category)} · Kho còn {item.quantity.toLocaleString("vi-VN")}</p>
-              <p className="muted">Đổi: {getSectItemContributionPrice(item.template).toLocaleString("vi-VN")} Cống Hiến / cái · Donate nhận {economy.donationContributionValue.toLocaleString("vi-VN")}</p>
-              <p className="muted">{economy.usage}</p>
-              <form action={withdrawSectItemAction} className="sect-inline-form">
-                <input type="hidden" name="sectId" value={sect.id} />
-                <input type="hidden" name="storageId" value={item.id} />
-                <input className="field" name="quantity" defaultValue="1" inputMode="numeric" />
-                <button className="btn btn-secondary" type="submit">{canManageStorage ? "Quản lý / rút" : "Đổi bằng cống hiến"}</button>
-              </form>
-            </article>
+              <ItemSummaryCard
+                key={item.id}
+                template={item.template}
+                quantityLabel={`x${item.quantity.toLocaleString("vi-VN")}`}
+                priceLabel={`${formatCurrency(getSectItemContributionPrice(item.template))} Cống Hiến`}
+                href={`/game/sect/${sect.id}?tab=storage&storageItem=${item.id}`}
+                selected={selectedStorage?.id === item.id}
+                action={<SectWithdrawItemForm sectId={sect.id} item={item} canManageStorage={canManageStorage} />}
+              />
           );})}
         </div>
       </div>
@@ -394,6 +399,17 @@ function StorageTab({ sect, characterItems, canManageTreasury, canManageStorage 
         ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 16)} />
       </div>
     </section>
+  );
+}
+
+function SectWithdrawItemForm({ sectId, item, canManageStorage }: { sectId: string; item: any; canManageStorage: boolean }) {
+  return (
+    <form action={withdrawSectItemAction} className="item-card-action">
+      <input type="hidden" name="sectId" value={sectId} />
+      <input type="hidden" name="storageId" value={item.id} />
+      <input className="field item-qty-field" name="quantity" defaultValue="1" inputMode="numeric" min="1" max={item.quantity} aria-label="Số lượng" />
+      <button className="btn btn-secondary" type="submit">{canManageStorage ? "Rút" : "Đổi"}</button>
+    </form>
   );
 }
 

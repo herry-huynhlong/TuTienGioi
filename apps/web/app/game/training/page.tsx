@@ -1,5 +1,6 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { FacilityActionCard, FacilityPage, FacilityPanel, FacilityTierStrip, FacilityTutorial } from "@/components/FacilityPage";
 import { Lock } from "lucide-react";
 
@@ -13,7 +14,8 @@ const trainingStats = [
 
 export default async function TrainingPage() {
   const user = await getUser();
-  const c = await prisma.character.findUniqueOrThrow({ where: { userId: user!.id }, include: { currentLocation: true } });
+  if (!user) redirect("/");
+  const c = await prisma.character.findUniqueOrThrow({ where: { userId: user.id }, include: { currentLocation: true } });
   const values = {
     body: c.body,
     attack: c.attack,

@@ -1,12 +1,14 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { markNotificationReadAction } from "@/lib/forms";
 import { Mail, Bell } from "lucide-react";
 
 export default async function MailPage() {
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     select: { id: true }
   });
   const [notifications, messages] = await Promise.all([

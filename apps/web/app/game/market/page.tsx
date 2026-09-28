@@ -1,5 +1,6 @@
 import { ItemCategory, prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { buyMarketListingAction, cancelMarketListingAction, sellItemAction, sellItemToNpcAction } from "@/lib/forms";
 import { formatItemCategory, formatRarity } from "@/lib/format";
 import { getItemEconomy, marketListingMaxQuantity, recordOnboardingEvent } from "@ttg/game";
@@ -18,12 +19,13 @@ const categories = [
 
 export default async function MarketPage({ searchParams }: { searchParams?: Promise<{ q?: string; category?: string; error?: string; tab?: string; sellItem?: string }> }) {
   const user = await getUser();
+  if (!user) redirect("/");
   const params = await searchParams;
   const q = params?.q?.trim() ?? "";
   const tab = params?.tab === "sell" || params?.tab === "my" ? params.tab : "buy";
   const category = categories.some(([value]) => value === params?.category) ? params?.category : "";
   const character = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: {
       currentLocation: true,
       items: {

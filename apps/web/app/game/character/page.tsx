@@ -1,5 +1,6 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { formatItemCategory, formatRarity } from "@/lib/format";
 import { recordOnboardingEvent } from "@ttg/game";
 
@@ -15,8 +16,9 @@ const equipmentSlots = [
 
 export default async function CharacterPage() {
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: {
       realmStage: { include: { realm: true } },
       spiritualRoot: true,

@@ -101,6 +101,81 @@ enum SectRoleName {
   OUTER
 }
 
+enum SectAlignment {
+  RIGHTEOUS
+  NEUTRAL
+  DEMONIC
+}
+
+enum SectApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum SectLogType {
+  CREATE
+  APPLICATION
+  MEMBER
+  ADMIN
+  RANK
+  TREASURY
+  INVENTORY
+  MISSION
+  CONTRIBUTION
+  DOMAIN
+  FARM
+  MINE
+  CAVE
+  LIBRARY
+  EXPANSION
+}
+
+enum SectInventoryLogType {
+  DEPOSIT
+  WITHDRAW
+  MISSION_REWARD
+  MISSION_COST
+  BUILDING_COST
+  FARM_REWARD
+  MINE_REWARD
+  RANK_COST
+  EXPANSION_COST
+  ADMIN
+}
+
+enum SectMissionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum SectFacilityType {
+  FARM
+  CAVE
+  MINE
+  STORAGE
+  OTHER
+}
+
+enum SectWorkStatus {
+  EMPTY
+  ACTIVE
+  READY
+  CLAIMED
+  CANCELLED
+}
+
+enum SectCaveQuality {
+  COMMON
+  SPIRIT
+  MYSTIC
+  EARTH
+  HEAVEN
+}
+
 enum RelationType {
   ALLIANCE
   NEUTRAL
@@ -200,6 +275,7 @@ model Character {
   talents         CharacterTalent[]
   techniques      CharacterTechnique[]
   items           ItemInstance[]
+  sectInventoryLogs SectInventoryLog[]
   cultivationJobs CultivationActivity[]
   explorations    ExplorationActivity[]
   travels         Travel[]
@@ -208,6 +284,15 @@ model Character {
   bids            AuctionBid[]
   walletTxs       WalletTransaction[]
   sectMember      SectMember?
+  sectApplications SectApplication[]
+  sectAnnouncements SectAnnouncement[]
+  sectLogs         SectLog[]
+  sectTreasuryTransactions SectTreasuryTransaction[]
+  sectContributionTransactions SectContributionTransaction[]
+  sectMissionParticipants SectMissionParticipant[]
+  sectFarmPlots SectFarmPlot[]
+  sectMineWorks SectMineWork[]
+  assignedSectCaves SectCave[]
   notifications   Notification[]
   messagesSent    PrivateMessage[] @relation("SentMessages")
   messagesRecv    PrivateMessage[] @relation("RecvMessages")
@@ -290,6 +375,7 @@ model Technique {
   effects     Json
   description String
   learners    CharacterTechnique[]
+  sectLibraries SectLibraryTechnique[]
 }
 
 model CharacterTechnique {
@@ -319,6 +405,8 @@ model ItemTemplate {
   baseModifiers Json
   bindRules     Json?
   items         ItemInstance[]
+  sectInventory SectInventoryItem[]
+  sectInventoryLogs SectInventoryLog[]
   recipesOut    Recipe[] @relation("RecipeOutput")
 }
 
@@ -631,18 +719,42 @@ model Sect {
   name        String @unique
   tag         String @unique
   description String
+  emblem      String @default("yin-yang")
+  alignment   SectAlignment @default(NEUTRAL)
+  rank        Int @default(5)
   level       Int @default(1)
   experience  Int @default(0)
   treasury    BigInt @default(0)
   reputation  Int @default(0)
-  memberLimit Int @default(30)
+  memberLimit Int @default(5)
+  recruiting  Boolean @default(true)
+  autoAccept   Boolean @default(false)
+  joinRequirement String @default("Không yêu cầu")
+  notice      String @default("Sơn môn mới lập, mọi sự vụ đang chờ người hữu duyên cùng gây dựng.")
   leaderId    String
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   members     SectMember[]
+  applications SectApplication[]
   characters  Character[]
   buildings   SectBuilding[]
+  announcements SectAnnouncement[]
+  logs        SectLog[]
+  treasuryTransactions SectTreasuryTransaction[]
+  inventoryItems SectInventoryItem[]
+  inventoryLogs SectInventoryLog[]
+  contributionTransactions SectContributionTransaction[]
+  missions SectMission[]
+  missionParticipants SectMissionParticipant[]
+  facilityExpansions SectFacilityExpansion[]
+  farmPlots SectFarmPlot[]
+  mineWorks SectMineWork[]
+  caves SectCave[]
+  libraryTechniques SectLibraryTechnique[]
   relationsA  SectRelation[] @relation("SectA")
   relationsB  SectRelation[] @relation("SectB")
+  @@index([rank, recruiting])
+  @@index([reputation])
 }
 
 model SectMember {
@@ -652,8 +764,11 @@ model SectMember {
   characterId String @unique
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   role        SectRoleName @default(OUTER)
+  contribution Int @default(0)
+  weeklyContribution Int @default(0)
   joinedAt    DateTime @default(now())
   @@index([sectId, role])
+  @@index([sectId, contribution])
 }
 
 model SectBuilding {
@@ -664,7 +779,253 @@ model SectBuilding {
   name      String
   level     Int @default(1)
   bonus     Json
+  updatedAt DateTime @updatedAt
   @@unique([sectId, key])
+}
+
+model SectFacilityExpansion {
+  id              String @id @default(cuid())
+  sectId          String
+  sect            Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  facilityType    SectFacilityType
+  currentCapacity Int
+  maxCapacity     Int
+  expansionCount  Int @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([sectId, facilityType])
+  @@index([sectId, facilityType])
+}
+
+model SectFarmPlot {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  plotIndex   Int
+  planterId   String?
+  planter     Character? @relation(fields: [planterId], references: [id], onDelete: SetNull)
+  cropKey     String?
+  status      SectWorkStatus @default(EMPTY)
+  startedAt   DateTime?
+  readyAt     DateTime?
+  harvestedAt DateTime?
+  reward      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([sectId, plotIndex])
+  @@index([sectId, status, readyAt])
+  @@index([planterId, status])
+}
+
+model SectMineWork {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  workerId    String
+  worker      Character @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  mineKey     String
+  status      SectWorkStatus @default(ACTIVE)
+  startedAt   DateTime @default(now())
+  readyAt     DateTime
+  claimedAt   DateTime?
+  reward      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([sectId, status, readyAt])
+  @@index([workerId, status])
+}
+
+model SectCave {
+  id                      String @id @default(cuid())
+  sectId                  String
+  sect                    Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  name                    String
+  quality                 SectCaveQuality
+  cultivationBonusBps     Int
+  breakthroughBonusBps    Int @default(0)
+  requiredRole            SectRoleName @default(OUTER)
+  requiredRealmOrder      Int @default(0)
+  assignedCharacterId     String?
+  assignedCharacter       Character? @relation(fields: [assignedCharacterId], references: [id], onDelete: SetNull)
+  status                  String @default("OPEN")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  @@index([sectId, quality])
+  @@index([assignedCharacterId])
+}
+
+model SectLibraryTechnique {
+  id                  String @id @default(cuid())
+  sectId              String
+  sect                Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  techniqueId         String
+  technique           Technique @relation(fields: [techniqueId], references: [id], onDelete: Cascade)
+  accessRole          SectRoleName @default(OUTER)
+  requiredRealmOrder  Int @default(0)
+  contributionCost    Int
+  source              String @default("rank_unlock")
+  createdAt           DateTime @default(now())
+  @@unique([sectId, techniqueId])
+  @@index([sectId, accessRole])
+}
+
+model SectApplication {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  message     String @default("")
+  status      SectApplicationStatus @default(PENDING)
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([sectId, characterId, status])
+  @@index([characterId, status])
+  @@index([sectId, status, createdAt])
+}
+
+model SectAnnouncement {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  authorId    String?
+  author      Character? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  title       String
+  body        String
+  pinned      Boolean @default(false)
+  createdAt   DateTime @default(now())
+  @@index([sectId, pinned, createdAt])
+}
+
+model SectLog {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       Character? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  type        SectLogType
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  @@index([sectId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model SectTreasuryTransaction {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  type        String
+  currency    Currency
+  amount      BigInt
+  before      BigInt
+  after       BigInt
+  reason      String
+  createdAt   DateTime @default(now())
+  @@index([sectId, createdAt])
+  @@index([characterId, createdAt])
+}
+
+model SectInventoryItem {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  templateId  String
+  template    ItemTemplate @relation(fields: [templateId], references: [id])
+  quantity    Int @default(0)
+  quality     Int @default(1)
+  enhancement Int @default(0)
+  bound       Boolean @default(false)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  @@unique([sectId, templateId, quality, enhancement, bound])
+  @@index([sectId, quantity])
+  @@index([templateId])
+}
+
+model SectInventoryLog {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  templateId  String
+  template    ItemTemplate @relation(fields: [templateId], references: [id])
+  type        SectInventoryLogType
+  quantity    Int
+  beforeQuantity Int
+  afterQuantity  Int
+  reason      String
+  createdAt   DateTime @default(now())
+  @@index([sectId, createdAt])
+  @@index([characterId, createdAt])
+  @@index([templateId])
+}
+
+model SectContributionTransaction {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  amount      Int
+  before      Int
+  after       Int
+  type        String
+  reason      String
+  referenceType String?
+  referenceId String?
+  idempotencyKey String?
+  createdAt   DateTime @default(now())
+  @@unique([characterId, idempotencyKey])
+  @@index([sectId, createdAt])
+  @@index([characterId, createdAt])
+}
+
+model SectMission {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  key         String
+  title       String
+  description String
+  difficulty  Int @default(1)
+  durationMinutes Int @default(10)
+  maxParticipants Int @default(1)
+  reward      Json
+  cost        Json?
+  status      SectMissionStatus @default(ACTIVE)
+  createdById String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  participants SectMissionParticipant[]
+  @@index([sectId, status])
+  @@index([key])
+}
+
+model SectMissionParticipant {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  missionId   String?
+  mission     SectMission? @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  missionKey  String
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  status      SectMissionStatus @default(ACTIVE)
+  startedAt   DateTime @default(now())
+  endsAt      DateTime
+  completedAt DateTime?
+  reward      Json?
+  idempotencyKey String?
+  @@unique([characterId, idempotencyKey])
+  @@index([characterId, missionKey, status])
+  @@index([sectId, status, endsAt])
+  @@index([missionId, status])
 }
 
 model SectRelation {

@@ -4,6 +4,7 @@ import { claimTravelAction, startTravelAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
 import { getFeatureUnlockState, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
 import {
   Anchor,
@@ -111,8 +112,9 @@ const quickLinks: QuickLink[] = [
 export default async function WorldPage({ searchParams }: { searchParams?: Promise<{ region?: string; location?: string; error?: string }> }) {
   const params = await searchParams;
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: {
       travels: { where: { status: "ACTIVE" }, include: { route: { include: { origin: true, destination: true } } }, orderBy: { endsAt: "desc" } },
       cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },

@@ -1,10 +1,12 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { BookMarked, Swords } from "lucide-react";
 
 export default async function BestiaryPage() {
   const user = await getUser();
-  const character = await prisma.character.findUniqueOrThrow({ where: { userId: user!.id }, select: { id: true } });
+  if (!user) redirect("/");
+  const character = await prisma.character.findUniqueOrThrow({ where: { userId: user.id }, select: { id: true } });
   const combats = await prisma.combat.findMany({ where: { characterId: character.id }, orderBy: { createdAt: "desc" } });
   const discoveredKeys = [...new Set(combats.map((combat) => combat.monsterKey))];
   const monsters = discoveredKeys.length > 0 ? await prisma.monster.findMany({ where: { key: { in: discoveredKeys } } }) : [];

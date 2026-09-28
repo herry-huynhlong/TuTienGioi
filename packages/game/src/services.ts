@@ -323,7 +323,24 @@ async function advanceExplorationActivityTx(tx: Tx, characterId: string, activit
   const job = await tx.explorationActivity.findUnique({ where: { id: activityId } });
   if (!job || job.characterId !== characterId || job.status !== ActivityStatus.ACTIVE || job.endsAt > now) return job;
   const mode = activityModeFromReward(job.reward);
-  if (mode !== "hunt") return job;
+  if (mode !== "hunt") {
+    const updated = await tx.explorationActivity.updateMany({
+      where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
+      data: { status: ActivityStatus.CLAIMED, claimedAt: now, eventKey: mode === "gather" ? "gather-resource" : "explore-result", reward: inputJson({ mode, resolving: true }) }
+    });
+    if (updated.count !== 1) return job;
+    const zone = await tx.zone.findUniqueOrThrow({ where: { id: job.zoneId } });
+    const rng = seededRng(seedFromString(`${job.id}:${mode}`));
+    const roll = pickWeighted(parseEncounterTable(zone.resourceTable), rng);
+    const template = await tx.itemTemplate.findUnique({ where: { key: roll.key } });
+    if (!template) throw new GameError("RESOURCE_NOT_FOUND", "Tài nguyên khu vực chưa được cấu hình.");
+    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1 } });
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: inputJson({ mode, item: roll.key, quantity: 1 }) } });
+    const verb = mode === "gather" ? "Thu thập" : "Khám phá";
+    await tx.gameLog.create({ data: { characterId, type: "exploration", message: `${verb} nhận được ${template.name}.`, metadata: { mode, item: roll.key } } });
+    await recordOnboardingEvent(tx, characterId, "EXPLORATION_COMPLETED");
+    return job;
+  }
   const { reward, session } = huntSessionFromReward(job.reward);
   const durationMs = numberFromRecord(session, "durationSeconds", 60) * 1000;
   const previousElapsed = numberFromRecord(session, "activeElapsedMs");

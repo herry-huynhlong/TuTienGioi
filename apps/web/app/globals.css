@@ -1463,3 +1463,427 @@ select.field option {
   align-items: stretch;
   grid-template-columns: minmax(0, 1fr);
 }
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: #2dd4bf;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.sect-page {
+  display: grid;
+  gap: 1.1rem;
+  padding: 1.35rem;
+}
+
+.sect-lobby-hero,
+.sect-home-hero {
+  display: grid;
+  gap: 1rem;
+  align-items: end;
+  border-bottom: 1px solid rgba(244, 239, 227, 0.12);
+  padding-bottom: 1.2rem;
+}
+
+.sect-lobby-hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sect-lobby-hero h1,
+.sect-home-title h1 {
+  margin: 0;
+  color: #fff8e8;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  font-weight: 950;
+}
+
+.sect-hero-stat,
+.sect-home-stats span,
+.sect-metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(214, 178, 94, 0.24);
+  background: rgba(214, 178, 94, 0.08);
+  padding: 0.65rem 0.8rem;
+}
+
+.sect-hero-stat {
+  min-width: 12rem;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.sect-hero-stat b,
+.sect-home-stats b,
+.sect-metrics b {
+  color: #d6b25e;
+}
+
+.sect-tabs {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+}
+
+.sect-tabs a {
+  white-space: nowrap;
+  border: 1px solid rgba(244, 239, 227, 0.11);
+  background: rgba(244, 239, 227, 0.04);
+  color: rgba(244, 239, 227, 0.72);
+  padding: 0.72rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.sect-tabs a.active,
+.sect-tabs a:hover {
+  border-color: rgba(45, 212, 191, 0.42);
+  background: rgba(45, 212, 191, 0.12);
+  color: #dcfffa;
+}
+
+.sect-lobby-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(22rem, 0.75fr);
+  gap: 1rem;
+}
+
+.sect-list-panel,
+.sect-profile-panel,
+.sect-create-form,
+.sect-create-preview,
+.sect-board,
+.sect-table-panel,
+.sect-feature-card,
+.sect-building-card {
+  padding: 1rem;
+}
+
+.sect-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) 10rem 10rem auto;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.9rem;
+}
+
+.sect-filter-bar label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(244, 239, 227, 0.13);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 0.62rem 0.7rem;
+}
+
+.sect-filter-bar input,
+.sect-filter-bar select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f4efe3;
+}
+
+.sect-filter-bar select {
+  border: 1px solid rgba(244, 239, 227, 0.13);
+  background: #20261f;
+  padding: 0.7rem;
+}
+
+.sect-card-list,
+.sect-public-profile,
+.sect-apply-form,
+.sect-create-form,
+.sect-list-meta,
+.sect-metrics,
+.sect-home-stats {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sect-list-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(12rem, auto);
+  gap: 0.85rem;
+  align-items: center;
+  border: 1px solid rgba(244, 239, 227, 0.11);
+  background: rgba(17, 23, 19, 0.56);
+  color: #f4efe3;
+  padding: 0.85rem;
+}
+
+.sect-list-card.active,
+.sect-list-card:hover {
+  border-color: rgba(45, 212, 191, 0.42);
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.sect-list-card h2,
+.sect-public-profile h2,
+.sect-create-form h2,
+.sect-create-preview h2,
+.sect-board h2,
+.sect-table-panel h2,
+.sect-building-card h2,
+.sect-rank-panel h2 {
+  margin: 0;
+  color: #d6b25e;
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.sect-emblem {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid rgba(214, 178, 94, 0.42);
+  background: radial-gradient(circle at 50% 20%, rgba(214, 178, 94, 0.18), rgba(45, 212, 191, 0.08) 42%, rgba(0, 0, 0, 0.22));
+  color: #d6b25e;
+}
+
+.sect-emblem.large {
+  width: 4rem;
+  height: 4rem;
+}
+
+.sect-emblem.hero {
+  width: 5rem;
+  height: 5rem;
+}
+
+.sect-profile-head,
+.sect-feature-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.sect-public-profile blockquote,
+.sect-home-title blockquote {
+  margin: 0;
+  border-left: 3px solid rgba(214, 178, 94, 0.48);
+  padding-left: 0.8rem;
+  color: #fff4d5;
+}
+
+.sect-create-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.46fr);
+  gap: 1rem;
+}
+
+.sect-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.sect-home-hero {
+  grid-template-columns: auto minmax(0, 1fr) minmax(14rem, auto);
+}
+
+.sect-rank-panel {
+  display: grid;
+  grid-template-columns: minmax(12rem, auto) minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 1rem;
+}
+
+.sect-progress {
+  height: 0.7rem;
+  border: 1px solid rgba(214, 178, 94, 0.22);
+  background: rgba(0, 0, 0, 0.26);
+  overflow: hidden;
+}
+
+.sect-progress div {
+  height: 100%;
+  background: linear-gradient(90deg, #d6b25e, #2dd4bf);
+}
+
+.sect-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.72fr);
+  gap: 1rem;
+}
+
+.sect-board.large {
+  min-height: 14rem;
+}
+
+.sect-affairs,
+.sect-building-grid,
+.sect-two-col,
+.sect-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.sect-affair {
+  display: flex;
+  gap: 0.7rem;
+  border: 1px solid rgba(244, 239, 227, 0.1);
+  background: rgba(0, 0, 0, 0.15);
+  padding: 0.8rem;
+}
+
+.sect-affair b,
+.sect-affair span {
+  display: block;
+}
+
+.sect-affair b {
+  color: #d6b25e;
+}
+
+.sect-affair span {
+  color: rgba(244, 239, 227, 0.68);
+  font-size: 0.86rem;
+}
+
+.sect-note,
+.sect-member-row,
+.sect-application-row,
+.sect-log-row {
+  border-bottom: 1px solid rgba(244, 239, 227, 0.09);
+  padding: 0.7rem 0;
+}
+
+.sect-note p {
+  margin: 0.3rem 0;
+}
+
+.sect-member-list,
+.sect-log-list {
+  display: grid;
+}
+
+.sect-member-row,
+.sect-application-row {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) 11rem 10rem 9rem auto;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.sect-member-row b,
+.sect-member-row span,
+.sect-application-row b,
+.sect-application-row span {
+  display: block;
+}
+
+.sect-member-row span,
+.sect-application-row span,
+.sect-member-row small {
+  color: rgba(244, 239, 227, 0.66);
+  font-size: 0.82rem;
+}
+
+.sect-feature-card,
+.sect-building-card {
+  display: grid;
+  gap: 0.8rem;
+  min-height: 11rem;
+}
+
+.sect-feature-head {
+  justify-content: space-between;
+}
+
+.sect-feature-head b {
+  flex: 1;
+  color: #d6b25e;
+  font-size: 1.05rem;
+}
+
+.sect-feature-head span {
+  color: #2dd4bf;
+  font-weight: 900;
+}
+
+.sect-building-card.locked {
+  opacity: 0.58;
+}
+
+.sect-log-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0.8rem;
+}
+
+.sect-log-row time {
+  color: #2dd4bf;
+  font-weight: 800;
+}
+
+.sect-metrics.vertical span {
+  justify-content: space-between;
+}
+
+.sect-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.sect-inline-form select {
+  min-width: 0;
+}
+
+.sect-storage-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sect-storage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(15rem, auto);
+  gap: 0.8rem;
+  align-items: center;
+  border: 1px solid rgba(244, 239, 227, 0.09);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 0.75rem;
+}
+
+.sect-storage-row b,
+.sect-storage-row span {
+  display: block;
+}
+
+.sect-storage-row span {
+  color: rgba(244, 239, 227, 0.66);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 980px) {
+  .sect-lobby-hero,
+  .sect-home-hero,
+  .sect-lobby-grid,
+  .sect-create-grid,
+  .sect-rank-panel,
+  .sect-dashboard-grid,
+  .sect-affairs,
+  .sect-building-grid,
+  .sect-two-col,
+  .sect-admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sect-filter-bar,
+  .sect-list-card,
+  .sect-member-row,
+  .sect-application-row,
+  .sect-storage-row,
+  .sect-inline-form {
+    grid-template-columns: 1fr;
+  }
+}

@@ -37,8 +37,9 @@ const activityCopy: Record<LocationActivityMode, { title: string; cta: string; d
 export default async function LocationPage({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
   const params = await searchParams;
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: {
       explorations: { where: { status: { in: ["ACTIVE", "COMPLETED", "CLAIMED"] } }, orderBy: [{ status: "asc" }, { endsAt: "desc" }], take: 6 },
       cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
@@ -236,6 +237,7 @@ function SituationPanel({
         <p className="text-xs font-bold uppercase text-jade">{mode === "hunt" ? "Đang săn bắn" : `Đang ${activityCopy[mode].title.toLowerCase()}`}</p>
         <h3>{activityCopy[mode].title}</h3>
         <p className="muted">{activityNarrative(mode, session)}</p>
+        {mode === "hunt" ? <p className="mt-3 text-sm text-gold">Tiến độ chuyến săn: {huntProgress(session)}%</p> : null}
         <ActivityCountdown startedAt={active.startedAt.toISOString()} endsAt={active.endsAt.toISOString()} />
         <div className="mt-4 flex flex-wrap gap-3">
           <form action={cancelExploreAction}>
@@ -341,6 +343,12 @@ function activityNarrative(mode: LocationActivityMode, session: Record<string, u
   }
   if (mode === "explore") return "Bạn đang men theo những lối mòn sâu hơn trong khu vực.";
   return "Bạn đang tìm kiếm dược liệu và tài nguyên tự nhiên.";
+}
+
+function huntProgress(session: Record<string, unknown>) {
+  const duration = typeof session.durationSeconds === "number" ? session.durationSeconds * 1000 : 60_000;
+  const elapsed = typeof session.activeElapsedMs === "number" ? session.activeElapsedMs : 0;
+  return Math.max(0, Math.min(100, Math.round((elapsed / Math.max(1, duration)) * 100)));
 }
 
 function formatDanger(value: number) {

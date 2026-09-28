@@ -1,13 +1,15 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { FacilityActionCard, FacilityPage, FacilityPanel, FacilityTutorial } from "@/components/FacilityPage";
 import { formatRarity } from "@/lib/format";
 import { BookOpen } from "lucide-react";
 
 export default async function TechniquesPage() {
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: { techniques: { include: { technique: true }, orderBy: [{ equipped: "desc" }, { level: "desc" }] } }
   });
   const equipped = c.techniques.find((entry) => entry.equipped);

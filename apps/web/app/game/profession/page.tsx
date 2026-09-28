@@ -1,14 +1,16 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { FacilityActionCard, FacilityPage, FacilityPanel, FacilityTierStrip, FacilityTutorial } from "@/components/FacilityPage";
 import { formatService } from "@/lib/format";
 import { Hammer, Lock } from "lucide-react";
 
 export default async function ProfessionPage() {
   const user = await getUser();
+  if (!user) redirect("/");
   const [c, professions] = await Promise.all([
     prisma.character.findUniqueOrThrow({
-      where: { userId: user!.id },
+      where: { userId: user.id },
       include: {
         currentLocation: true,
         craftJobs: { where: { status: "ACTIVE" }, include: { recipe: { include: { outputTemplate: true, profession: true } } }, orderBy: { endsAt: "desc" } }

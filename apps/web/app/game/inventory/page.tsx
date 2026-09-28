@@ -1,5 +1,6 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { consumeItemAction, equipItemAction, unequipItemAction } from "@/lib/forms";
 import { formatEquipmentSlot, formatItemCategory, formatRarity } from "@/lib/format";
 import { getItemEconomy, jsonRecord } from "@ttg/game";
@@ -32,8 +33,9 @@ type InventoryItem = {
 export default async function InventoryPage({ searchParams }: { searchParams?: Promise<{ error?: string; item?: string; filter?: string }> }) {
   const params = await searchParams;
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: {
       currentLocation: true,
       items: {

@@ -1,5 +1,6 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { breakthroughAction, cancelCultivationAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
 import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationEnergyCost, currentEnergy, getOnboardingState } from "@ttg/game";
 import Link from "next/link";
@@ -10,8 +11,9 @@ import { ActivityCountdown } from "@/components/ActivityCountdown";
 export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
   const params = await searchParams;
   const user = await getUser();
+  if (!user) redirect("/");
   const c = await prisma.character.findUniqueOrThrow({
-    where: { userId: user!.id },
+    where: { userId: user.id },
     include: {
       realmStage: { include: { realm: true } },
       spiritualRoot: true,

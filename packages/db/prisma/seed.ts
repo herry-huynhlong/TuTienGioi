@@ -1,5 +1,6 @@
 import argon2 from "argon2";
-import { PrismaClient, Rarity, ItemCategory } from "@prisma/client";
+import { PrismaClient, Rarity, ItemCategory, EquipmentSlot, ProfessionRank, RecipeUnlockType } from "@prisma/client";
+import { coreProfessionRecipes } from "./professionSeedData";
 
 const prisma = new PrismaClient();
 
@@ -13,15 +14,57 @@ const itemSpecificVisualKeys = new Set([
 
 function itemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
   if (itemSpecificVisualKeys.has(key)) return key;
+  if (icon === "ore" || icon === "metal") return "default-ore";
+  if (icon === "crystal" || icon === "core") return "default-crystal";
+  if (icon === "formation" || icon === "flag") return "default-formation";
+  if (icon === "paper" || icon === "powder" || icon === "ink") return "default-talisman";
   if (icon === "pill") return "default-pill";
   if (icon === "herb" || icon === "leaf") return "default-herb";
   if (icon === "sword") return "default-weapon";
   if (icon === "armor" || icon === "boots") return "default-armor";
   if (icon === "manual" || icon === "scroll") return "default-manual";
+  if (icon === "formation" || icon === "flag") return "default-artifact";
   if (icon === "gem" || icon === "ring" || icon === "talisman") return "default-artifact";
   if (category === "EQUIPMENT" && equipSlot === "WEAPON") return "default-weapon";
   if (category === "EQUIPMENT") return "default-armor";
   return "default-material";
+}
+
+function professionItemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
+  const folder = icon === "pill" ? "pill"
+    : icon === "sword" ? "weapon"
+    : icon === "armor" || icon === "boots" ? "armor"
+    : icon === "ring" || icon === "talisman" || icon === "artifact" ? "accessory"
+    : icon === "scroll" || icon === "paper" ? "talisman"
+    : icon === "formation" || icon === "flag" ? "formation"
+    : icon === "herb" || icon === "leaf" || icon === "root" || icon === "flower" || icon === "mushroom" ? "herb"
+    : icon === "fruit" ? "fruit"
+    : icon === "ore" || icon === "metal" ? "ore"
+    : icon === "crystal" || icon === "gem" || icon === "core" ? "crystal"
+    : icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell" ? "beast"
+    : icon === "powder" || icon === "ink" || icon === "sand" || icon === "water" ? "material"
+    : category === "EQUIPMENT" && equipSlot === "WEAPON" ? "weapon"
+    : category === "EQUIPMENT" ? "armor"
+    : "material";
+  return `${folder}/${key}`;
+}
+
+function professionMaterialSubType(key: string, icon: string) {
+  if (key === "linh-thach") return "Tiền Tệ";
+  if (icon === "herb" || icon === "leaf" || icon === "root") return "Linh Thảo";
+  if (icon === "flower") return "Linh Hoa";
+  if (icon === "fruit") return "Linh Quả";
+  if (icon === "mushroom") return "Linh Chi";
+  if (icon === "ore" || icon === "metal") return "Khoáng Vật";
+  if (icon === "crystal" || icon === "gem") return "Tinh Thạch";
+  if (icon === "core") return "Yêu Đan";
+  if (icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell") return "Nguyên Liệu Yêu Thú";
+  if (icon === "paper") return "Phù Chỉ";
+  if (icon === "powder") return "Phù Phấn";
+  if (icon === "ink") return "Linh Mặc";
+  if (icon === "flag") return "Trận Kỳ";
+  if (icon === "water") return "Linh Dịch";
+  return "Nguyên Liệu Nghề";
 }
 
 const realms = [
@@ -87,7 +130,7 @@ const locations = [
   ["thanh-van-son", "Thanh Vân Sơn", "thanh-linh-son-mach", "mountain", "Dãy núi nhìn xuống Thanh Vân Vực, thích hợp tìm linh dược và luyện thân.", "MEDIUM", ["explore", "pve", "resource"]],
   ["linh-khe", "Linh Khê", "thanh-van-thanh", "river", "Dòng suối linh khí chảy qua rìa thành, an toàn hơn ngoại vực nhưng vẫn có cơ duyên nhỏ.", "MEDIUM", ["explore", "resource", "encounter"]],
   ["hac-phong-coc", "Hắc Phong Cốc", "hac-son", "valley", "Sơn cốc âm phong nặng, chỉ tu sĩ đã vững căn cơ mới nên tiến vào.", "LOW", ["explore", "pve", "event"]],
-  ["cho-linh-bao", "Chợ Linh Bảo", "thanh-van-thanh", "market", "Nơi thương nhân và tu sĩ giao dịch vật phẩm phổ thông.", "HIGH", ["market", "auction", "npc_shop"]],
+    ["cho-linh-bao", "Chợ Linh Bảo", "thanh-van-thanh", "market", "Nơi thương nhân và tu sĩ giao dịch vật phẩm phổ thông.", "HIGH", ["market", "auction", "npc_shop", "alchemy", "talisman"]],
   ["bac-mon", "Bắc Môn", "thanh-van-thanh", "gate", "Cửa bắc dẫn ra quan đạo, nhiều tiêu cục tụ tập.", "MEDIUM", ["travel", "caravan"]],
   ["thanh-van-quan-dao", "Thanh Vân Quan Đạo", "hac-son", "road", "Tuyến đường chính giữa thành và Hắc Sơn.", "LOW", ["travel", "encounter"]],
   ["hac-son-chan-nui", "Chân Núi Hắc Sơn", "hac-son", "wilds", "Dấu chân yêu thú xuất hiện dày hơn khi đêm xuống.", "LOW", ["explore", "pve"]],
@@ -612,13 +655,112 @@ async function main() {
     await prisma.profession.upsert({ where: { key }, update: {}, create: { key, name, description: `${name} tạo ra giá trị cho kinh tế người chơi.` } });
   }
 
-  const alchemy = await prisma.profession.findUniqueOrThrow({ where: { key: "alchemy" } });
-  const tuLinhDan = await prisma.itemTemplate.findUniqueOrThrow({ where: { key: "tu-linh-dan" } });
-  await prisma.recipe.upsert({
-    where: { key: "recipe-tu-linh-dan" },
-    update: {},
-    create: { key: "recipe-tu-linh-dan", name: "Luyện Tụ Linh Đan", professionId: alchemy.id, outputTemplateId: tuLinhDan.id, ingredients: [{ key: "thanh-linh-thao", qty: 2 }], craftMinutes: 10, fee: 80n, requiredLevel: 1 }
-  });
+  const rankRarity: Record<string, Rarity> = { APPRENTICE: Rarity.HA, ADEPT: Rarity.TRUNG, EXPERT: Rarity.THUONG, MASTER: Rarity.CUC, GRANDMASTER: Rarity.TIEN };
+  const professionByKey = new Map((await prisma.profession.findMany()).map((profession) => [profession.key, profession]));
+  const recipeKeys = new Set(coreProfessionRecipes.map((recipe) => recipe.key));
+  await prisma.recipe.deleteMany({ where: { profession: { key: { in: ["alchemy", "forging", "talisman", "formation"] } }, key: { notIn: [...recipeKeys] }, jobs: { none: {} } } });
+
+  const allRecipeItems = new Map<string, { key: string; name: string; category: ItemCategory; rarity: Rarity; subType: string; icon: string; description: string; usage: string; stackable: boolean; equipSlot?: EquipmentSlot; modifiers: Record<string, unknown>; price: number }>();
+  for (const recipe of coreProfessionRecipes) {
+    const rarity = rankRarity[recipe.rank] ?? Rarity.HA;
+    allRecipeItems.set(recipe.outputKey, {
+      key: recipe.outputKey,
+      name: recipe.outputName,
+      category: recipe.category as ItemCategory,
+      rarity,
+        subType: recipe.subType,
+      icon: recipe.icon,
+      description: recipe.description,
+      usage: recipe.usage,
+      stackable: recipe.category !== "EQUIPMENT",
+      equipSlot: recipe.equipSlot as EquipmentSlot | undefined,
+      modifiers: recipe.modifiers ?? {},
+      price: Math.max(10, recipe.fee * 2)
+    });
+    for (const ingredient of recipe.ingredients) {
+      if (allRecipeItems.has(ingredient.key)) continue;
+      allRecipeItems.set(ingredient.key, {
+        key: ingredient.key,
+        name: ingredient.name,
+        category: ItemCategory.MATERIAL,
+        rarity,
+        subType: ingredient.subType ?? professionMaterialSubType(ingredient.key, ingredient.icon ?? "material"),
+        icon: ingredient.icon ?? "material",
+        description: `${ingredient.name} là nguyên liệu dùng trong cây nghề nghiệp.`,
+        usage: "Nguyên liệu chế tạo.",
+        stackable: true,
+        modifiers: {},
+        price: Math.max(5, Math.floor(recipe.fee / 4))
+      });
+    }
+  }
+
+  for (const item of allRecipeItems.values()) {
+    if (item.key === "linh-thach") continue;
+    const bindRules = {
+      subType: item.subType,
+      icon: item.icon,
+      visualKey: professionItemVisualKey(item.key, item.category, item.icon, item.equipSlot),
+      usage: item.usage,
+      systemBasePrice: item.price,
+      npcBuyPrice: Math.floor(item.price * 0.7),
+      sellableToNpc: true,
+      marketEnabled: true,
+      systemMarketEnabled: item.category === ItemCategory.MATERIAL && item.rarity !== Rarity.TIEN,
+      sectExchangeEnabled: true,
+      sectContributionPrice: Math.max(1, Math.floor(item.price * 0.4)),
+      donationContributionValue: Math.max(1, Math.floor(item.price * 0.15))
+    };
+    await prisma.itemTemplate.upsert({
+      where: { key: item.key },
+      update: { name: item.name, category: item.category, rarity: item.rarity, description: item.description, stackable: item.stackable, maxStack: item.stackable ? 999 : 1, tradeable: true, equipSlot: item.equipSlot ?? null, baseModifiers: item.modifiers, bindRules },
+      create: { key: item.key, name: item.name, category: item.category, rarity: item.rarity, description: item.description, stackable: item.stackable, maxStack: item.stackable ? 999 : 1, tradeable: true, equipSlot: item.equipSlot ?? null, baseModifiers: item.modifiers, bindRules }
+    });
+  }
+
+  const itemByKey = new Map((await prisma.itemTemplate.findMany({ where: { key: { in: [...allRecipeItems.keys()] } } })).map((item) => [item.key, item]));
+  for (const recipe of coreProfessionRecipes) {
+    const profession = professionByKey.get(recipe.profession);
+    const output = itemByKey.get(recipe.outputKey);
+    if (!profession || !output) throw new Error(`Missing profession recipe seed dependency: ${recipe.key}`);
+    const ingredients = recipe.ingredients.map((ingredient) => {
+      const item = itemByKey.get(ingredient.key);
+      if (!item) throw new Error(`Missing ingredient ${ingredient.key} for ${recipe.key}`);
+      return { itemId: item.id, key: item.key, quantity: ingredient.qty };
+    });
+    await prisma.recipe.upsert({
+      where: { key: recipe.key },
+      update: {
+        name: recipe.name,
+        professionId: profession.id,
+        outputTemplateId: output.id,
+        ingredients,
+        craftMinutes: recipe.minutes,
+        fee: BigInt(recipe.fee),
+        requiredLevel: ["APPRENTICE", "ADEPT", "EXPERT", "MASTER", "GRANDMASTER"].indexOf(recipe.rank) + 1,
+        requiredRank: recipe.rank as ProfessionRank,
+        unlockType: RecipeUnlockType.PROFESSION_RANK,
+        station: recipe.station,
+        outputQuantity: 1,
+        professionExp: recipe.exp
+      },
+      create: {
+        key: recipe.key,
+        name: recipe.name,
+        professionId: profession.id,
+        outputTemplateId: output.id,
+        ingredients,
+        craftMinutes: recipe.minutes,
+        fee: BigInt(recipe.fee),
+        requiredLevel: ["APPRENTICE", "ADEPT", "EXPERT", "MASTER", "GRANDMASTER"].indexOf(recipe.rank) + 1,
+        requiredRank: recipe.rank as ProfessionRank,
+        unlockType: RecipeUnlockType.PROFESSION_RANK,
+        station: recipe.station,
+        outputQuantity: 1,
+        professionExp: recipe.exp
+      }
+    });
+  }
 
   for (const [key, name, hp, atk, def, spd] of [
     ["yeu-lang", "Yêu Lang", 90, 14, 6, 12],

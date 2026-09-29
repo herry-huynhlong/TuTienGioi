@@ -87,6 +87,22 @@ enum EquipmentSlot {
   ARTIFACT
 }
 
+enum ProfessionRank {
+  APPRENTICE
+  ADEPT
+  EXPERT
+  MASTER
+  GRANDMASTER
+}
+
+enum RecipeUnlockType {
+  PROFESSION_RANK
+  ITEM
+  QUEST
+  NPC
+  SECT
+}
+
 enum ListingStatus {
   ACTIVE
   SOLD
@@ -359,6 +375,7 @@ model Character {
   updatedAt       DateTime @updatedAt
   talents         CharacterTalent[]
   techniques      CharacterTechnique[]
+  professions     CharacterProfession[]
   items           ItemInstance[]
   sectInventoryLogs SectInventoryLog[]
   cultivationJobs CultivationActivity[]
@@ -727,8 +744,11 @@ model CharacterProfession {
   characterId  String
   professionId String
   level        Int @default(1)
+  rank         ProfessionRank @default(APPRENTICE)
   experience   Int @default(0)
   specialization String?
+  unlockedRecipes Json?
+  character    Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   profession   Profession @relation(fields: [professionId], references: [id])
   @@unique([characterId, professionId])
 }
@@ -745,7 +765,14 @@ model Recipe {
   craftMinutes Int
   fee          BigInt @default(0)
   requiredLevel Int @default(1)
+  requiredRank ProfessionRank @default(APPRENTICE)
+  unlockType   RecipeUnlockType @default(PROFESSION_RANK)
+  station      String @default("ALCHEMY_FURNACE")
+  outputQuantity Int @default(1)
+  professionExp Int @default(0)
   jobs         CraftJob[]
+  @@index([professionId, requiredRank])
+  @@index([unlockType])
 }
 
 model CraftJob {
@@ -757,8 +784,14 @@ model CraftJob {
   startedAt   DateTime @default(now())
   endsAt      DateTime
   status      ActivityStatus @default(ACTIVE)
+  outputTemplateId String?
+  outputQuantity Int @default(1)
+  ingredients  Json?
+  fee          BigInt @default(0)
+  professionExp Int @default(0)
   claimedAt   DateTime?
   @@index([characterId, status])
+  @@index([endsAt, status])
 }
 
 model Monster {

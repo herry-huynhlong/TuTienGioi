@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCultivation, claimExploration, claimSectMining, claimTraining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimTraining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -138,6 +138,24 @@ export async function cancelTrainingAction(formData: FormData) {
     redirectGameError(error, "/game/training");
   }
   redirect("/game/training");
+}
+
+export async function startCraftAction(formData: FormData) {
+  try {
+    await startCraft(prisma, await characterId(), String(formData.get("recipeId")));
+  } catch (error) {
+    redirectGameError(error, "/game/profession");
+  }
+  redirect("/game/profession");
+}
+
+export async function claimCraftAction(formData: FormData) {
+  try {
+    await claimCraft(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/profession");
+  }
+  redirect("/game/profession");
 }
 
 export async function exploreAction(formData: FormData) {

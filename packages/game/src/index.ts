@@ -9,3 +9,4 @@ export * from "./quests.js";
 export * from "./inventory.js";
 export * from "./social.js";
 export * from "./location-visuals.js";
+export * from "./professions.js";

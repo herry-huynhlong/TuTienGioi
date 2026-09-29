@@ -1,11 +1,17 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { FacilityActionCard, FacilityPage, FacilityPanel, FacilityTierStrip, FacilityTutorial } from "@/components/FacilityPage";
-import { formatService } from "@/lib/format";
-import { Hammer, Lock } from "lucide-react";
+import { FacilityPage, FacilityPanel, FacilityTutorial } from "@/components/FacilityPage";
+import { formatRarity, formatService } from "@/lib/format";
+import { claimCraftAction, startCraftAction } from "@/lib/forms";
+import { ItemVisual } from "@/components/ItemCard";
+import { professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationLabels, professionStationServices } from "@ttg/game";
+import { CheckCircle2, Lock, Play, Timer } from "lucide-react";
 
-export default async function ProfessionPage() {
+type IngredientRow = { itemId?: unknown; key?: unknown; quantity?: unknown; qty?: unknown };
+
+export default async function ProfessionPage({ searchParams }: { searchParams?: Promise<{ profession?: string; error?: string; ok?: string }> }) {
+  const params = await searchParams;
   const user = await getUser();
   if (!user) redirect("/");
   const [c, professions] = await Promise.all([
@@ -13,107 +19,159 @@ export default async function ProfessionPage() {
       where: { userId: user.id },
       include: {
         currentLocation: true,
-        craftJobs: { where: { status: "ACTIVE" }, include: { recipe: { include: { outputTemplate: true, profession: true } } }, orderBy: { endsAt: "desc" } }
+        items: { where: { quantity: { gt: 0 } }, select: { templateId: true, quantity: true } },
+        professions: { include: { profession: true } },
+        craftJobs: { where: { status: "ACTIVE" }, include: { recipe: { include: { outputTemplate: true, profession: true } } }, orderBy: { endsAt: "asc" } }
       }
     }),
     prisma.profession.findMany({
-      include: { recipes: { include: { outputTemplate: true }, orderBy: { requiredLevel: "asc" } } },
-      orderBy: { name: "asc" }
+      where: { key: { in: ["alchemy", "forging", "talisman", "formation"] } },
+      include: { recipes: { include: { outputTemplate: true }, orderBy: [{ requiredRank: "asc" }, { requiredLevel: "asc" }, { name: "asc" }] } },
+      orderBy: { key: "asc" }
     })
   ]);
+  const professionOrder = ["alchemy", "forging", "talisman", "formation"];
+  professions.sort((a, b) => professionOrder.indexOf(a.key) - professionOrder.indexOf(b.key));
+  const activeProfession = professions.find((profession) => profession.key === params?.profession) ?? professions[0];
+  if (!activeProfession) return null;
+  const characterProfession = c.professions.find((entry) => entry.professionId === activeProfession.id);
+  const currentRank = characterProfession?.rank ?? "APPRENTICE";
+  const currentOrder = professionRankOrder(currentRank);
+  const nextRank = professionRanks[currentOrder + 1] ?? null;
+  const visibleRanks = new Set([currentRank, ...(nextRank ? [nextRank] : [])]);
+  const visibleRecipes = activeProfession.recipes.filter((recipe) => visibleRanks.has(recipe.requiredRank));
+  const ingredientIds = [...new Set(visibleRecipes.flatMap((recipe) => ingredientRows(recipe.ingredients).map((row) => String(row.itemId ?? "")).filter(Boolean)))];
+  const ingredientTemplates = ingredientIds.length ? await prisma.itemTemplate.findMany({ where: { id: { in: ingredientIds } } }) : [];
+  const ingredientById = new Map(ingredientTemplates.map((item) => [item.id, item]));
+  const ownedByTemplateId = new Map<string, number>();
+  for (const item of c.items) ownedByTemplateId.set(item.templateId, (ownedByTemplateId.get(item.templateId) ?? 0) + item.quantity);
   const services = c.currentLocation?.services ?? [];
-  const craftServices = services.filter((service) => ["forging", "formation", "resource"].includes(service));
+  const hasActiveCraft = c.craftJobs.length > 0;
 
   return (
-    <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Theo dõi luyện đan, luyện khí, chế phù, trận pháp và các nghề kinh tế trong tu giới.">
+    <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Cây nghề nghiệp dùng recipe, nguyên liệu, phí và thời gian thật. Công thức bậc hiện tại mở, bậc kế tiếp hiển thị khóa để định hướng tiến triển.">
+      {params?.error ? <div className="action-alert error">{params.error}</div> : null}
       <FacilityTutorial title="Hướng dẫn Nghề Nghiệp">
-        Nghề nghiệp dùng công thức, nguyên liệu, phí và thời gian. Hãy tìm đúng cơ sở để bắt đầu chế tạo.
+        Chọn nghề, kiểm tra bậc nghề và đứng đúng cơ sở. Khi bắt đầu chế tạo, nguyên liệu và Linh Thạch bị trừ ngay; khi hoàn thành hãy nhận thành phẩm vào Ba Lô để lấy EXP nghề.
       </FacilityTutorial>
 
+      <section className="profession-tabs">
+        {professions.map((profession) => {
+          const entry = c.professions.find((row) => row.professionId === profession.id);
+          const rank = entry?.rank ?? "APPRENTICE";
+          return (
+            <a key={profession.id} href={`/game/profession?profession=${profession.key}`} className={profession.id === activeProfession.id ? "active" : ""}>
+              <b>{profession.name}</b>
+              <span>{professionRankLabels[rank]} · {entry?.experience ?? 0} EXP</span>
+            </a>
+          );
+        })}
+      </section>
+
       <section className="mt-4 grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
-        <FacilityPanel title="Cơ sở hiện tại" subtitle={c.currentLocation?.name ?? "Vô định"}>
-          <div className="facility-current">
-            <Hammer size={24} aria-hidden />
-            <div>
-              <h2>{c.currentLocation?.name ?? "Chưa rõ địa điểm"}</h2>
-              <p>{craftServices.length ? craftServices.map(formatService).join(", ") : "Địa điểm hiện tại không có lò nghề phù hợp."}</p>
-            </div>
+        <FacilityPanel title="Cây bậc nghề" subtitle={activeProfession.name}>
+          <div className="profession-rank-track">
+            {professionRanks.map((rank, index) => {
+              const unlocked = index <= currentOrder;
+              const threshold = professionRankExpThresholds[rank];
+              return (
+                <div key={rank} className={`profession-rank-node ${unlocked ? "unlocked" : "locked"}`}>
+                  {unlocked ? <CheckCircle2 size={18} /> : <Lock size={18} />}
+                  <b>{professionRankLabels[rank]}</b>
+                  <span>{threshold ? `Mốc ${threshold.toLocaleString("vi-VN")} EXP` : "Tối đa"}</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="mt-4 info-table">
-            <div><span>Linh thạch</span><b>{c.linhThach.toString()}</b></div>
-            <div><span>Việc đang chế tạo</span><b>{c.craftJobs.length}</b></div>
-            <div><span>Trạng thái</span><b>Đang chuẩn bị</b></div>
+          <div className="info-table mt-4">
+            <div><span>Địa điểm</span><b>{c.currentLocation?.name ?? "Vô định"}</b></div>
+            <div><span>Cơ sở hiện có</span><b>{services.length ? services.map(formatService).join(", ") : "Không"}</b></div>
+            <div><span>Bậc hiện tại</span><b>{professionRankLabels[currentRank]}</b></div>
           </div>
         </FacilityPanel>
 
-        <FacilityPanel title="Việc đang chạy" subtitle="CraftJob">
+        <FacilityPanel title="Việc đang chạy" subtitle={`${c.craftJobs.length} việc`}>
           {c.craftJobs.length > 0 ? (
             <div className="activity-list">
-              {c.craftJobs.map((job) => (
-                <div key={job.id} className="activity-row">
-                  <span>
-                    <b>{job.recipe.name}</b>
-                    <small>{job.recipe.profession.name} · tạo {job.recipe.outputTemplate.name} · xong {job.endsAt.toLocaleString("vi-VN")}</small>
-                  </span>
-                  <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled>Nhận</button>
-                </div>
-              ))}
+              {c.craftJobs.map((job) => {
+                const ready = job.endsAt.getTime() <= Date.now();
+                return (
+                  <div key={job.id} className="activity-row">
+                    <span>
+                      <b>{job.recipe.name}</b>
+                      <small>{job.recipe.profession.name} · tạo {job.recipe.outputTemplate.name} · {ready ? "đã hoàn thành" : `xong ${job.endsAt.toLocaleString("vi-VN")}`}</small>
+                    </span>
+                    <form action={claimCraftAction}>
+                      <input type="hidden" name="id" value={job.id} />
+                      <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled={!ready}>{ready ? "Nhận" : "Đang luyện"}</button>
+                    </form>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="empty-state">
               <b>Không có việc chế tạo đang chạy.</b>
-              <p>Các lò luyện đang chạy sẽ xuất hiện ở đây.</p>
+              <p>Hãy chọn một công thức đã mở để bắt đầu.</p>
             </div>
           )}
         </FacilityPanel>
       </section>
 
-      <FacilityPanel title="Danh sách nghề" subtitle={`${professions.length} nhánh`} className="mt-5">
-        <FacilityTierStrip>
-          {professions.map((profession) => (
-            <div key={profession.id} className="facility-tier locked">
-              <Lock size={16} aria-hidden />
-              <span>{profession.name}</span>
-              <small>{profession.recipes.length ? `${profession.recipes.length} công thức` : "Chưa có công thức"}</small>
-            </div>
-          ))}
-        </FacilityTierStrip>
-      </FacilityPanel>
-
-      <FacilityPanel title="Công thức đã biết" subtitle="Chọn lò luyện phù hợp" className="mt-5">
-        <div className="facility-action-grid">
-          {professions.flatMap((profession) =>
-            profession.recipes.map((recipe) => (
-              <FacilityActionCard
-                key={recipe.id}
-                title={recipe.name}
-                meta={`${profession.name} · Cấp ${recipe.requiredLevel} · ${recipe.craftMinutes} phút · ${recipe.fee.toString()} linh thạch`}
-                description={`Tạo ${recipe.outputTemplate.name}. Nguyên liệu: ${formatIngredients(recipe.ingredients)}.`}
-              >
-                <button className="btn btn-secondary w-full" disabled><Lock size={16} aria-hidden /> Chưa thể chế tạo</button>
-              </FacilityActionCard>
-            ))
-          )}
-          {professions.every((profession) => profession.recipes.length === 0) ? (
-            <div className="empty-state">
-              <b>Chưa có công thức.</b>
-              <p>Hãy tìm sư phụ hoặc bí quyển nghề nghiệp để mở công thức mới.</p>
-            </div>
-          ) : null}
+      <FacilityPanel title="Công thức bậc hiện tại và kế tiếp" subtitle={`${visibleRecipes.length} công thức hiển thị`} className="mt-5">
+        <div className="profession-recipe-grid">
+          {visibleRecipes.map((recipe) => {
+            const locked = professionRankOrder(currentRank) < professionRankOrder(recipe.requiredRank);
+            const stationServices = professionStationServices[recipe.station] ?? [];
+            const stationOk = stationServices.length === 0 || stationServices.some((service) => services.includes(service));
+            return (
+              <article key={recipe.id} className={`profession-recipe-card ${locked ? "locked" : ""}`}>
+                <div className="profession-recipe-head">
+                  <ItemVisual template={recipe.outputTemplate} size="card" />
+                  <div>
+                    <h3>{recipe.outputTemplate.name}</h3>
+                    <p>{formatRarity(recipe.outputTemplate.rarity)} Phẩm · {recipe.outputTemplate.description}</p>
+                  </div>
+                </div>
+                <div className="profession-recipe-meta">
+                  <span><Timer size={14} /> {recipe.craftMinutes} phút</span>
+                  <span>{recipe.fee.toLocaleString("vi-VN")} Linh Thạch</span>
+                  <span>+{recipe.professionExp} EXP</span>
+                  <span>{professionStationLabels[recipe.station] ?? recipe.station}</span>
+                </div>
+                <div className="profession-ingredients">
+                  {ingredientRows(recipe.ingredients).map((row) => {
+                    const template = typeof row.itemId === "string" ? ingredientById.get(row.itemId) : null;
+                    const required = Number(row.quantity ?? row.qty ?? 1);
+                    const owned = typeof row.itemId === "string" ? ownedByTemplateId.get(row.itemId) ?? 0 : 0;
+                    return (
+                      <span key={`${String(row.itemId)}-${String(row.key)}`} className={owned < required ? "missing" : ""}>
+                        {template ? <ItemVisual template={template} size="card" /> : null}
+                        <b>{template?.name ?? String(row.key ?? "Nguyên liệu")}</b>
+                        <em>{owned}/{required}</em>
+                      </span>
+                    );
+                  })}
+                </div>
+                {locked ? (
+                  <button className="btn btn-secondary w-full" disabled><Lock size={16} /> {professionRankLabels[recipe.requiredRank]}</button>
+                ) : (
+                  <form action={startCraftAction}>
+                    <input type="hidden" name="recipeId" value={recipe.id} />
+                    <button className="btn btn-primary w-full" disabled={!stationOk || hasActiveCraft}>
+                      <Play size={16} /> {!stationOk ? "Sai cơ sở" : hasActiveCraft ? "Đang chế tạo" : "Chế tạo"}
+                    </button>
+                  </form>
+                )}
+              </article>
+            );
+          })}
         </div>
       </FacilityPanel>
     </FacilityPage>
   );
 }
 
-function formatIngredients(value: unknown) {
-  if (!Array.isArray(value)) return "chưa rõ";
-  const labels = value.map((entry) => {
-    if (!entry || typeof entry !== "object") return null;
-    const item = entry as { key?: unknown; qty?: unknown };
-    if (typeof item.key !== "string") return null;
-    const qty = typeof item.qty === "number" ? item.qty : 1;
-    return `${item.key} x${qty}`;
-  }).filter(Boolean);
-  return labels.length ? labels.join(", ") : "chưa rõ";
+function ingredientRows(value: unknown): IngredientRow[] {
+  return Array.isArray(value) ? value.filter((entry): entry is IngredientRow => Boolean(entry && typeof entry === "object")) : [];
 }

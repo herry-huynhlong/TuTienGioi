@@ -1,7 +1,8 @@
 import { formatItemCategory, formatRarity } from "@/lib/format";
-import { getItemEconomy, itemVisualKey, jsonRecord } from "@ttg/game";
+import { getItemEconomy, itemVisualFallbackKey, itemVisualKey, jsonRecord } from "@ttg/game";
 import { Box, Gem, Hammer, Leaf, Pill, ScrollText, Shield, Shirt, Sparkles, Swords } from "lucide-react";
 import Link from "next/link";
+import { ItemVisualImage } from "./ItemVisualImage";
 
 type ItemTemplateLike = {
   key?: string;
@@ -128,19 +129,20 @@ export function formatCurrency(value: bigint | number) {
 
 export function ItemVisual({ template, size }: { template: ItemTemplateLike; size: "card" | "detail" }) {
   const economy = getItemEconomy(template);
-  const src = visualSrc(template);
+  const { src, fallbackSrc } = visualSrc(template);
   const className = `item-visual ${size === "detail" ? "item-visual-large" : ""} grade-${template.rarity.toLowerCase()}`;
-  if (src) return <img className={className} src={src} alt="" aria-hidden />;
+  if (src) return <ItemVisualImage className={className} src={src} fallbackSrc={fallbackSrc} />;
   const Icon = iconFor(economy.icon);
   return <span className={className}><Icon size={size === "detail" ? 44 : 34} aria-hidden /></span>;
 }
 
 function visualSrc(template: ItemTemplateLike) {
   const meta = jsonRecord(template.bindRules);
-  if (typeof meta.imageUrl === "string" && meta.imageUrl && !isLegacyGeneratedSvg(meta.imageUrl)) return meta.imageUrl;
   const economy = getItemEconomy(template);
+  const fallbackKey = itemVisualFallbackKey({ category: template.category, icon: economy.icon, equipSlot: template.equipSlot });
+  if (typeof meta.imageUrl === "string" && meta.imageUrl && !isLegacyGeneratedSvg(meta.imageUrl)) return { src: meta.imageUrl, fallbackSrc: `/items/${fallbackKey}.webp` };
   const visualKey = typeof meta.visualKey === "string" && meta.visualKey ? meta.visualKey : economy.visualKey || itemVisualKey({ key: template.key, category: template.category, icon: economy.icon, equipSlot: template.equipSlot });
-  return `/items/${visualKey}.webp`;
+  return { src: `/items/${visualKey}.webp`, fallbackSrc: `/items/${fallbackKey}.webp` };
 }
 
 function isLegacyGeneratedSvg(value: string) {

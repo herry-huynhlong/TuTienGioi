@@ -19,6 +19,7 @@ type InventoryItem = {
   bound: boolean;
   quality: number;
   template: {
+    key: string;
     name: string;
     category: string;
     rarity: string;
@@ -49,7 +50,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   });
   const filter = params?.filter ?? "ALL";
   const equipped = c.items.filter((item) => item.equippedSlot);
-  const inventory = c.items.filter((item) => !item.equippedSlot && (filter === "ALL" || item.template.category === filter));
+  const inventory = c.items.filter((item) => !item.equippedSlot && matchesInventoryFilter(item, filter));
   const selected = inventory.find((item) => item.id === params?.item) ?? inventory[0] ?? c.items.find((item) => item.equippedSlot);
   const atMarket = Array.isArray(c.currentLocation?.services) && c.currentLocation.services.includes("market");
 
@@ -103,9 +104,11 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
 function InventoryFilters({ active }: { active: string }) {
   const filters = [
     ["ALL", "Tất cả"],
+    ["CONSUMABLE", "Đan Dược"],
     ["EQUIPMENT", "Trang bị"],
-    ["CONSUMABLE", "Tiêu hao"],
     ["MATERIAL", "Nguyên liệu"],
+    ["TALISMAN", "Phù"],
+    ["FORMATION", "Trận Pháp"],
     ["TECHNIQUE", "Bí tịch"],
     ["QUEST", "Khác"]
   ];
@@ -114,6 +117,15 @@ function InventoryFilters({ active }: { active: string }) {
       {filters.map(([value, label]) => <Link key={value} href={`/game/inventory?filter=${value}`} className={active === value ? "active" : ""}>{label}</Link>)}
     </div>
   );
+}
+
+function matchesInventoryFilter(item: InventoryItem, filter: string) {
+  if (filter === "ALL") return true;
+  const economy = getItemEconomy(item.template);
+  if (filter === "TALISMAN") return economy.subType.includes("Phù") || economy.icon === "scroll";
+  if (filter === "FORMATION") return economy.subType.includes("Trận") || economy.icon === "formation";
+  if (filter === "QUEST") return item.template.category === "QUEST" || item.template.category === "COSMETIC";
+  return item.template.category === filter;
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {

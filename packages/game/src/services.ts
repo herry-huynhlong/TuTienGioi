@@ -1,9 +1,10 @@
-import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory } from "@ttg/db";
+import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory, RecipeUnlockType } from "@ttg/db";
 import { calculateCultivationReward, calculateTrainingGain, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, isCultivationDurationKey, isTrainingDurationKey, isTrainingType, locationActivityConfigs, parseEncounterTable, simulateCombat, trainingDurationConfigs, trainingStatCap, trainingTypeConfigs, travelDurationSeconds, type CultivationDurationKey, type LocationActivityMode, type TrainingDurationKey, type TrainingTypeKey } from "./rules.js";
 import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
 import { progressQuestEvent } from "./quests.js";
+import { professionExpGain, professionRankOrder, professionStationServices, promoteProfessionRank } from "./professions.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -93,6 +94,16 @@ function inputJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+function parseIngredientRows(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => parseJsonRecord(entry)).map((entry) => {
+    const itemId = typeof entry.itemId === "string" ? entry.itemId : null;
+    const key = typeof entry.key === "string" ? entry.key : null;
+    const quantity = typeof entry.quantity === "number" ? Math.floor(entry.quantity) : typeof entry.qty === "number" ? Math.floor(entry.qty) : 0;
+    return itemId && quantity > 0 ? { itemId, key, quantity } : null;
+  }).filter((row): row is { itemId: string; key: string | null; quantity: number } => Boolean(row));
+}
+
 function dropQuantity(row: Record<string, unknown>, rng: () => number) {
   const minQuantity = typeof row.minQuantity === "number" ? Math.max(1, Math.floor(row.minQuantity)) : 1;
   const maxQuantity = typeof row.maxQuantity === "number" ? Math.max(minQuantity, Math.floor(row.maxQuantity)) : minQuantity;
@@ -179,6 +190,29 @@ async function removeItemFromInventory(tx: Tx, characterId: string, itemId: stri
     await tx.itemInstance.update({ where: { id: item.id }, data: { quantity: { decrement: quantity } } });
   }
   return item;
+}
+
+async function consumeTemplateQuantity(tx: Tx, characterId: string, templateId: string, quantity: number) {
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng vật phẩm không hợp lệ.");
+  const stacks = await tx.itemInstance.findMany({
+    where: {
+      ownerId: characterId,
+      templateId,
+      equippedSlot: null,
+      listings: { none: { status: ListingStatus.ACTIVE } }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+  const total = stacks.reduce((sum, stack) => sum + stack.quantity, 0);
+  if (total < quantity) throw new GameError("MISSING_INGREDIENT", "Không đủ nguyên liệu chế tạo.");
+  let remaining = quantity;
+  for (const stack of stacks) {
+    if (remaining <= 0) break;
+    const take = Math.min(stack.quantity, remaining);
+    if (take === stack.quantity) await tx.itemInstance.delete({ where: { id: stack.id } });
+    else await tx.itemInstance.update({ where: { id: stack.id }, data: { quantity: { decrement: take } } });
+    remaining -= take;
+  }
 }
 
 async function grantStackableItem(tx: Tx, characterId: string, templateId: string, quantity: number, options: { quality?: number; enhancement?: number; bound?: boolean; customModifiers?: unknown } = {}) {
@@ -384,6 +418,75 @@ export async function cancelTraining(db: Db, characterId: string, activityId: st
     await tx.gameLog.create({ data: { characterId, type: "training", message: "Bạn đã dừng phiên rèn luyện. Thể Lực đã tiêu hao không hoàn lại." } });
     return { cancelled: true };
   });
+}
+
+export async function startCraft(db: Db, characterId: string, recipeId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const recipe = await tx.recipe.findUnique({ where: { id: recipeId }, include: { profession: true, outputTemplate: true } });
+    if (!recipe) throw new GameError("RECIPE_NOT_FOUND", "Không tìm thấy công thức.");
+    if (recipe.unlockType !== RecipeUnlockType.PROFESSION_RANK) throw new GameError("RECIPE_LOCKED", "Công thức này cần mở khóa đặc biệt.");
+    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { currentLocation: true } });
+    const services = character.currentLocation?.services ?? [];
+    const allowedServices = professionStationServices[recipe.station] ?? [];
+    if (allowedServices.length > 0 && !allowedServices.some((service) => services.includes(service))) throw new GameError("STATION_REQUIRED", "Bạn cần tới đúng cơ sở nghề nghiệp để chế tạo.");
+    const characterProfession = await tx.characterProfession.upsert({
+      where: { characterId_professionId: { characterId, professionId: recipe.professionId } },
+      update: {},
+      create: { characterId, professionId: recipe.professionId, rank: "APPRENTICE", level: 1, experience: 0 }
+    });
+    if (professionRankOrder(characterProfession.rank) < professionRankOrder(recipe.requiredRank)) throw new GameError("PROFESSION_RANK_REQUIRED", "Bậc nghề nghiệp chưa đủ để dùng công thức này.");
+    const activeCraft = await tx.craftJob.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
+    if (activeCraft) throw new GameError("ACTIVE_CRAFT", "Bạn đang có một việc chế tạo đang chạy.");
+    const ingredients = parseIngredientRows(recipe.ingredients);
+    if (ingredients.length === 0) throw new GameError("BAD_RECIPE", "Công thức chưa có nguyên liệu hợp lệ.");
+    for (const ingredient of ingredients) await consumeTemplateQuantity(tx, characterId, ingredient.itemId, ingredient.quantity);
+    if (recipe.fee > 0n) await debitWallet(tx, characterId, Currency.LINH_THACH, recipe.fee, WalletTxType.CRAFT, "Recipe", recipe.id, `craft:fee:${recipe.id}:${characterId}:${now.getTime()}`);
+    const craft = await tx.craftJob.create({
+      data: {
+        characterId,
+        recipeId: recipe.id,
+        startedAt: now,
+        endsAt: new Date(now.getTime() + Math.ceil((recipe.craftMinutes * 60) / 24) * 1000),
+        status: ActivityStatus.ACTIVE,
+        outputTemplateId: recipe.outputTemplateId,
+        outputQuantity: recipe.outputQuantity,
+        ingredients: inputJson(ingredients),
+        fee: recipe.fee,
+        professionExp: recipe.professionExp
+      }
+    });
+    await tx.gameLog.create({ data: { characterId, type: "profession", message: `Bắt đầu ${recipe.name}, tạo ${recipe.outputTemplate.name} x${recipe.outputQuantity}.` } });
+    return craft;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function claimCraft(db: Db, characterId: string, craftJobId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const job = await tx.craftJob.findUnique({ where: { id: craftJobId }, include: { recipe: { include: { profession: true, outputTemplate: true } } } });
+    if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy việc chế tạo.");
+    if (job.status === ActivityStatus.CLAIMED) throw new GameError("ALREADY_CLAIMED", "Thành phẩm đã được nhận.");
+    if (job.endsAt > now) throw new GameError("NOT_READY", "Việc chế tạo chưa hoàn thành.");
+    const updated = await tx.craftJob.updateMany({
+      where: { id: craftJobId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
+      data: { status: ActivityStatus.CLAIMED, claimedAt: now }
+    });
+    if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Thành phẩm đã được nhận.");
+    const outputTemplateId = job.outputTemplateId ?? job.recipe.outputTemplateId;
+    const outputQuantity = job.outputQuantity || job.recipe.outputQuantity || 1;
+    await addItemToInventory(tx, characterId, outputTemplateId, outputQuantity);
+    const characterProfession = await tx.characterProfession.upsert({
+      where: { characterId_professionId: { characterId, professionId: job.recipe.professionId } },
+      update: {},
+      create: { characterId, professionId: job.recipe.professionId, rank: "APPRENTICE", level: 1, experience: 0 }
+    });
+    const gainedExp = professionExpGain(job.professionExp || job.recipe.professionExp, characterProfession.rank, job.recipe.requiredRank);
+    const totalExperience = characterProfession.experience + gainedExp;
+    const nextRank = promoteProfessionRank(characterProfession.rank, totalExperience);
+    await tx.characterProfession.update({ where: { id: characterProfession.id }, data: { experience: totalExperience, rank: nextRank, level: professionRankOrder(nextRank) + 1 } });
+    await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: job.recipe.outputTemplate.key, amount: outputQuantity });
+    await tx.gameLog.create({ data: { characterId, type: "profession", message: `Hoàn thành ${job.recipe.name}, nhận ${job.recipe.outputTemplate.name} x${outputQuantity}, +${gainedExp} EXP ${job.recipe.profession.name}.` } });
+    return { job, output: job.recipe.outputTemplate, quantity: outputQuantity, gainedExp, rank: nextRank };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function startCultivation(db: Db, characterId: string, duration: CultivationDurationKey, now = new Date()) {

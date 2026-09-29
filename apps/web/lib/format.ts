@@ -34,6 +34,8 @@ export function formatService(value: string) {
     explore: "Khám phá",
     pve: "Săn yêu",
     resource: "Thu thập",
+    alchemy: "Luyện đan",
+    talisman: "Chế phù",
     encounter: "Điều tra",
     formation: "Trận pháp",
     secret: "Bí cảnh",

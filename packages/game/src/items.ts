@@ -268,6 +268,10 @@ export function inferSubType(category: ItemCategory | string, equipSlot?: string
 export function itemVisualKey(item: { key?: string | null | undefined; category: ItemCategory | string; icon?: string | null | undefined; equipSlot?: string | null | undefined }) {
   if (item.key && itemSpecificVisualKeySet.has(item.key)) return item.key;
   const icon = item.icon ?? inferIcon(item.category, item.equipSlot);
+  if (icon === "ore" || icon === "metal") return "default-ore";
+  if (icon === "crystal" || icon === "core") return "default-crystal";
+  if (icon === "formation" || icon === "flag") return "default-formation";
+  if (icon === "paper" || icon === "powder" || icon === "ink") return "default-talisman";
   if (icon === "pill") return "default-pill";
   if (icon === "herb" || icon === "leaf") return "default-herb";
   if (icon === "sword") return "default-weapon";
@@ -275,6 +279,10 @@ export function itemVisualKey(item: { key?: string | null | undefined; category:
   if (icon === "manual" || icon === "scroll") return "default-manual";
   if (icon === "gem" || icon === "ring" || icon === "talisman") return "default-artifact";
   return "default-material";
+}
+
+export function itemVisualFallbackKey(item: { category: ItemCategory | string; icon?: string | null | undefined; equipSlot?: string | null | undefined }) {
+  return itemVisualKey({ category: item.category, icon: item.icon, equipSlot: item.equipSlot });
 }
 
 export function marketListingMaxQuantity(ownedQuantity: number) {

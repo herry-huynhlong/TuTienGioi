@@ -32,7 +32,7 @@ export default async function AdminItemsPage({ searchParams }: { searchParams?: 
         <input className="field" name="q" placeholder="Search name/key..." defaultValue={q} />
         <select className="field" name="rarity" defaultValue={rarity ?? ""}><option value="">Mọi phẩm</option>{Object.values(Rarity).map((v) => <option key={v}>{v}</option>)}</select>
         <select className="field" name="category" defaultValue={category ?? ""}><option value="">Mọi category</option>{Object.values(ItemCategory).map((v) => <option key={v}>{v}</option>)}</select>
-        <select className="field" name="market" defaultValue={params?.market ?? ""}><option value="">Market bất kỳ</option><option value="system">System market</option><option value="auction">Auction</option></select>
+        <select className="field" name="market" defaultValue={params?.market ?? ""}><option value="">Market bất kỳ</option><option value="system">Vạn Bảo Lâu</option><option value="auction">Auction</option></select>
         <select className="field" name="sect" defaultValue={params?.sect ?? ""}><option value="">Sect bất kỳ</option><option value="enabled">Có đổi Tông Môn</option><option value="disabled">Không đổi</option></select>
         <button className="btn btn-secondary">Lọc</button>
       </form>
@@ -43,7 +43,7 @@ export default async function AdminItemsPage({ searchParams }: { searchParams?: 
             {filtered.map((item) => {
               const economy = getItemEconomy(item);
               const meta = jsonRecord(item.bindRules);
-              const image = typeof meta.imageUrl === "string" && meta.imageUrl ? meta.imageUrl : `/items/${item.key}.svg`;
+              const image = typeof meta.imageUrl === "string" && meta.imageUrl ? meta.imageUrl : `/items/${economy.visualKey}.webp`;
               return (
                 <tr key={item.id}>
                   <td><img className="admin-item-thumb" src={image} alt="" /></td>
@@ -52,7 +52,7 @@ export default async function AdminItemsPage({ searchParams }: { searchParams?: 
                   <td>{formatRarity(item.rarity)} Phẩm</td>
                   <td>{formatItemCategory(item.category)}</td>
                   <td>{formatCurrency(economy.systemBasePrice)}</td>
-                  <td>{economy.systemMarketEnabled ? "System" : economy.marketEnabled ? "Player" : "Tắt"}</td>
+                  <td>{economy.systemMarketEnabled ? "Vạn Bảo Lâu" : economy.marketEnabled ? "Player" : "Tắt"}</td>
                   <td>{economy.sectExchangeEnabled ? `${economy.sectContributionPrice} CH` : "Tắt"}</td>
                   <td><Link className="btn btn-secondary" href={`/admin/items/${item.id}`}>Edit</Link></td>
                 </tr>

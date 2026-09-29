@@ -3,6 +3,27 @@ import { PrismaClient, Rarity, ItemCategory } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+const itemSpecificVisualKeys = new Set([
+  "thanh-linh-thao", "ngung-khi-thao", "hac-thiet-quang", "xich-dong-quang", "hoi-khi-dan", "duong-the-dan", "truc-co-dan-ha", "yeu-thu-bi",
+  "yeu-thu-nha", "linh-moc", "tu-diep-linh-thao", "huyen-thiet", "tinh-dong", "bich-ngoc-tuy", "tu-khi-dan", "duong-hon-dan",
+  "truc-co-dan-trung", "yeu-dan-nhat-giai", "huyen-thu-cot", "tu-linh-thach", "thien-linh-thao", "huyen-tinh", "xich-viem-tinh-kim", "ngoc-tuy-tinh-hoa",
+  "truc-co-dan-thuong", "tay-tuy-dan", "yeu-dan-nhi-giai", "thien-tam-ti", "dia-mach-linh-tinh", "tu-linh-ngoc", "huyen-thiet-kiem", "thanh-van-dao-bao",
+  "thiet-moc-ho-phu", "nhan-tu-linh", "giay-than-hanh", "hoi-xuan-dan", "tu-linh-dan", "pha-canh-dan", "giai-doc-dan", "linh-thach"
+]);
+
+function itemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
+  if (itemSpecificVisualKeys.has(key)) return key;
+  if (icon === "pill") return "default-pill";
+  if (icon === "herb" || icon === "leaf") return "default-herb";
+  if (icon === "sword") return "default-weapon";
+  if (icon === "armor" || icon === "boots") return "default-armor";
+  if (icon === "manual" || icon === "scroll") return "default-manual";
+  if (icon === "gem" || icon === "ring" || icon === "talisman") return "default-artifact";
+  if (category === "EQUIPMENT" && equipSlot === "WEAPON") return "default-weapon";
+  if (category === "EQUIPMENT") return "default-armor";
+  return "default-material";
+}
+
 const realms = [
   "Phàm Nhân",
   "Luyện Khí",
@@ -328,6 +349,66 @@ async function main() {
   const sectMissionDialogue = await dialogue("dlg-nhiem-vu-chap-su", "Nhiệm Vụ Chấp Sự", "Nhiệm Vụ Chấp Sự", "Nhiệm Vụ Đường ghi nhận công lao của đệ tử. Việc nhỏ tích lại cũng thành uy danh sơn môn.", ["Hỏi về nhiệm vụ", "Rời đi"]);
   const teachingDialogue = await dialogue("dlg-truyen-cong-truong-lao", "Truyền Công Trưởng Lão", "Truyền Công Trưởng Lão", "Công pháp không nằm ở trang giấy, mà ở cách ngươi vận chuyển từng hơi thở.", ["Hỏi về công pháp", "Rời đi"]);
 
+  const npcProfiles = {
+    "duoc-nong": {
+      portraitUrl: "/npc/duoc-nong.webp",
+      avatarUrl: "/npc/duoc-nong.webp",
+      visualKey: "duoc-nong",
+      metadata: {
+        dialogueProfile: {
+          first: "Lão phu quanh năm hái thuốc ở rìa rừng. Nếu đạo hữu biết nhìn lá nghe gió, Thanh Trúc Lâm sẽ không bạc đãi.",
+          repeat: "Lại là đạo hữu. Hôm nay gió núi đổi hướng, linh thảo non dễ lộ dấu hơn mọi ngày.",
+          moved: "Ngươi cũng tới đây sao? Lão phu theo mùi dược khí mà đến, xem ra chúng ta có duyên.",
+          friendly: "Có người chịu nghe chuyện cỏ cây, lão phu cũng bớt cô quạnh.",
+          activeQuest: "Việc tìm dược liệu cứ chậm mà chắc. Dược tính hỏng là cứu người không thành.",
+          readyQuest: "Mùi Thanh Linh Thảo trên tay áo đạo hữu rất rõ. Đưa lão phu xem thử.",
+          helped: "Ân tình lần trước lão phu còn nhớ. Sau này gặp thảo dược lạ, ta sẽ nhắc đạo hữu trước."
+        },
+        movementProfile: { type: "scheduled", route: ["thanh-truc-lam", "thanh-van-dong-thanh"] },
+        role: "herbalist",
+        relationshipType: "friendly"
+      }
+    },
+    "tu-si-bi-thuong": {
+      portraitUrl: "/npc/tu-si-bi-thuong.webp",
+      avatarUrl: "/npc/tu-si-bi-thuong.webp",
+      visualKey: "tu-si-bi-thuong",
+      metadata: {
+        dialogueProfile: {
+          first: "Đạo hữu... xin dừng bước. Ta bị yêu thú tập kích, chân nguyên tán loạn. Nếu có Thanh Linh Thảo, có lẽ còn giữ được mạng này.",
+          repeat: "Là đạo hữu sao... vết thương vẫn chưa ổn, nhưng thần trí đã tỉnh hơn trước.",
+          moved: "Không ngờ lại gặp đạo hữu ở nơi này. Sau trận ấy, ta không dám ở lại rừng trúc quá lâu.",
+          activeQuest: "Ba con yêu lang vẫn quanh quẩn gần đó. Xin đạo hữu cẩn thận.",
+          readyQuest: "Khí tức yêu thú trên người đạo hữu rất rõ. Xem ra việc đã thành.",
+          helped: "Ân cứu mạng ngày đó, tại hạ vẫn ghi nhớ. Nếu có ngày khôi phục, ta nhất định báo đáp."
+        },
+        movementProfile: { type: "questDriven", route: ["thanh-truc-lam", "thanh-van-dong-thanh"] },
+        state: { wounded: true },
+        role: "wounded-cultivator",
+        relationshipType: "grateful"
+      }
+    },
+    "du-phuong-dao-nhan": {
+      portraitUrl: "/npc/du-phuong-dao-nhan.webp",
+      avatarUrl: "/npc/du-phuong-dao-nhan.webp",
+      visualKey: "du-phuong-dao-nhan",
+      metadata: {
+        dialogueProfile: {
+          first: "Đạo hữu trông lạ mặt. Ta là kẻ du phương, đi qua nhiều vùng đất này, chỉ dừng chân ở nơi có cơ duyên.",
+          repeat: "Ha ha, lại gặp đạo hữu rồi. Đường tu dài, có người nhớ mặt nhau đã là duyên.",
+          moved: "Thật có duyên. Không ngờ lại gặp đạo hữu ở nơi này.",
+          friendly: "Người biết hỏi đạo không nhiều. Ngươi có tâm, ta cũng nguyện nói thêm vài câu.",
+          activeQuest: "Việc ta nhắc đạo hữu, tiến triển đến đâu rồi?",
+          readyQuest: "Ánh mắt đạo hữu khác trước. Có lẽ ngươi đã hiểu điều cần hiểu.",
+          helped: "Ân tình lần trước ta vẫn chưa quên. Giang hồ rộng, nợ ân tình lại càng rộng."
+        },
+        movementProfile: { type: "route", route: ["thanh-truc-lam", "thanh-van-dong-thanh", "bia-rung"] },
+        role: "wandering-sage",
+        relationshipType: "fate"
+      }
+    }
+  } as const;
+
   const npcData = [
     ["luc-minh", "Lục Minh", "Dẫn Lộ Nhân", "Một tán tu từng nhiều năm dẫn người mới qua cửa Đông Thành.", "guide", "thanh-van-dong-thanh", lucMinhDialogue.id, ["GUIDE", "QUEST"], true, false, true],
     ["thanh-van-su-gia", "Thanh Vân Sứ Giả", "Sứ Giả Sơn Môn", "Người đưa tin giữa các sơn môn quanh Thanh Vân Vực.", "sect-disciple", "thanh-van-dong-thanh", emissaryDialogue.id, ["SECT", "QUEST"], true, false, true],
@@ -343,10 +424,19 @@ async function main() {
   const npcByKey = new Map<string, string>();
   for (const [key, name, title, description, iconKey, locationKey, dialogueSetId, npcTypes, questProvider, shopProvider, serviceProvider] of npcData) {
     const location = await prisma.location.findUniqueOrThrow({ where: { key: locationKey } });
+    const profile = npcProfiles[key as keyof typeof npcProfiles];
+    const routeKeys = profile?.metadata.movementProfile.route ?? [];
+    const routeIds = routeKeys.map((routeKey) => locationByKey.get(routeKey)).filter(Boolean);
+    const movementType = profile?.metadata.movementProfile.type ?? "fixed";
     const npc = await prisma.npc.upsert({
       where: { key },
-      update: { name, title, description, iconKey, locationId: location.id, regionId: location.zoneId ? (await prisma.zone.findUnique({ where: { id: location.zoneId } }))?.regionId ?? null : null, dialogueSetId, npcTypes: [...npcTypes] as never, questProvider, shopProvider, serviceProvider, active: true },
-      create: { key, name, title, description, iconKey, locationId: location.id, regionId: location.zoneId ? (await prisma.zone.findUnique({ where: { id: location.zoneId } }))?.regionId ?? null : null, dialogueSetId, npcTypes: [...npcTypes] as never, questProvider, shopProvider, serviceProvider, active: true }
+      update: { name, title, description, iconKey, portraitUrl: profile?.portraitUrl, avatarUrl: profile?.avatarUrl, visualKey: profile?.visualKey, locationId: location.id, homeLocationId: location.id, regionId: location.zoneId ? (await prisma.zone.findUnique({ where: { id: location.zoneId } }))?.regionId ?? null : null, dialogueSetId, npcTypes: [...npcTypes] as never, questProvider, shopProvider, serviceProvider, spawnMode: movementType === "fixed" ? "STATIC" : movementType === "route" ? "RANDOM" : "EVENT", metadata: profile?.metadata ?? {}, active: true },
+      create: { key, name, title, description, iconKey, portraitUrl: profile?.portraitUrl, avatarUrl: profile?.avatarUrl, visualKey: profile?.visualKey, locationId: location.id, homeLocationId: location.id, regionId: location.zoneId ? (await prisma.zone.findUnique({ where: { id: location.zoneId } }))?.regionId ?? null : null, dialogueSetId, npcTypes: [...npcTypes] as never, questProvider, shopProvider, serviceProvider, spawnMode: movementType === "fixed" ? "STATIC" : movementType === "route" ? "RANDOM" : "EVENT", metadata: profile?.metadata ?? {}, active: true }
+    });
+    await prisma.npcWorldState.upsert({
+      where: { npcId: npc.id },
+      update: { currentLocationId: location.id, movementType, route: routeIds, schedule: {}, state: profile && "state" in profile.metadata ? profile.metadata.state : {} },
+      create: { npcId: npc.id, currentLocationId: location.id, movementType, route: routeIds, schedule: {}, state: profile && "state" in profile.metadata ? profile.metadata.state : {} }
     });
     npcByKey.set(key, npc.id);
   }
@@ -354,7 +444,7 @@ async function main() {
   const onboardingQuests = [
     ["buoc-dau-tien", "Bước Đầu Tiên", "Ra khỏi Đông Thành và tới Thanh Trúc Lâm để hiểu cách di chuyển ngoài thành.", "MAIN", "VISIT_LOCATION", { targetKey: "thanh-truc-lam", requireTurnIn: true }, 1, "TALK_TO_NPC", "luc-minh", "luc-minh", null, "san-yeu-dau-tien", { cultivation: 100, linhThach: 50 }, ["met_intro_guide"]],
     ["san-yeu-dau-tien", "Săn Yêu Thú Đầu Tiên", "Đánh bại 3 yêu thú yếu trong lúc lịch luyện hoặc săn bắn.", "MAIN", "KILL_MONSTER", { targetKey: "yeu-lang", requireTurnIn: true }, 3, "MONSTER_KILLED", "luc-minh", "luc-minh", "buoc-dau-tien", "thu-thap-linh-thao", { cultivation: 120, linhThach: 80 }, ["completed_first_hunt"]],
-    ["thu-thap-linh-thao", "Thu Thập Linh Thảo", "Mang về 5 Thanh Linh Thảo từ các khu vực tài nguyên quanh Hắc Sơn.", "MAIN", "COLLECT_ITEM", { targetKey: "thanh-linh-thao", requireTurnIn: true }, 5, "ITEM_OBTAINED", "tu-si-bi-thuong", "tu-si-bi-thuong", "san-yeu-dau-tien", "tim-hieu-son-mon", { cultivation: 90, linhThach: 60, items: [{ key: "hoi-khi-dan", quantity: 1 }] }, ["helped_wounded_cultivator"]],
+    ["thu-thap-linh-thao", "Thu Thập Linh Thảo", "Mang về 5 Thanh Linh Thảo từ các khu vực tài nguyên quanh Hắc Sơn.", "MAIN", "COLLECT_ITEM", { targetKey: "thanh-linh-thao", requireTurnIn: true }, 5, "ITEM_OBTAINED", "tu-si-bi-thuong", "tu-si-bi-thuong", "san-yeu-dau-tien", "tim-hieu-son-mon", { cultivation: 90, linhThach: 60, items: [{ key: "hoi-khi-dan", quantity: 1 }], npc: { relationshipScore: 18, moveToLocationKey: "thanh-van-dong-thanh", movementType: "questDriven" } }, ["helped_wounded_cultivator"]],
     ["tim-hieu-son-mon", "Tìm Hiểu Sơn Môn", "Mở danh sách Tông Môn hoặc ghé sơn môn để biết con đường tu hành theo thế lực.", "MAIN", "VISIT_SECT_PAGE", { requireTurnIn: true }, 1, "MANUAL", "thanh-van-su-gia", "thanh-van-su-gia", "thu-thap-linh-thao", null, { cultivation: 100, linhThach: 100 }, ["unlocked_sect_intro", "unlocked_market_intro"]]
   ] as const;
 
@@ -403,8 +493,7 @@ async function main() {
     const bindRules = {
       subType,
       icon,
-      visualKey: key,
-      imageUrl: `/items/${key}.svg`,
+      visualKey: itemVisualKey(key, category, icon),
       usage,
       systemBasePrice,
       npcBuyPrice: Math.floor(systemBasePrice * 0.7),
@@ -426,6 +515,59 @@ async function main() {
     });
   }
 
+  await prisma.itemTemplate.upsert({
+    where: { key: "linh-thach" },
+    update: {
+      name: "Linh Thạch",
+      category: ItemCategory.MATERIAL,
+      rarity: Rarity.PHAM,
+      description: "Tinh thạch chứa linh khí, vừa là tài nguyên tu luyện vừa là đơn vị tiền tệ phổ biến.",
+      stackable: true,
+      maxStack: 999999,
+      tradeable: false,
+      baseModifiers: {},
+      bindRules: {
+        subType: "Tiền Tệ",
+        icon: "crystal",
+        visualKey: "linh-thach",
+        usage: "Dùng làm tiền tệ giao dịch, phí dịch vụ và phần thưởng.",
+        systemBasePrice: 1,
+        npcBuyPrice: 1,
+        sellableToNpc: false,
+        marketEnabled: false,
+        systemMarketEnabled: false,
+        sectExchangeEnabled: false,
+        sectContributionPrice: 0,
+        donationContributionValue: 0
+      }
+    },
+    create: {
+      key: "linh-thach",
+      name: "Linh Thạch",
+      category: ItemCategory.MATERIAL,
+      rarity: Rarity.PHAM,
+      description: "Tinh thạch chứa linh khí, vừa là tài nguyên tu luyện vừa là đơn vị tiền tệ phổ biến.",
+      stackable: true,
+      maxStack: 999999,
+      tradeable: false,
+      baseModifiers: {},
+      bindRules: {
+        subType: "Tiền Tệ",
+        icon: "crystal",
+        visualKey: "linh-thach",
+        usage: "Dùng làm tiền tệ giao dịch, phí dịch vụ và phần thưởng.",
+        systemBasePrice: 1,
+        npcBuyPrice: 1,
+        sellableToNpc: false,
+        marketEnabled: false,
+        systemMarketEnabled: false,
+        sectExchangeEnabled: false,
+        sectContributionPrice: 0,
+        donationContributionValue: 0
+      }
+    }
+  });
+
   const equipment = [
     ["huyen-thiet-kiem", "Huyền Thiết Kiếm", "WEAPON", { attack: 5 }],
     ["thanh-van-dao-bao", "Thanh Vân Đạo Bào", "ARMOR", { defense: 3 }],
@@ -435,10 +577,12 @@ async function main() {
   ] as const;
   for (const [key, name, slot, mods] of equipment) {
     const systemBasePrice = 180 + Object.values(mods).reduce((sum, value) => sum + value * 5, 0);
+    const icon = slot === "ARMOR" ? "armor" : slot === "BOOTS" ? "boots" : slot === "RING" ? "ring" : slot === "TALISMAN" ? "talisman" : "sword";
+    const bindRules = { subType: slot, icon, visualKey: itemVisualKey(key, "EQUIPMENT", icon, slot), systemBasePrice, npcBuyPrice: Math.floor(systemBasePrice * 0.7), sellableToNpc: true, usage: `${name} có thể trang bị để tăng chỉ số.` };
     await prisma.itemTemplate.upsert({
       where: { key },
-      update: { bindRules: { subType: slot, icon: slot === "ARMOR" ? "armor" : slot === "BOOTS" ? "boots" : slot === "RING" ? "ring" : slot === "TALISMAN" ? "talisman" : "sword", systemBasePrice, npcBuyPrice: Math.floor(systemBasePrice * 0.7), sellableToNpc: true, usage: `${name} có thể trang bị để tăng chỉ số.` } },
-      create: { key, name, category: ItemCategory.EQUIPMENT, rarity: Rarity.TRUNG, description: `${name} có thể trang bị.`, equipSlot: slot as never, baseModifiers: mods, durability: undefined, bindRules: { subType: slot, icon: slot === "ARMOR" ? "armor" : slot === "BOOTS" ? "boots" : slot === "RING" ? "ring" : slot === "TALISMAN" ? "talisman" : "sword", systemBasePrice, npcBuyPrice: Math.floor(systemBasePrice * 0.7), sellableToNpc: true, usage: `${name} có thể trang bị để tăng chỉ số.` } } as never
+      update: { bindRules },
+      create: { key, name, category: ItemCategory.EQUIPMENT, rarity: Rarity.TRUNG, description: `${name} có thể trang bị.`, equipSlot: slot as never, baseModifiers: mods, durability: undefined, bindRules } as never
     });
   }
   for (const [key, name, mods] of [
@@ -447,7 +591,8 @@ async function main() {
     ["pha-canh-dan", "Phá Cảnh Đan", { breakthroughBps: 900 }],
     ["giai-doc-dan", "Giải Độc Đan", { cleanse: true }]
   ] as const) {
-    await prisma.itemTemplate.upsert({ where: { key }, update: { bindRules: { subType: "Đan Dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 } }, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods, bindRules: { subType: "Đan Dược", icon: "pill", systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 } } });
+    const bindRules = { subType: "Đan Dược", icon: "pill", visualKey: itemVisualKey(key, "CONSUMABLE", "pill"), systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 };
+    await prisma.itemTemplate.upsert({ where: { key }, update: { bindRules }, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods, bindRules } });
   }
 
   for (const [key, name, type, mod] of [

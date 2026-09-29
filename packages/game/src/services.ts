@@ -245,8 +245,8 @@ async function applyEquipmentDelta(tx: Tx, characterId: string, modifiers: unkno
 }
 
 async function assertAtMarket(tx: Tx, characterId: string) {
-  const character = await tx.character.findUnique({ where: { id: characterId }, select: { currentLocation: { select: { key: true } } } });
-  if (character?.currentLocation?.key !== "cho-linh-bao") throw new GameError("MARKET_LOCATION_REQUIRED", "Bạn cần tới Chợ Linh Bảo để giao dịch.");
+  const character = await tx.character.findUnique({ where: { id: characterId }, select: { currentLocation: { select: { services: true } } } });
+  if (!Array.isArray(character?.currentLocation?.services) || !character.currentLocation.services.includes("market")) throw new GameError("MARKET_LOCATION_REQUIRED", "Bạn cần tới Vạn Bảo Lâu hoặc địa điểm có giao dịch để mua bán vật phẩm.");
 }
 
 async function assertItemRequirements(tx: Tx, characterId: string, template: { bindRules: unknown }) {
@@ -808,19 +808,19 @@ export async function purchaseSystemMarketItem(db: Db, buyerId: string, stockId:
       }
     }
     const stock = await tx.systemMarketStock.findUnique({ where: { id: stockId }, include: { template: true } });
-    if (!stock || stock.periodKey !== currentSystemMarketPeriod(now) || stock.stock <= 0) throw new GameError("SYSTEM_STOCK_EMPTY", "Hàng hệ thống đã hết.");
+    if (!stock || stock.periodKey !== currentSystemMarketPeriod(now) || stock.stock <= 0) throw new GameError("SYSTEM_STOCK_EMPTY", "Vạn Bảo Lâu đã hết vật phẩm này.");
     const economy = getItemEconomy(stock.template);
-    if (!economy.systemMarketEnabled) throw new GameError("SYSTEM_STOCK_DISABLED", "Vật phẩm này không bán trực tiếp ở Chợ.");
+    if (!economy.systemMarketEnabled) throw new GameError("SYSTEM_STOCK_DISABLED", "Vật phẩm này không bán trực tiếp ở Vạn Bảo Lâu.");
     await assertItemRequirements(tx, buyerId, stock.template);
-    if (quantity > stock.stock) throw new GameError("INVALID_QUANTITY", "Chợ không còn đủ số lượng.");
+    if (quantity > stock.stock) throw new GameError("INVALID_QUANTITY", "Vạn Bảo Lâu không còn đủ số lượng.");
     const totalPrice = stock.price * BigInt(quantity);
     const claimed = await tx.systemMarketStock.updateMany({ where: { id: stockId, stock: { gte: quantity } }, data: { stock: { decrement: quantity } } });
-    if (claimed.count !== 1) throw new GameError("SYSTEM_STOCK_EMPTY", "Hàng hệ thống đã được mua hết.");
+    if (claimed.count !== 1) throw new GameError("SYSTEM_STOCK_EMPTY", "Vạn Bảo Lâu đã được mua hết vật phẩm này.");
     await debitWallet(tx, buyerId, Currency.LINH_THACH, totalPrice, WalletTxType.MARKET, "SystemMarketStock", stockId, purchaseKey || `system-buy:${stockId}:${buyerId}:${quantity}:${now.getTime()}`);
     await addItemToInventory(tx, buyerId, stock.templateId, quantity);
     await progressQuestEvent(tx, { characterId: buyerId, eventType: "ITEM_OBTAINED", itemKey: stock.template.key, amount: quantity });
     await tx.marketTransaction.create({ data: { listingId: `system:${stockId}`, buyerId, sellerId: "SYSTEM", itemTemplateId: stock.templateId, quantity, price: totalPrice, tax: 0n } });
-    await tx.gameLog.create({ data: { characterId: buyerId, type: "market", message: `Mua ${stock.template.name} x${quantity} từ Chợ Linh Bảo, trả ${totalPrice.toString()} Linh Thạch.` } });
+    await tx.gameLog.create({ data: { characterId: buyerId, type: "market", message: `Mua ${stock.template.name} x${quantity} từ Vạn Bảo Lâu, trả ${totalPrice.toString()} Linh Thạch.` } });
     return { itemName: stock.template.name, quantity, totalPrice };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

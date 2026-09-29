@@ -5,7 +5,7 @@ export function formatSecurity(value: string) {
 export function formatLocationKind(value: string) {
   return ({
     district: "Khu dân cư",
-    market: "Chợ",
+    market: "Vạn Bảo Lâu",
     gate: "Cổng thành",
     road: "Quan đạo",
     wilds: "Ngoại vực",
@@ -24,7 +24,7 @@ export function formatLocationKind(value: string) {
 
 export function formatService(value: string) {
   return ({
-    market: "Giao dịch",
+    market: "Vạn Bảo Lâu",
     auction: "Đấu giá",
     npc_shop: "Cửa hàng NPC",
     inn: "Khách điếm",

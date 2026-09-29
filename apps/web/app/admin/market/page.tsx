@@ -11,8 +11,8 @@ export default async function AdminMarketPage({ searchParams }: { searchParams?:
   return (
     <div>
       <header className="admin-page-head">
-        <div><p className="eyebrow">Market Admin</p><h1>Chợ Linh Bảo</h1><p className="muted">Kỳ stock: {periodKey}</p></div>
-        <form action={refreshAdminMarketStockAction}><button className="btn">Refresh market rows</button></form>
+        <div><p className="eyebrow">Market Admin</p><h1>Vạn Bảo Lâu</h1><p className="muted">Kỳ stock: {periodKey}</p></div>
+        <form action={refreshAdminMarketStockAction}><button className="btn">Làm mới vật phẩm</button></form>
       </header>
       <ActionAlert message={query?.error ?? (query?.ok ? "Đã xử lý market." : undefined)} />
       <div className="admin-table-wrap mt-5">

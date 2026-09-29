@@ -2484,6 +2484,17 @@ select.field option {
   line-height: 1.45;
 }
 
+.npc-memory-chip {
+  display: inline-flex;
+  margin-top: 0.55rem;
+  border: 1px solid rgba(222, 190, 99, 0.25);
+  background: rgba(222, 190, 99, 0.08);
+  color: rgba(244, 239, 227, 0.76);
+  padding: 0.25rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
 .npc-portrait,
 .npc-profile-portrait {
   position: relative;
@@ -2541,14 +2552,32 @@ select.field option {
 }
 
 .npc-profile-portrait {
-  width: 7rem;
-  height: 7rem;
+  width: 100%;
+  aspect-ratio: 4 / 5;
   margin-bottom: 1rem;
 }
 
 .npc-profile-panel h2 {
   font-size: 1.45rem;
   font-weight: 1000;
+}
+
+.npc-profile-meta {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+.npc-profile-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(244, 239, 227, 0.1);
+  background: rgba(0, 0, 0, 0.15);
+  color: rgba(244, 239, 227, 0.74);
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .npc-type-list {

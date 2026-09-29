@@ -2,8 +2,8 @@ import { ActionAlert } from "@/components/ActionAlert";
 import { getUser } from "@/lib/auth";
 import { acceptQuestAction, completeQuestAction, talkToNpcAction } from "@/lib/forms";
 import { prisma, QuestStatus } from "@ttg/db";
-import { getAvailableQuestTemplates, talkToNpc } from "@ttg/game";
-import { ArrowLeft, CheckCircle2, CircleDot, Gift, MessageCircle, ScrollText, UserRound } from "lucide-react";
+import { getAvailableQuestTemplates, QuestError, talkToNpc } from "@ttg/game";
+import { ArrowLeft, CheckCircle2, CircleDot, Gift, MapPin, MessageCircle, ScrollText, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -11,10 +11,13 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
   const [{ key }, query] = await Promise.all([params, searchParams]);
   const user = await getUser();
   if (!user?.character) redirect("/");
-  const data = await talkToNpc(prisma, user.character.id, key);
-  const node = data.npc.dialogueSet?.nodes[0] ?? null;
+  const data = await talkToNpc(prisma, user.character.id, key).catch((error) => {
+    if (error instanceof QuestError) redirect(`/game/location?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  });
   const activeQuests = data.quests.filter((quest) => quest.status === QuestStatus.ACTIVE || quest.status === QuestStatus.READY_TO_TURN_IN);
   const completedQuests = data.quests.filter((quest) => quest.status === QuestStatus.COMPLETED).slice(0, 3);
+  const hasQuestPanel = data.available.length > 0 || activeQuests.length > 0 || completedQuests.length > 0;
 
   return (
     <div className="p-5 lg:p-8">
@@ -22,7 +25,7 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
         <div>
           <p className="text-xs font-bold uppercase text-jade">NPC</p>
           <h1 className="mt-1 text-3xl font-black">{data.npc.name}</h1>
-          <p className="muted mt-2">{data.npc.title} · {data.npc.location.name}</p>
+          <p className="muted mt-2">{data.npc.title} · {data.currentLocation.name}</p>
         </div>
         <Link href="/game/location" className="btn btn-secondary"><ArrowLeft size={16} aria-hidden /> Quay lại</Link>
       </header>
@@ -37,6 +40,11 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
           <h2>{data.npc.name}</h2>
           <p className="text-gold">{data.npc.title}</p>
           <p className="muted mt-3">{data.npc.description}</p>
+          <div className="npc-profile-meta">
+            <span><MapPin size={14} aria-hidden />{data.currentLocation.name}</span>
+            <span>{data.playerNpcState.relationshipState}</span>
+            <span>Đã gặp {data.playerNpcState.timesMet} lần</span>
+          </div>
           <div className="npc-type-list">
             {data.npc.npcTypes.map((type) => <span key={type}>{formatNpcType(type)}</span>)}
           </div>
@@ -47,13 +55,13 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
             <div className="dialogue-box">
               <MessageCircle size={20} aria-hidden />
               <div>
-                <b>{node?.speaker ?? data.npc.name}</b>
-                <p>{node?.text ?? "Người này nhìn bạn, nhưng chưa có lời thoại được cấu hình."}</p>
+                <b>{data.dialogue.speaker}</b>
+                <p>{data.dialogue.text}</p>
               </div>
             </div>
-            {node?.choices.length ? (
+            {data.dialogue.choices.length ? (
               <div className="dialogue-choice-list">
-                {node.choices.map((choice) => <span key={choice.id}>{choice.label}</span>)}
+                {data.dialogue.choices.map((choice) => <span key={choice.id}>{choice.label}</span>)}
               </div>
             ) : null}
             <form action={talkToNpcAction} className="mt-4">
@@ -62,24 +70,25 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
             </form>
           </section>
 
-          <section className="panel rounded-lg p-5">
-            <h2 className="text-xl font-bold text-gold">Nhiệm vụ</h2>
-            <div className="quest-list mt-4">
-              {data.available.map((quest) => (
-                <QuestTemplateCard key={quest.id} npcKey={data.npc.key} quest={quest} />
-              ))}
-              {activeQuests.map((quest) => (
-                <CharacterQuestCard key={quest.id} npcKey={data.npc.key} quest={quest} />
-              ))}
-              {completedQuests.map((quest) => (
-                <article key={quest.id} className="quest-card quest-card-done">
-                  <CheckCircle2 size={18} aria-hidden />
-                  <div><b>{quest.template.title}</b><p>Đã hoàn thành.</p></div>
-                </article>
-              ))}
-              {data.available.length === 0 && activeQuests.length === 0 && completedQuests.length === 0 ? <p className="muted">NPC này hiện chưa có nhiệm vụ phù hợp với bạn.</p> : null}
-            </div>
-          </section>
+          {hasQuestPanel ? (
+            <section className="panel rounded-lg p-5">
+              <h2 className="text-xl font-bold text-gold">Nhiệm vụ</h2>
+              <div className="quest-list mt-4">
+                {data.available.map((quest) => (
+                  <QuestTemplateCard key={quest.id} npcKey={data.npc.key} quest={quest} />
+                ))}
+                {activeQuests.map((quest) => (
+                  <CharacterQuestCard key={quest.id} npcKey={data.npc.key} quest={quest} />
+                ))}
+                {completedQuests.map((quest) => (
+                  <article key={quest.id} className="quest-card quest-card-done">
+                    <CheckCircle2 size={18} aria-hidden />
+                    <div><b>{quest.template.title}</b><p>Đã hoàn thành.</p></div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </main>
       </section>
     </div>

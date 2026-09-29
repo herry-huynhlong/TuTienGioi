@@ -2,7 +2,7 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { attackEncounterAction, cancelExploreAction, exploreAction, leaveEncounterAction, startTravelAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { advanceExplorationActivity, currentEnergy, getItemEconomy, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
+import { advanceExplorationActivity, currentEnergy, getItemEconomy, getNpcsAtLocation, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
@@ -11,7 +11,7 @@ import { formatCurrency, ItemSummaryCard } from "@/components/ItemCard";
 import { Compass, Home, Landmark, Mail, MessageCircle, Route, ScrollText, Shield, ShoppingBag, Swords, Trees, UserRound } from "lucide-react";
 
 const activityLabels: Record<string, string> = {
-  market: "Chợ",
+  market: "Vạn Bảo Lâu",
   auction: "Đấu giá",
   npc_shop: "Cửa hàng NPC",
   inn: "Khách điếm",
@@ -45,7 +45,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
       explorations: { where: { status: { in: ["ACTIVE", "COMPLETED", "CLAIMED"] } }, orderBy: [{ status: "asc" }, { endsAt: "desc" }], take: 6 },
       cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
       travels: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
-      currentLocation: { include: { zone: { include: { region: true } }, routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } }, npcs: { where: { active: true }, include: { questStarts: true, questTurnIns: true }, orderBy: { name: "asc" } } } },
+      currentLocation: { include: { zone: { include: { region: true } }, routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } } } },
       location: true,
       quests: { where: { status: { in: ["ACTIVE", "READY_TO_TURN_IN", "COMPLETED"] } }, include: { template: true } }
     }
@@ -67,14 +67,15 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
   const activities = getLocationActivities(services);
   const facilities = getLocationFacilities(services, location?.kind);
   const routes = location?.routesFrom ?? [];
-  const [logs, itemTemplates, monsters] = await Promise.all([
+  const [logs, itemTemplates, monsters, npcsAtLocation] = await Promise.all([
     prisma.gameLog.findMany({
     where: { characterId: c.id, type: { in: ["exploration", "encounter"] } },
     take: 6,
     orderBy: { createdAt: "desc" }
     }),
     prisma.itemTemplate.findMany(),
-    prisma.monster.findMany({ select: { key: true, name: true, hp: true, realmOrder: true } })
+    prisma.monster.findMany({ select: { key: true, name: true, hp: true, realmOrder: true } }),
+    location ? getNpcsAtLocation(prisma, c.id, location.id) : []
   ]);
   const itemTemplatesByKey = new Map(itemTemplates.map((item) => [item.key, item]));
   const monsterByKey = new Map(monsters.map((monster) => [monster.key, monster]));
@@ -115,10 +116,10 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
             </Panel>
           ) : null}
 
-          {location?.npcs.length ? (
+          {npcsAtLocation.length ? (
             <Panel title="Nhân vật">
               <div className="npc-grid">
-                {location.npcs.map((npc) => <NpcCard key={npc.id} npc={npc} quests={c.quests} />)}
+                {npcsAtLocation.map((npc) => <NpcCard key={npc.id} npc={npc} quests={c.quests} />)}
               </div>
             </Panel>
           ) : null}
@@ -179,7 +180,7 @@ function NpcCard({
   npc,
   quests
 }: {
-  npc: { key: string; name: string; title: string; description: string; portraitUrl: string | null; iconKey: string; questStarts: Array<{ id: string }>; questTurnIns: Array<{ id: string }> };
+  npc: { key: string; name: string; title: string; description: string; portraitUrl: string | null; avatarUrl?: string | null; iconKey: string; questStarts: Array<{ id: string }>; questTurnIns: Array<{ id: string }>; playerState?: { timesMet: number; relationshipState: string } | null };
   quests: Array<{ status: string; templateId: string; template: { startNpcId: string | null; turnInNpcId: string | null } }>;
 }) {
   const ready = quests.some((quest) => quest.status === "READY_TO_TURN_IN" && npc.questTurnIns.some((template) => template.id === quest.templateId));
@@ -197,6 +198,7 @@ function NpcCard({
         <b>{npc.name}</b>
         <small>{npc.title}</small>
         <p>{npc.description}</p>
+        {npc.playerState && npc.playerState.timesMet > 0 ? <span className="npc-memory-chip">{npc.playerState.relationshipState} · đã gặp {npc.playerState.timesMet} lần</span> : null}
         <Link href={`/game/npc/${npc.key}`} className="btn btn-secondary mt-3 w-full"><MessageCircle size={16} aria-hidden /> Trò chuyện</Link>
       </div>
     </article>
@@ -213,7 +215,7 @@ function getLocationActivities(services: string[]): LocationActivityMode[] {
 
 function getLocationFacilities(services: string[], kind?: string) {
   const facilities: Array<{ key: string; label: string; description: string; href?: string; disabled?: boolean; icon: React.ReactNode }> = [];
-  if (services.includes("market")) facilities.push({ key: "market", label: "Chợ", description: "Mua bán vật phẩm giữa người chơi.", href: "/game/market", icon: <ShoppingBag size={18} aria-hidden /> });
+  if (services.includes("market")) facilities.push({ key: "market", label: "Vạn Bảo Lâu", description: "Mua bán vật phẩm, thu mua chiến lợi phẩm và bày hàng cho người chơi.", href: "/game/market", icon: <ShoppingBag size={18} aria-hidden /> });
   if (services.includes("mail")) facilities.push({ key: "mail", label: "Thư tín", description: "Đọc thư và thông báo cá nhân.", href: "/game/mail", icon: <Mail size={18} aria-hidden /> });
   if (services.includes("inn")) facilities.push({ key: "inn", label: "Khách điếm", description: "Nghỉ chân, hồi phục và nghe tin tức trong thành.", disabled: true, icon: <Home size={18} aria-hidden /> });
   if (services.includes("auction")) facilities.push({ key: "auction", label: "Đấu giá", description: "Nơi các kỳ vật được đưa lên sàn tranh giá.", disabled: true, icon: <Landmark size={18} aria-hidden /> });

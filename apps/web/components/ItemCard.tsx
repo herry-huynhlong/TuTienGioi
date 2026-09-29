@@ -1,5 +1,5 @@
 import { formatItemCategory, formatRarity } from "@/lib/format";
-import { getItemEconomy, jsonRecord } from "@ttg/game";
+import { getItemEconomy, itemVisualKey, jsonRecord } from "@ttg/game";
 import { Box, Gem, Hammer, Leaf, Pill, ScrollText, Shield, Shirt, Sparkles, Swords } from "lucide-react";
 import Link from "next/link";
 
@@ -126,7 +126,7 @@ export function formatCurrency(value: bigint | number) {
   return value.toLocaleString("vi-VN");
 }
 
-function ItemVisual({ template, size }: { template: ItemTemplateLike; size: "card" | "detail" }) {
+export function ItemVisual({ template, size }: { template: ItemTemplateLike; size: "card" | "detail" }) {
   const economy = getItemEconomy(template);
   const src = visualSrc(template);
   const className = `item-visual ${size === "detail" ? "item-visual-large" : ""} grade-${template.rarity.toLowerCase()}`;
@@ -137,10 +137,14 @@ function ItemVisual({ template, size }: { template: ItemTemplateLike; size: "car
 
 function visualSrc(template: ItemTemplateLike) {
   const meta = jsonRecord(template.bindRules);
-  if (typeof meta.imageUrl === "string" && meta.imageUrl) return meta.imageUrl;
-  if (typeof meta.visualKey === "string" && meta.visualKey) return `/items/${meta.visualKey}.svg`;
-  if (template.key) return `/items/${template.key}.svg`;
-  return "";
+  if (typeof meta.imageUrl === "string" && meta.imageUrl && !isLegacyGeneratedSvg(meta.imageUrl)) return meta.imageUrl;
+  const economy = getItemEconomy(template);
+  const visualKey = typeof meta.visualKey === "string" && meta.visualKey ? meta.visualKey : economy.visualKey || itemVisualKey({ key: template.key, category: template.category, icon: economy.icon, equipSlot: template.equipSlot });
+  return `/items/${visualKey}.webp`;
+}
+
+function isLegacyGeneratedSvg(value: string) {
+  return value.startsWith("/items/") && value.endsWith(".svg");
 }
 
 function formatCondition(requiredRealmOrder: number | null, requiredSectRank: number | null) {

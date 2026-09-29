@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { getItemEconomy, itemStackKey, progressionItemCatalog, stockForSystemMarketItem } from "../src/items.js";
+import { getItemEconomy, itemSpecificVisualKeys, itemStackKey, itemVisualKey, progressionItemCatalog, stockForSystemMarketItem } from "../src/items.js";
 
 describe("item progression economy", () => {
   it("defines the 30 baseline progression items by grade", () => {
@@ -17,17 +17,22 @@ describe("item progression economy", () => {
     expect(variants.map((item) => item.rarity).sort()).toEqual(["HA", "THUONG", "TRUNG"]);
   });
 
-  it("has a dedicated visual asset for every baseline progression item", () => {
+  it("maps baseline progression items to dedicated visual assets", () => {
     const keys = progressionItemCatalog.map((item) => item.key);
     expect(new Set(keys).size).toBe(30);
-    for (const key of keys) {
-      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${key}.svg`)), key).toBe(true);
+    for (const item of progressionItemCatalog) {
+      const visualKey = itemVisualKey(item);
+      expect(visualKey).toBe(item.key);
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), `${item.key}:${visualKey}`).toBe(true);
     }
-    expect(["truc-co-dan-ha", "truc-co-dan-trung", "truc-co-dan-thuong"].map((key) => `${key}.svg`)).toEqual([
-      "truc-co-dan-ha.svg",
-      "truc-co-dan-trung.svg",
-      "truc-co-dan-thuong.svg"
-    ]);
+    expect(itemVisualKey(progressionItemCatalog.find((item) => item.key === "duong-the-dan")!)).toBe("duong-the-dan");
+  });
+
+  it("keeps a project asset for every specific item visual key including Linh Thach", () => {
+    expect(itemSpecificVisualKeys).toContain("linh-thach");
+    for (const visualKey of itemSpecificVisualKeys) {
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), visualKey).toBe(true);
+    }
   });
 
   it("enables system market stock only for low and mid grade baseline items", () => {

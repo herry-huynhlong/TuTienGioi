@@ -70,8 +70,8 @@ export function ItemAdminForm({ item }: { item?: ItemLike }) {
           <label>NPC buy price<input className="field" name="npcBuyPrice" inputMode="numeric" defaultValue={String(meta.npcBuyPrice ?? economy?.npcBuyPrice ?? 0)} /></label>
           <Check name="tradeable" label="Tradeable" checked={item?.tradeable ?? true} />
           <Check name="sellableToNpc" label="Vạn Bảo Lâu thu mua" checked={Boolean(meta.sellableToNpc ?? true)} />
-          <Check name="marketEnabled" label="Market enabled" checked={Boolean(meta.marketEnabled ?? true)} />
-          <Check name="systemMarketEnabled" label="System market enabled" checked={Boolean(meta.systemMarketEnabled)} />
+          <Check name="marketEnabled" label="Cho giao dịch người chơi" checked={Boolean(meta.marketEnabled ?? true)} />
+          <Check name="systemMarketEnabled" label="Bán tại Vạn Bảo Lâu" checked={Boolean(meta.systemMarketEnabled)} />
           <Check name="auctionEligible" label="Auction eligible" checked={Boolean(meta.auctionEligible)} />
         </AdminSection>
         <AdminSection title="Tông Môn / Điều Kiện">

@@ -45,7 +45,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
     }
   });
   await recordOnboardingEvent(prisma, character.id, "VIEW_MARKET");
-  const atMarket = character.currentLocation?.key === "cho-linh-bao";
+  const atMarket = Array.isArray(character.currentLocation?.services) && character.currentLocation.services.includes("market");
   const selectedItem = character.items.find((item) => item.id === params?.sellItem) ?? character.items.find((item) => item.template.tradeable && !item.bound && item.listings.length === 0);
   await refreshSystemMarketStock(prisma);
   const periodKey = currentSystemMarketPeriod();
@@ -90,15 +90,15 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
     <div className="p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Vạn Bảo Lâu</p>
-        <h1 className="mt-1 text-3xl font-black">Chợ Linh Bảo</h1>
+        <h1 className="mt-1 text-3xl font-black">Vạn Bảo Lâu</h1>
         <p className="muted mt-2">Mua bán vật phẩm, đổi chiến lợi phẩm lấy Linh Thạch và bày hàng cho người chơi khác.</p>
       </header>
       <ActionAlert message={params?.error} />
       <ActionAlert message={params?.ok === "npc-sell" ? "Đã bán vật phẩm cho Vạn Bảo Lâu." : params?.ok === "listed" ? "Đã bày bán vật phẩm." : params?.ok} />
       {!atMarket ? (
         <section className="panel rounded-lg p-5">
-          <h2 className="text-xl font-bold text-gold">Bạn chưa ở Chợ Linh Bảo</h2>
-          <p className="muted mt-2">Giao dịch chỉ mở khi nhân vật đứng tại Chợ Linh Bảo trong Thanh Vân Đông Thành.</p>
+          <h2 className="text-xl font-bold text-gold">Bạn chưa ở Vạn Bảo Lâu</h2>
+          <p className="muted mt-2">Giao dịch chỉ mở khi nhân vật đứng tại địa điểm có Vạn Bảo Lâu hoặc dịch vụ mua bán.</p>
           <Link href="/game/world" className="btn mt-4">Xem bản đồ</Link>
         </section>
       ) : null}
@@ -134,16 +134,18 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
           <button className="btn">Tìm</button>
         </form>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-          <span className="muted">{systemStocks.length} hàng hệ thống · {listings.length} hàng người chơi</span>
+          <span className="muted">{systemStocks.length} vật phẩm Vạn Bảo Lâu · {listings.length} hàng người chơi</span>
           <span className="text-gold">Linh thạch: {linhThach.toString()}</span>
         </div>
       </section>
-      <h2 className="mt-5 text-xl font-black text-gold">Hàng hệ thống</h2>
+      <h2 className="mt-5 text-xl font-black text-gold">Vạn Bảo Lâu</h2>
       {selectedSystem ? (
         <section className="panel rounded-lg p-5 mt-3">
           <ItemDetailPanel
             template={selectedSystem.template}
             details={[
+              { label: "Nguồn", value: "Vạn Bảo Lâu" },
+              { label: "Điều kiện", value: marketCondition(selectedSystem.template) },
               { label: "Còn lại", value: selectedSystem.stock.toLocaleString("vi-VN") },
               { label: "Giá", value: `${formatCurrency(selectedSystem.price)} Linh Thạch / cái` }
             ]}
@@ -157,6 +159,8 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
           <ItemDetailPanel
             template={selectedListing.item.template}
             details={[
+              { label: "Nguồn", value: "Người chơi bày bán" },
+              { label: "Điều kiện", value: marketCondition(selectedListing.item.template) },
               { label: "Người bán", value: selectedListing.seller.name },
               { label: "Số lượng", value: selectedListing.quantity.toLocaleString("vi-VN") },
               { label: "Giá", value: `${formatCurrency(selectedListing.price)} Linh Thạch / cái` }
@@ -168,7 +172,7 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
       ) : null}
       <section className="market-card-grid mt-3">
         {systemStocks.map((stock) => <SystemStockCard key={stock.id} stock={stock} balance={linhThach} disabled={disabled} selected={detail === `system:${stock.id}`} />)}
-        {systemStocks.length === 0 ? <div className="empty-state panel rounded-lg p-5"><b>Không có hàng hệ thống phù hợp.</b><p>Hạ Phẩm và một phần Trung Phẩm sẽ được bổ sung theo kỳ.</p></div> : null}
+        {systemStocks.length === 0 ? <div className="empty-state panel rounded-lg p-5"><b>Không có vật phẩm Vạn Bảo Lâu phù hợp.</b><p>Hạ Phẩm và một phần Trung Phẩm sẽ được bổ sung theo kỳ.</p></div> : null}
       </section>
       <h2 className="mt-6 text-xl font-black text-gold">Hàng người chơi</h2>
       <section className="market-card-grid mt-5">
@@ -179,10 +183,18 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
   );
 }
 
+function marketCondition(template: any) {
+  const economy = getItemEconomy(template);
+  const parts = [];
+  if (economy.requiredRealmOrder !== null) parts.push(`Cảnh giới bậc ${economy.requiredRealmOrder}+`);
+  if (economy.requiredSectRank !== null) parts.push(`Tông Môn ${economy.requiredSectRank} phẩm trở lên`);
+  return parts.length ? parts.join(" · ") : "Không";
+}
+
 function SystemBuyForm({ stock, balance, disabled }: { stock: any; balance: bigint; disabled: boolean }) {
   const affordable = stock.price > 0n ? Number(balance / stock.price) : stock.stock;
   const maxQuantity = Math.max(0, Math.min(stock.stock, 99, affordable));
-  const disabledReason = disabled ? "Bạn phải đứng tại Chợ Linh Bảo để giao dịch." : stock.stock <= 0 ? "Đã hết hàng." : affordable < 1 ? "Không đủ Linh Thạch." : "";
+  const disabledReason = disabled ? "Bạn phải đứng tại Vạn Bảo Lâu để giao dịch." : stock.stock <= 0 ? "Đã hết hàng." : affordable < 1 ? "Không đủ Linh Thạch." : "";
   return (
     <form action={buySystemMarketItemAction} className="item-card-action">
       <input type="hidden" name="stockId" value={stock.id} />
@@ -207,7 +219,7 @@ function SystemStockCard({ stock, balance, disabled, selected }: { stock: any; b
 function PlayerBuyForm({ listing, balance, disabled }: { listing: any; balance: bigint; disabled: boolean }) {
   const affordable = listing.price > 0n ? Number(balance / listing.price) : listing.quantity;
   const maxQuantity = Math.max(0, Math.min(listing.quantity, 99, affordable));
-  const disabledReason = disabled ? "Bạn phải đứng tại Chợ Linh Bảo để giao dịch." : listing.quantity <= 0 ? "Tin rao đã hết hàng." : affordable < 1 ? "Không đủ Linh Thạch." : "";
+  const disabledReason = disabled ? "Bạn phải đứng tại Vạn Bảo Lâu để giao dịch." : listing.quantity <= 0 ? "Tin rao đã hết hàng." : affordable < 1 ? "Không đủ Linh Thạch." : "";
   return (
     <form action={buyMarketListingAction} className="item-card-action">
       <input type="hidden" name="listingId" value={listing.id} />

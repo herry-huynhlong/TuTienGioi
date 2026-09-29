@@ -51,7 +51,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   const equipped = c.items.filter((item) => item.equippedSlot);
   const inventory = c.items.filter((item) => !item.equippedSlot && (filter === "ALL" || item.template.category === filter));
   const selected = inventory.find((item) => item.id === params?.item) ?? inventory[0] ?? c.items.find((item) => item.equippedSlot);
-  const atMarket = c.currentLocation?.key === "cho-linh-bao";
+  const atMarket = Array.isArray(c.currentLocation?.services) && c.currentLocation.services.includes("market");
 
   return (
     <div className="p-5 lg:p-8">
@@ -184,7 +184,7 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
           </form>
         ) : null}
         {canSell && atMarket ? <Link href={`/game/market?tab=sell&sellItem=${item.id}`} className="btn w-full">Rao bán</Link> : null}
-        {canSell && !atMarket ? <Link href="/game/world?error=Bạn cần tới Chợ Linh Bảo để giao dịch." className="btn w-full">Tới Chợ Linh Bảo</Link> : null}
+        {canSell && !atMarket ? <Link href="/game/world?error=Bạn cần tới Vạn Bảo Lâu để giao dịch." className="btn w-full">Tới Vạn Bảo Lâu</Link> : null}
         </>
       )}
     />

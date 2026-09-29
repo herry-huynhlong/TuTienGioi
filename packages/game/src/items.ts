@@ -3,6 +3,7 @@ import type { ItemCategory, ItemTemplate, Rarity } from "@ttg/db";
 export type ItemEconomy = {
   subType: string;
   icon: string;
+  visualKey: string;
   usage: string;
   systemBasePrice: bigint;
   npcBuyPrice: bigint;
@@ -144,6 +145,51 @@ const equipmentIcon: Record<string, string> = {
   ARTIFACT: "gem"
 };
 
+export const itemSpecificVisualKeys = [
+  "thanh-linh-thao",
+  "ngung-khi-thao",
+  "hac-thiet-quang",
+  "xich-dong-quang",
+  "hoi-khi-dan",
+  "duong-the-dan",
+  "truc-co-dan-ha",
+  "yeu-thu-bi",
+  "yeu-thu-nha",
+  "linh-moc",
+  "tu-diep-linh-thao",
+  "huyen-thiet",
+  "tinh-dong",
+  "bich-ngoc-tuy",
+  "tu-khi-dan",
+  "duong-hon-dan",
+  "truc-co-dan-trung",
+  "yeu-dan-nhat-giai",
+  "huyen-thu-cot",
+  "tu-linh-thach",
+  "thien-linh-thao",
+  "huyen-tinh",
+  "xich-viem-tinh-kim",
+  "ngoc-tuy-tinh-hoa",
+  "truc-co-dan-thuong",
+  "tay-tuy-dan",
+  "yeu-dan-nhi-giai",
+  "thien-tam-ti",
+  "dia-mach-linh-tinh",
+  "tu-linh-ngoc",
+  "huyen-thiet-kiem",
+  "thanh-van-dao-bao",
+  "thiet-moc-ho-phu",
+  "nhan-tu-linh",
+  "giay-than-hanh",
+  "hoi-xuan-dan",
+  "tu-linh-dan",
+  "pha-canh-dan",
+  "giai-doc-dan",
+  "linh-thach"
+] as const;
+
+const itemSpecificVisualKeySet = new Set<string>(itemSpecificVisualKeys);
+
 export function jsonRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -168,6 +214,7 @@ export function getItemEconomy(template: TemplateLike): ItemEconomy {
   return {
     subType: stringFromMeta(meta.subType) ?? inferSubType(template.category, template.equipSlot),
     icon: stringFromMeta(meta.icon) ?? inferIcon(template.category, template.equipSlot),
+    visualKey: stringFromMeta(meta.visualKey) ?? itemVisualKey({ category: template.category, icon: stringFromMeta(meta.icon) ?? inferIcon(template.category, template.equipSlot), equipSlot: template.equipSlot }),
     usage: stringFromMeta(meta.usage) ?? categoryUsage[template.category] ?? "Vật phẩm có thể dùng trong hành trình tu luyện.",
     systemBasePrice,
     npcBuyPrice: bigintFromMeta(meta.npcBuyPrice) ?? defaultNpcBuyPrice,
@@ -216,6 +263,18 @@ export function inferIcon(category: ItemCategory | string, equipSlot?: string | 
 export function inferSubType(category: ItemCategory | string, equipSlot?: string | null) {
   if (equipSlot) return equipSlot;
   return category;
+}
+
+export function itemVisualKey(item: { key?: string | null | undefined; category: ItemCategory | string; icon?: string | null | undefined; equipSlot?: string | null | undefined }) {
+  if (item.key && itemSpecificVisualKeySet.has(item.key)) return item.key;
+  const icon = item.icon ?? inferIcon(item.category, item.equipSlot);
+  if (icon === "pill") return "default-pill";
+  if (icon === "herb" || icon === "leaf") return "default-herb";
+  if (icon === "sword") return "default-weapon";
+  if (icon === "armor" || icon === "boots") return "default-armor";
+  if (icon === "manual" || icon === "scroll") return "default-manual";
+  if (icon === "gem" || icon === "ring" || icon === "talisman") return "default-artifact";
+  return "default-material";
 }
 
 export function marketListingMaxQuantity(ownedQuantity: number) {

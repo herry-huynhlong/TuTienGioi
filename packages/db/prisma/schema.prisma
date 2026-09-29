@@ -391,6 +391,7 @@ model Character {
   onboarding      OnboardingProgress[]
   quests          CharacterQuest[]
   questFlags      CharacterQuestFlag[]
+  npcStates       PlayerNpcState[]
   @@index([realmStageId])
   @@index([sectId])
   @@index([locationId])
@@ -591,6 +592,8 @@ model Location {
   routesTo     Route[] @relation("RouteDestination")
   characters   Character[]
   npcs         Npc[]
+  npcHomes     Npc[] @relation("NpcHomeLocation")
+  npcWorldStates NpcWorldState[]
   @@index([zoneId])
   @@index([securityLevel])
 }
@@ -1185,11 +1188,15 @@ model Npc {
   title           String
   description     String
   portraitUrl     String?
+  avatarUrl       String?
+  visualKey       String?
   iconKey         String @default("user")
   regionId        String?
   region          Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
   locationId      String
   location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  homeLocationId  String?
+  homeLocation    Location? @relation("NpcHomeLocation", fields: [homeLocationId], references: [id], onDelete: SetNull)
   npcTypes        NpcType[]
   sectId          String?
   sect            Sect? @relation(fields: [sectId], references: [id], onDelete: SetNull)
@@ -1205,10 +1212,52 @@ model Npc {
   metadata        Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  worldState      NpcWorldState?
+  playerStates    PlayerNpcState[]
   questStarts     QuestTemplate[] @relation("QuestStartNpc")
   questTurnIns    QuestTemplate[] @relation("QuestTurnInNpc")
   @@index([locationId, active])
+  @@index([homeLocationId])
   @@index([sectId])
+}
+
+model NpcWorldState {
+  id                String @id @default(cuid())
+  npcId             String @unique
+  npc               Npc @relation(fields: [npcId], references: [id], onDelete: Cascade)
+  currentLocationId String
+  currentLocation   Location @relation(fields: [currentLocationId], references: [id], onDelete: Cascade)
+  movementType      String @default("fixed")
+  route             Json @default("[]")
+  schedule          Json @default("{}")
+  state             Json @default("{}")
+  movedAt           DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@index([currentLocationId])
+  @@index([movementType])
+}
+
+model PlayerNpcState {
+  id                String @id @default(cuid())
+  characterId       String
+  character         Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  npcId             String
+  npc               Npc @relation(fields: [npcId], references: [id], onDelete: Cascade)
+  firstMetAt        DateTime?
+  lastMetAt         DateTime?
+  timesMet          Int @default(0)
+  lastLocationMetId String?
+  relationshipScore Int @default(0)
+  relationshipState String @default("Xa lạ")
+  lastDialogueNode  String?
+  flags             Json @default("{}")
+  questState        Json @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@unique([characterId, npcId])
+  @@index([characterId])
+  @@index([npcId])
+  @@index([relationshipState])
 }
 
 model DialogueSet {

@@ -3,6 +3,7 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { applyToSectAction, cancelSectApplicationAction, createSectAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { getSectRank, progressQuestEvent, sectAlignments, sectCreateCost } from "@ttg/game";
 import { BadgeCheck, Castle, Crown, Search, Shield, Sparkles, Users } from "lucide-react";
 
@@ -172,7 +173,7 @@ function CreateSectPanel({ characterLinhThach }: { characterLinhThach: bigint })
         <div>
           <p className="eyebrow">KHAI SƠN LẬP PHÁI</p>
           <h2>Dựng đạo thống Ngũ Phẩm</h2>
-          <p className="muted">Chi phí khai sơn: {sectCreateCost.toLocaleString("vi-VN")} Linh Thạch. Tông chủ nhận Tông Môn Đại Điện và Động Phủ Ngoại Môn cơ bản.</p>
+          <p className="muted">Chi phí khai sơn: <CurrencyAmount amount={sectCreateCost} />. Tông chủ nhận Tông Môn Đại Điện và Động Phủ Ngoại Môn cơ bản.</p>
         </div>
         <input className="field" name="name" placeholder="Tên tông môn" minLength={3} maxLength={48} required />
         <input className="field" name="tag" placeholder="Ký hiệu 2-6 ký tự" minLength={2} maxLength={6} required />
@@ -190,7 +191,7 @@ function CreateSectPanel({ characterLinhThach }: { characterLinhThach: bigint })
             <option value={SectAlignment.DEMONIC}>Ma đạo</option>
           </select>
         </div>
-        <button className="btn" type="submit" disabled={!canPay}>Khai sơn lập phái - {sectCreateCost.toLocaleString("vi-VN")} Linh Thạch</button>
+        <button className="btn" type="submit" disabled={!canPay}>Khai sơn lập phái - <CurrencyAmount amount={sectCreateCost} /></button>
         {!canPay ? <p className="muted">Bạn chưa đủ Linh Thạch để khai sơn.</p> : null}
       </form>
       <aside className="panel sect-create-preview">

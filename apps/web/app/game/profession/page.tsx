@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { FacilityPage, FacilityPanel, FacilityTutorial } from "@/components/FacilityPage";
 import { formatRarity, formatService } from "@/lib/format";
 import { claimCraftAction, startCraftAction } from "@/lib/forms";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { ItemVisual } from "@/components/ItemCard";
 import { professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationLabels, professionStationServices } from "@ttg/game";
 import { CheckCircle2, Lock, Play, Timer } from "lucide-react";
@@ -135,7 +136,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
                 </div>
                 <div className="profession-recipe-meta">
                   <span><Timer size={14} /> {recipe.craftMinutes} phút</span>
-                  <span>{recipe.fee.toLocaleString("vi-VN")} Linh Thạch</span>
+                  <span><CurrencyAmount amount={recipe.fee} /></span>
                   <span>+{recipe.professionExp} EXP</span>
                   <span>{professionStationLabels[recipe.station] ?? recipe.station}</span>
                 </div>

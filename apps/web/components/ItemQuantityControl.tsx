@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 
 export function ItemQuantityControl({
   name = "quantity",
@@ -57,7 +58,7 @@ export function ItemQuantityControl({
         />
         <button type="button" disabled={locked || quantity >= safeMax} onClick={() => setQuantity((value) => clamp(value + 1, safeMin, safeMax))}>+</button>
       </div>
-      {total ? <b className="quantity-total">Tổng: {total} {unitLabel}</b> : null}
+      {total ? <b className="quantity-total">Tổng: {unitLabel === "Linh Thạch" ? <CurrencyAmount amount={total.replace(/\D/g, "") || "0"} /> : `${total} ${unitLabel}`}</b> : null}
       {reason && (disabled || safeMax < 1) ? <small className="quantity-disabled-reason">{reason}</small> : null}
       {submitLabel ? <button type="submit" className="btn btn-secondary" disabled={locked}>{pending ? "Đang xử lý..." : `${submitLabel} ${quantity > 0 ? quantity : ""}`}</button> : null}
     </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { logoutAction } from "@/lib/forms";
 import { currentEnergy } from "@ttg/game";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { RealtimeBadge } from "@/components/RealtimeProvider";
 import {
   Backpack,
@@ -140,7 +141,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
               <ResourceBar label="Thể lực" value={energy} max={character.energyMax} tone="energy" />
               <ResourceBar label="Tu vi" value={Math.floor(cultivationProgress)} max={100} tone="cultivation" compact />
               <div className="sidebar-ledger">
-                <div><span>Linh thạch</span><b>{character.linhThach.toString()}</b></div>
+                <div><span>Linh thạch</span><b><CurrencyAmount amount={character.linhThach} /></b></div>
                 <div><span>Tiên ngọc</span><b>{character.tienNgoc.toString()}</b></div>
                 <div><span>Danh vọng</span><b>{character.reputation}</b></div>
               </div>

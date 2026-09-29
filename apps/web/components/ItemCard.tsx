@@ -28,7 +28,7 @@ export function ItemSummaryCard({
 }: {
   template: ItemTemplateLike;
   quantityLabel: string;
-  priceLabel: string;
+  priceLabel: React.ReactNode;
   href?: string;
   selected?: boolean;
   sellerLabel?: string;

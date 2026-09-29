@@ -1,7 +1,8 @@
 import { ItemCategory, Rarity } from "@ttg/db";
 import { getItemEconomy, jsonRecord } from "@ttg/game";
 import { createItemTemplateAction, updateItemTemplateAction, uploadItemImageAction } from "@/lib/admin-actions";
-import { formatCurrency, ItemDetailPanel } from "@/components/ItemCard";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { ItemDetailPanel } from "@/components/ItemCard";
 
 type ItemLike = {
   id?: string;
@@ -31,7 +32,7 @@ export function ItemAdminForm({ item }: { item?: ItemLike }) {
             <ItemDetailPanel
               template={item}
               details={[
-                { label: "Giá", value: `${formatCurrency(economy!.systemBasePrice)} Linh Thạch` },
+                { label: "Giá", value: <CurrencyAmount amount={economy!.systemBasePrice} /> },
                 { label: "Market", value: economy!.systemMarketEnabled ? "Bán hệ thống" : "Không bán hệ thống" }
               ]}
             />

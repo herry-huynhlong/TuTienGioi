@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory, RecipeUnlockType } from "@ttg/db";
 import { calculateCultivationReward, calculateTrainingGain, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, isCultivationDurationKey, isTrainingDurationKey, isTrainingType, locationActivityConfigs, parseEncounterTable, simulateCombat, trainingDurationConfigs, trainingStatCap, trainingTypeConfigs, travelDurationSeconds, type CultivationDurationKey, type LocationActivityMode, type TrainingDurationKey, type TrainingTypeKey } from "./rules.js";
 import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
+import { getItemUsageDefinition, type ItemEffectSpec } from "./item-effects.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
 import { progressQuestEvent } from "./quests.js";
@@ -245,6 +246,41 @@ function modifierValue(value: unknown, key: string): number {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
   const raw = (value as Record<string, unknown>)[key];
   return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+}
+
+function payloadNumber(effect: ItemEffectSpec, key: string): number {
+  const raw = effect.payload[key];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+}
+
+function effectMessage(effect: ItemEffectSpec, value: number) {
+  if (effect.type === "HEAL_HP") return `hồi ${value} Sinh Lực`;
+  if (effect.type === "RESTORE_QI") return `hồi ${value} Chân Nguyên`;
+  if (effect.type === "RESTORE_ENERGY") return `hồi ${value} Thể Lực`;
+  if (effect.type === "GAIN_CULTIVATION") return `nhận ${value} Tu Vi`;
+  if (effect.type === "BUFF_STAT") return "kích hoạt hiệu ứng tạm thời";
+  return "kích hoạt hiệu ứng";
+}
+
+function percentAmount(currentMax: number, percent: number) {
+  return Math.max(0, Math.floor((currentMax * percent) / 100));
+}
+
+function currentEnergySnapshot(character: { energyStored: number; energyMax: number; energyUpdatedAt: Date }, now: Date) {
+  return currentEnergy(character, now);
+}
+
+async function refreshCharacterBuff(tx: Tx, characterId: string, sourceId: string, effect: ItemEffectSpec, now: Date) {
+  const durationSeconds = payloadNumber(effect, "durationSeconds");
+  const value = parseJsonRecord(effect.payload.value);
+  const effectType = typeof effect.payload.effectType === "string" ? effect.payload.effectType : "BUFF";
+  const duration = durationSeconds > 0 ? durationSeconds : 3600;
+  const endsAt = new Date(now.getTime() + duration * 1000);
+  await tx.characterBuff.upsert({
+    where: { characterId_sourceType_sourceId_effectType: { characterId, sourceType: "ITEM", sourceId, effectType } },
+    update: { value: inputJson(value), startedAt: now, endsAt, stackRule: "REFRESH_DURATION" },
+    create: { characterId, sourceType: "ITEM", sourceId, effectType, value: inputJson(value), startedAt: now, endsAt, stackRule: "REFRESH_DURATION" }
+  });
 }
 
 function itemStatDelta(value: unknown, direction: 1 | -1) {
@@ -1177,28 +1213,76 @@ export async function consumeItem(db: Db, characterId: string, itemId: string, q
     if (item.template.category !== ItemCategory.CONSUMABLE) throw new GameError("NOT_CONSUMABLE", "Vật phẩm này không thể sử dụng.");
     if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Không thể dùng vật phẩm đang rao bán.");
     if (item.quantity <= 0 || quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Số lượng vật phẩm không hợp lệ.");
-    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId } });
-    const hpRestore = modifierValue(item.template.baseModifiers, "hpRestore");
-    const qiRestore = modifierValue(item.template.baseModifiers, "qiRestore");
-    const cultivation = modifierValue(item.template.baseModifiers, "cultivation");
-    const breakthroughBps = modifierValue(item.template.baseModifiers, "breakthroughBps");
+    const usage = getItemUsageDefinition(item.template);
+    if (!usage.usable || usage.action !== "USE") throw new GameError("ITEM_CONTEXT_REQUIRED", usage.reason ?? "Vật phẩm này cần ngữ cảnh sử dụng khác.");
+    if (usage.runtime !== "ACTIVE") throw new GameError("ITEM_CONTEXT_REQUIRED", usage.reason ?? "Vật phẩm này chưa thể dùng trực tiếp.");
+    if (usage.effects.some((effect) => effect.type === "BUFF_STAT") && quantity > 1) throw new GameError("INVALID_QUANTITY", "Vật phẩm tạo buff chỉ dùng từng cái một.");
+    const now = new Date();
+    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { realmStage: { include: { realm: true } } } });
+    const changes: Prisma.CharacterUpdateInput = {};
+    const messages: string[] = [];
+    let applied = 0;
+    let nextHp = character.hp;
+    let nextQi = character.qi;
+    let nextEnergy = currentEnergySnapshot(character, now);
+
+    for (const effect of usage.effects) {
+      if (effect.type === "HEAL_HP") {
+        const amount = payloadNumber(effect, "amount") || percentAmount(character.maxHp, payloadNumber(effect, "percent"));
+        const room = Math.max(0, character.maxHp - nextHp);
+        const delta = Math.min(room, amount * quantity);
+        if (delta > 0) {
+          nextHp += delta;
+          changes.hp = nextHp;
+          messages.push(effectMessage(effect, delta));
+          applied += 1;
+        }
+      } else if (effect.type === "RESTORE_QI") {
+        const amount = payloadNumber(effect, "amount") || percentAmount(character.maxQi, payloadNumber(effect, "percent"));
+        const room = Math.max(0, character.maxQi - nextQi);
+        const delta = Math.min(room, amount * quantity);
+        if (delta > 0) {
+          nextQi += delta;
+          changes.qi = nextQi;
+          messages.push(effectMessage(effect, delta));
+          applied += 1;
+        }
+      } else if (effect.type === "RESTORE_ENERGY") {
+        const amount = payloadNumber(effect, "amount") || percentAmount(character.energyMax, payloadNumber(effect, "percent"));
+        const room = Math.max(0, character.energyMax - nextEnergy);
+        const delta = Math.min(room, amount * quantity);
+        if (delta > 0) {
+          nextEnergy += delta;
+          changes.energyStored = nextEnergy;
+          changes.energyUpdatedAt = now;
+          messages.push(effectMessage(effect, delta));
+          applied += 1;
+        }
+      } else if (effect.type === "GAIN_CULTIVATION") {
+        const amount = payloadNumber(effect, "amount");
+        const result = amount > 0 ? await addCultivationClamped(tx, characterId, BigInt(amount * quantity)) : { applied: 0n };
+        if (result.applied > 0n) {
+          messages.push(effectMessage(effect, Number(result.applied)));
+          applied += 1;
+        }
+      } else if (effect.type === "BUFF_STAT") {
+        await refreshCharacterBuff(tx, characterId, item.template.key, effect, now);
+        messages.push(effectMessage(effect, 0));
+        applied += 1;
+      } else if (effect.type === "CLEANSE") {
+        // Debuff rows are not modeled yet; do not consume cleanse-only items without a real target.
+      }
+    }
+    if (applied === 0) throw new GameError("NO_EFFECT", "Vật phẩm chưa tạo hiệu quả nào, không tiêu hao.");
     const updated = await tx.itemInstance.updateMany({
       where: { id: item.id, ownerId: characterId, quantity: { gte: quantity } },
       data: { quantity: { decrement: quantity } }
     });
     if (updated.count !== 1) throw new GameError("ALREADY_USED", "Vật phẩm đã được sử dụng.");
     await tx.itemInstance.deleteMany({ where: { id: item.id, quantity: { lte: 0 } } });
-    const data: Prisma.CharacterUpdateInput = {
-      hp: Math.min(character.maxHp, character.hp + hpRestore * quantity),
-      qi: Math.min(character.maxQi, character.qi + qiRestore * quantity),
-      ...(breakthroughBps > 0 ? { breakthroughBonusBps: { increment: breakthroughBps * quantity } } : {})
-    };
-    await tx.character.update({
-      where: { id: characterId },
-      data
-    });
-    if (cultivation > 0) await addCultivationClamped(tx, characterId, BigInt(cultivation * quantity));
-    await tx.gameLog.create({ data: { characterId, type: "inventory", message: `Sử dụng ${item.template.name} x${quantity}.` } });
-    return { itemName: item.template.name, quantity };
+    if (Object.keys(changes).length > 0) await tx.character.update({ where: { id: characterId }, data: changes });
+    const detail = messages.length > 0 ? ` (${messages.join(", ")})` : "";
+    await tx.gameLog.create({ data: { characterId, type: "inventory", message: `Sử dụng ${item.template.name} x${quantity}${detail}.`, metadata: inputJson({ itemKey: item.template.key, effects: usage.effects }) } });
+    return { itemName: item.template.name, quantity, effects: messages };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

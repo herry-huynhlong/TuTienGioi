@@ -1,7 +1,7 @@
 import { prisma } from "@ttg/db";
 import { currentSystemMarketPeriod } from "@ttg/game";
-import { formatCurrency } from "@/components/ItemCard";
 import { ActionAlert } from "@/components/ActionAlert";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { adjustSystemMarketStockAction, refreshAdminMarketStockAction } from "@/lib/admin-actions";
 
 export default async function AdminMarketPage({ searchParams }: { searchParams?: Promise<{ ok?: string; error?: string }> }) {
@@ -24,7 +24,7 @@ export default async function AdminMarketPage({ searchParams }: { searchParams?:
                 <td><b>{stock.template.name}</b><small>{stock.template.key}</small></td>
                 <td>{stock.template.rarity}</td>
                 <td>{stock.stock.toLocaleString("vi-VN")}</td>
-                <td>{formatCurrency(stock.price)} Linh Thạch</td>
+                <td><CurrencyAmount amount={stock.price} /></td>
                 <td>
                   <form action={adjustSystemMarketStockAction} className="admin-inline-form">
                     <input type="hidden" name="stockId" value={stock.id} />

@@ -3,6 +3,7 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, completeSectMissionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectSectApplicationAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
@@ -85,7 +86,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
         </div>
         <div className="sect-home-stats">
           <span><Users size={16} /> {sect.members.length}/{sect.memberLimit} Thành viên</span>
-          <span><Gem size={16} /> {sect.treasury.toLocaleString("vi-VN")} Linh Thạch</span>
+          <span><Gem size={16} /> <CurrencyAmount amount={sect.treasury} /></span>
           <span><Sparkles size={16} /> {sect.reputation.toLocaleString("vi-VN")} Uy Danh</span>
           <span><Crown size={16} /> {leader?.name ?? "Chưa rõ"}</span>
         </div>
@@ -209,7 +210,7 @@ function MissionsTab({ sect }: { sect: any }) {
               <span>Mục tiêu <b>{formatMissionObjective(mission, objective)}</b></span>
               <span>Tiến độ <b>{active ? `${active.progress}/${active.targetCount}` : completed ? `${completed.targetCount}/${completed.targetCount}` : `0/${mission.targetCount}`}</b></span>
             </div>
-            <p className="muted">Thưởng: +{reward.cultivation ?? 0} Tu Vi · +{reward.linhThach ?? 0} Linh Thạch · +{reward.contribution ?? 0} Cống Hiến · +{reward.reputation ?? 0} Uy Danh</p>
+            <p className="muted">Thưởng: +{reward.cultivation ?? 0} Tu Vi · <CurrencyAmount amount={reward.linhThach ?? 0} /> · +{reward.contribution ?? 0} Cống Hiến · +{reward.reputation ?? 0} Uy Danh</p>
             {active?.status === "READY_TO_TURN_IN" ? (
               <form action={completeSectMissionAction}>
                 <input type="hidden" name="sectId" value={sect.id} />
@@ -305,7 +306,7 @@ function DomainTab({ sect, canManage, canRankUp }: { sect: any; canManage: boole
         {next ? (
           <>
             <p>{rank.shortLabel} → {next.shortLabel}</p>
-            <p className="muted">Yêu cầu: {rank.reputationRequired.toLocaleString("vi-VN")} Uy Danh, {rank.rankUpCost?.treasury.toLocaleString("vi-VN")} Linh Thạch, {rank.rankUpCost?.memberCount} thành viên.</p>
+            <p className="muted">Yêu cầu: {rank.reputationRequired.toLocaleString("vi-VN")} Uy Danh, <CurrencyAmount amount={rank.rankUpCost?.treasury ?? 0} />, {rank.rankUpCost?.memberCount} thành viên.</p>
             <p className="muted">Tài nguyên: {rank.rankUpCost?.resources.map((item) => `${item.quantity} ${item.key}`).join(", ")}</p>
             {canRankUp ? (
               <form action={upgradeSectRankAction}>
@@ -327,7 +328,7 @@ function StorageTab({ sect, characterItems, selectedStorageId, canManageTreasury
       <div className="panel sect-board">
         <h2>Quỹ Tông Môn</h2>
         <div className="sect-metrics vertical">
-          <span>Linh Thạch <b>{sect.treasury.toLocaleString("vi-VN")}</b></span>
+          <span>Quỹ <b><CurrencyAmount amount={sect.treasury} /></b></span>
           <span>Loại vật phẩm <b>{sect.inventoryItems.length}</b></span>
           <span>Quyền rút quỹ <b>{canManageTreasury ? "Có" : "Không"}</b></span>
         </div>

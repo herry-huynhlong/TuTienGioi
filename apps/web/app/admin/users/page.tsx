@@ -1,5 +1,6 @@
 import { Currency, prisma } from "@ttg/db";
 import { ActionAlert } from "@/components/ActionAlert";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { adjustCharacterCurrencyAction, grantItemToCharacterAction } from "@/lib/admin-actions";
 
 export default async function AdminUsersPage({ searchParams }: { searchParams?: Promise<{ q?: string; ok?: string; error?: string }> }) {
@@ -26,7 +27,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
               <h2>{user.username}</h2>
               <p className="muted">{user.email} · {user.role} · {user.status}</p>
               <p>{user.character.name} · {user.character.realmStage.realm.name} {user.character.realmStage.name} · {user.character.currentLocation?.name ?? "Không rõ"}</p>
-              <p className="text-gold">Linh Thạch {user.character.linhThach.toLocaleString("vi-VN")} · Tiên Ngọc {user.character.tienNgoc.toLocaleString("vi-VN")}</p>
+              <p className="text-gold"><CurrencyAmount amount={user.character.linhThach} /> · Tiên Ngọc {user.character.tienNgoc.toLocaleString("vi-VN")}</p>
             </div>
             <form action={grantItemToCharacterAction} className="admin-inline-form">
               <input type="hidden" name="characterId" value={user.character.id} />

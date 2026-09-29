@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import type { RealtimeConversation, RealtimeMessage } from "@/lib/realtime";
 import Link from "next/link";
 import { Ban, Gem, MessageSquare, Send, Users } from "lucide-react";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 
 type ChatSnapshot = {
   conversations: RealtimeConversation[];
@@ -18,7 +19,7 @@ type TransferItem = {
   category: string;
   quantity: number;
   stackable: boolean;
-  priceLabel: string;
+  priceAmount: string;
 };
 
 export function RealtimeChat({
@@ -174,7 +175,7 @@ function CurrencyTransfer({ receiverId, balance }: { receiverId: string; balance
   return (
     <div className="transfer-box">
       <h3>Linh Thạch</h3>
-      <p className="muted">Số dư: {balanceLabel} Linh Thạch.</p>
+      <p className="muted">Số dư: <CurrencyAmount amount={balanceLabel.replace(/\D/g, "") || "0"} />.</p>
       {error ? <small className="quantity-disabled-reason">{error}</small> : null}
       <div className="quantity-control">
         <button type="button" onClick={() => setAmount((value) => Math.max(1, value - 1))}>-</button>
@@ -208,7 +209,7 @@ function ItemTransfer({ receiverId, items }: { receiverId: string; items: Transf
           <button key={item.id} type="button" className={`transfer-item-card ${item.id === selectedId ? "selected" : ""}`} onClick={() => { setSelectedId(item.id); setQuantity(1); }}>
             <b>{item.name}</b>
             <small>{item.rarity} · {item.category} · x{item.quantity}</small>
-            <span>{item.priceLabel}</span>
+            <span><CurrencyAmount amount={item.priceAmount} /></span>
           </button>
         ))}
       </div>

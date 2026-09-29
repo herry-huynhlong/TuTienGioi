@@ -1,6 +1,5 @@
 import { ActionAlert } from "@/components/ActionAlert";
 import { RealtimeChat } from "@/components/RealtimeChat";
-import { formatCurrency } from "@/components/ItemCard";
 import { getUser } from "@/lib/auth";
 import { formatItemCategory, formatRarity } from "@/lib/format";
 import { getRealtimeSnapshot } from "@/lib/realtime";
@@ -80,7 +79,7 @@ export default async function ChatPage({ searchParams }: { searchParams?: Promis
             category: economy.subType || formatItemCategory(item.template.category),
             quantity: item.quantity,
             stackable: item.template.stackable,
-            priceLabel: `${formatCurrency(economy.systemBasePrice)} Linh Thạch`
+            priceAmount: economy.systemBasePrice.toString()
           };
         })}
       />

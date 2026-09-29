@@ -153,6 +153,23 @@ button, input, select, textarea {
   height: 100%;
 }
 
+.currency-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  white-space: nowrap;
+  color: #d6b25e;
+  font-weight: 900;
+}
+
+.currency-amount img {
+  width: 1.12em;
+  height: 1.12em;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(214, 178, 94, 0.22), 0 0 10px rgba(45, 212, 191, 0.14);
+}
+
 .resource-life { background: linear-gradient(90deg, #6e2225, #d44b4f); }
 .resource-qi { background: linear-gradient(90deg, #1e5c67, #39c7d9); }
 .resource-energy { background: linear-gradient(90deg, #566f23, #a9d64f); }

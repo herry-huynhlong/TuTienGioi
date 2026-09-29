@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
 
 export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
   const params = await searchParams;
@@ -142,7 +143,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
             <Info label="Hoạt động" value={activeCount > 0 ? `${activeCount} việc đang chạy` : "Đang rảnh"} accent={activeCount > 0} />
             <Info label="Vị trí" value={locationName} />
-            <Info label="Linh thạch" value={c.linhThach.toString()} accent />
+            <Info label="Linh thạch" value={<CurrencyAmount amount={c.linhThach} />} accent />
           </div>
         </Panel>
 
@@ -307,7 +308,7 @@ function Panel({ title, children, className = "" }: { title: string; children: R
   );
 }
 
-function Info({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function Info({ label, value, accent = false }: { label: string; value: React.ReactNode; accent?: boolean }) {
   return (
     <div>
       <span>{label}</span>

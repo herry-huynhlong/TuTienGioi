@@ -7,7 +7,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
-import { formatCurrency, ItemSummaryCard } from "@/components/ItemCard";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { ItemSummaryCard } from "@/components/ItemCard";
 import { Compass, Home, Landmark, Mail, MessageCircle, Route, ScrollText, Shield, ShoppingBag, Swords, Trees, UserRound } from "lucide-react";
 
 const activityLabels: Record<string, string> = {
@@ -136,7 +137,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
                     </div>
                     <div className="route-card-meta">
                       <span><b>Thời gian</b>{formatTravelDuration(route.travelMinutes)}</span>
-                      <span><b>Chi phí</b>{route.travelCost > 0n ? `${route.travelCost.toString()} Linh thạch` : "Miễn phí"}</span>
+                      <span><b>Chi phí</b>{route.travelCost > 0n ? <CurrencyAmount amount={route.travelCost} /> : "Miễn phí"}</span>
                       <span><b>Nguy hiểm</b>{formatDanger(route.dangerLevel)}</span>
                     </div>
                     {hasBlockingActivity ? <p className="route-disabled-note">Hoàn thành hoặc dừng hoạt động hiện tại để di chuyển.</p> : null}
@@ -336,7 +337,7 @@ function SituationPanel({
           </div>
         ) : itemName ? <p className="mt-2"><b className="text-gold">{itemName}</b> x{typeof reward.quantity === "number" ? reward.quantity : 1}</p> : null}
         {combat.winner ? <p className="mt-2">{combat.winner === "player" ? "Bạn đã đánh bại yêu thú." : "Bạn rút khỏi trận chiến sau khi bị thương."}</p> : null}
-        {typeof loot.linhThach === "string" && loot.linhThach !== "0" ? <p className="mt-2 text-gold">Linh thạch +{loot.linhThach}</p> : null}
+        {typeof loot.linhThach === "string" && loot.linhThach !== "0" ? <p className="mt-2 text-gold">+<CurrencyAmount amount={loot.linhThach} /></p> : null}
         {lootItems.length > 0 ? (
           <div className="reward-item-grid mt-3">
             {lootItems.map((entry, index) => {
@@ -385,7 +386,7 @@ function RewardItemCard({ template, quantity, source }: { template: ItemTemplate
     <ItemSummaryCard
       template={template}
       quantityLabel={`x${quantity}`}
-      priceLabel={`${formatCurrency(economy.systemBasePrice)} Linh Thạch`}
+      priceLabel={<CurrencyAmount amount={economy.systemBasePrice} />}
       sellerLabel={source}
     />
   );

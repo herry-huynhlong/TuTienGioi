@@ -6,7 +6,8 @@ import { formatRarity } from "@/lib/format";
 import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, recordOnboardingEvent, refreshSystemMarketStock } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
-import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
 const categories = [
@@ -135,7 +136,7 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
         </form>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
           <span className="muted">{systemStocks.length} vật phẩm Vạn Bảo Lâu · {listings.length} hàng người chơi</span>
-          <span className="text-gold">Linh thạch: {linhThach.toString()}</span>
+          <span className="text-gold">Linh thạch: <CurrencyAmount amount={linhThach} /></span>
         </div>
       </section>
       <h2 className="mt-5 text-xl font-black text-gold">Vạn Bảo Lâu</h2>
@@ -147,7 +148,7 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
               { label: "Nguồn", value: "Vạn Bảo Lâu" },
               { label: "Điều kiện", value: marketCondition(selectedSystem.template) },
               { label: "Còn lại", value: selectedSystem.stock.toLocaleString("vi-VN") },
-              { label: "Giá", value: `${formatCurrency(selectedSystem.price)} Linh Thạch / cái` }
+              { label: "Giá", value: <><CurrencyAmount amount={selectedSystem.price} /> / cái</> }
             ]}
             showModifiers={false}
             action={<SystemBuyForm stock={selectedSystem} balance={linhThach} disabled={disabled} />}
@@ -163,7 +164,7 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
               { label: "Điều kiện", value: marketCondition(selectedListing.item.template) },
               { label: "Người bán", value: selectedListing.seller.name },
               { label: "Số lượng", value: selectedListing.quantity.toLocaleString("vi-VN") },
-              { label: "Giá", value: `${formatCurrency(selectedListing.price)} Linh Thạch / cái` }
+              { label: "Giá", value: <><CurrencyAmount amount={selectedListing.price} /> / cái</> }
             ]}
             showModifiers={false}
             action={<PlayerBuyForm listing={selectedListing} balance={linhThach} disabled={disabled} />}
@@ -208,7 +209,7 @@ function SystemStockCard({ stock, balance, disabled, selected }: { stock: any; b
     <ItemSummaryCard
       template={stock.template}
       quantityLabel={`Còn ${stock.stock}`}
-      priceLabel={`${formatCurrency(stock.price)} Linh Thạch`}
+      priceLabel={<CurrencyAmount amount={stock.price} />}
       href={`/game/market?tab=buy&detail=system:${stock.id}`}
       selected={selected}
       action={<SystemBuyForm stock={stock} balance={balance} disabled={disabled} />}
@@ -233,7 +234,7 @@ function ListingCard({ listing, buyerId, balance, disabled, selected }: { listin
     <ItemSummaryCard
       template={listing.item.template}
       quantityLabel={`x${listing.quantity}`}
-      priceLabel={`${formatCurrency(listing.price)} Linh Thạch`}
+      priceLabel={<CurrencyAmount amount={listing.price} />}
       href={`/game/market?tab=buy&detail=listing:${listing.id}`}
       selected={selected}
       sellerLabel={`Người bán: ${listing.seller.name}`}
@@ -273,7 +274,7 @@ function SellSelectedItem({ item, disabled }: { item: any; disabled: boolean }) 
       template={item.template}
       details={[
         { label: "Sở hữu", value: item.quantity.toLocaleString("vi-VN") },
-        { label: "Vạn Bảo Lâu thu mua", value: economy.sellableToNpc ? `${formatCurrency(economy.npcBuyPrice)} Linh Thạch / cái` : "Không thu mua" },
+        { label: "Vạn Bảo Lâu thu mua", value: economy.sellableToNpc ? <><CurrencyAmount amount={economy.npcBuyPrice} /> / cái</> : "Không thu mua" },
         { label: "Rao tối đa", value: `${maxQuantity} / lần` }
       ]}
       showModifiers={false}
@@ -309,7 +310,7 @@ function MyListingsTab({ listings }: { listings: Array<any> }) {
             key={listing.id}
             template={listing.item.template}
             quantityLabel={`x${listing.quantity}`}
-            priceLabel={`${formatCurrency(listing.price)} Linh Thạch`}
+            priceLabel={<CurrencyAmount amount={listing.price} />}
             action={(
               <form action={cancelMarketListingAction} className="item-card-action single">
                 <input type="hidden" name="listingId" value={listing.id} />

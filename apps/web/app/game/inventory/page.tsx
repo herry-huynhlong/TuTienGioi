@@ -3,10 +3,11 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { consumeItemAction, equipItemAction, sellItemToNpcAction, unequipItemAction } from "@/lib/forms";
 import { formatEquipmentSlot } from "@/lib/format";
-import { getItemEconomy } from "@ttg/game";
+import { getItemEconomy, getItemUsageDefinition } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
-import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
+import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
 const equipmentSlots = ["WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "TALISMAN", "ARTIFACT"] as const;
@@ -143,7 +144,7 @@ function ItemTile({ item, selected }: { item: InventoryItem; selected: boolean }
     <ItemSummaryCard
       template={item.template}
       quantityLabel={`x${item.quantity}`}
-      priceLabel={`${formatCurrency(economy.systemBasePrice)} Linh Thạch`}
+      priceLabel={<CurrencyAmount amount={economy.systemBasePrice} />}
       href={`/game/inventory?item=${item.id}`}
       selected={selected}
     />
@@ -152,8 +153,9 @@ function ItemTile({ item, selected }: { item: InventoryItem; selected: boolean }
 
 function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean }) {
   const activeListing = item.listings[0];
+  const usage = getItemUsageDefinition(item.template);
   const canEquip = item.template.category === "EQUIPMENT" && Boolean(item.template.equipSlot) && !activeListing;
-  const canConsume = item.template.category === "CONSUMABLE" && !activeListing;
+  const canConsume = usage.action === "USE" && usage.runtime === "ACTIVE" && !activeListing;
   const canSell = item.template.tradeable && !item.bound && !activeListing;
   const economy = getItemEconomy(item.template);
   return (
@@ -162,12 +164,17 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
       source="Túi Đồ"
       details={[
         { label: "Số lượng", value: `x${item.quantity}` },
+        { label: "Công dụng", value: usage.usable ? usage.effects.map((effect) => effect.type).join(", ") || "Theo ngữ cảnh" : "Nguyên liệu / không dùng trực tiếp" },
+        { label: "Có thể dùng", value: usage.usable ? `${usage.combatUsable ? "Combat" : ""}${usage.combatUsable && usage.outOfCombatUsable ? " / " : ""}${usage.outOfCombatUsable ? "Ngoài combat" : ""}` || "Theo ngữ cảnh" : "Không" },
+        { label: "Tiêu hao", value: usage.consumptionMode === "NONE" ? "Không" : usage.consumptionMode },
+        ...(usage.durationSeconds ? [{ label: "Thời lượng", value: `${Math.round(usage.durationSeconds / 60)} phút` }] : []),
+        ...(usage.reason ? [{ label: "Điều kiện dùng", value: usage.reason }] : []),
         { label: "Điều kiện", value: item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch" },
         ...(item.equippedSlot ? [{ label: "Đang trang bị", value: formatEquipmentSlot(item.equippedSlot) }] : [])
       ]}
       action={(
         <>
-          {activeListing ? <p className="badge">Đang bày bán: {formatCurrency(activeListing.price)} Linh Thạch</p> : null}
+          {activeListing ? <p className="badge">Đang bày bán: <CurrencyAmount amount={activeListing.price} /></p> : null}
         {item.equippedSlot ? (
           <form action={unequipItemAction}>
             <input type="hidden" name="itemId" value={item.id} />

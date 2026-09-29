@@ -1,30 +1,24 @@
 import Link from "next/link";
 import { logoutAction } from "@/lib/forms";
 import { currentEnergy } from "@ttg/game";
+import { RealtimeBadge } from "@/components/RealtimeProvider";
 import {
   Backpack,
-  BookOpen,
   BriefcaseBusiness,
   ChevronRight,
   Compass,
   Dumbbell,
   Gavel,
   Hammer,
-  Home,
   Landmark,
-  Mail,
-  Map,
   MessageSquare,
   Mountain,
-  ScrollText,
   Settings,
-  Shield,
   ShoppingBag,
-  Swords,
   Trophy,
-  User,
   Users,
   Lock,
+  ScrollText,
   type LucideIcon
 } from "lucide-react";
 
@@ -37,6 +31,7 @@ type NavLink = {
   status: FeatureStatus;
   featureKey?: keyof FeatureUnlocks;
   adminOnly?: boolean;
+  badge?: "messages" | "friends" | "notifications";
 };
 
 type NavGroup = {
@@ -48,24 +43,13 @@ type FeatureUnlocks = Record<string, { unlocked: boolean; reason: string }>;
 
 const navGroups: NavGroup[] = [
   {
-    title: "Tổng quan",
-    links: [
-      { href: "/game", label: "Tổng Quan", icon: Home, status: "implemented" },
-      { href: "/game/character", label: "Nhân Vật", icon: User, status: "implemented", featureKey: "character" },
-      { href: "/game/world", label: "Thế Giới", icon: Mountain, status: "implemented", featureKey: "world" },
-      { href: "/game/leaderboard", label: "Xếp Hạng", icon: Trophy, status: "implemented" }
-    ]
-  },
-  {
-    title: "Tu luyện",
+    title: "Truyện",
     links: [
       { href: "/game", label: "Tu Luyện", icon: Compass, status: "implemented", featureKey: "cultivation" },
       { href: "/game/training", label: "Rèn Luyện", icon: Dumbbell, status: "coming_soon", featureKey: "character" },
       { href: "/game/location", label: "Lịch Luyện", icon: Mountain, status: "partial", featureKey: "exploration" },
       { href: "/game/quests", label: "Nhiệm Vụ", icon: ScrollText, status: "partial", featureKey: "world" },
-      { href: "/game/inventory", label: "Túi Đồ", icon: Backpack, status: "partial", featureKey: "character" },
-      { href: "/game/techniques", label: "Công Pháp", icon: BookOpen, status: "partial", featureKey: "character" },
-      { href: "/game/bestiary", label: "Đồ Giám", icon: Swords, status: "partial", featureKey: "bestiary" }
+      { href: "/game/inventory", label: "Túi Đồ", icon: Backpack, status: "partial", featureKey: "character" }
     ]
   },
   {
@@ -79,18 +63,17 @@ const navGroups: NavGroup[] = [
   {
     title: "Xã hội",
     links: [
-      { href: "/game/sect", label: "Tông Môn", icon: Shield, status: "partial", featureKey: "sect" },
-      { href: "/game/friends", label: "Bạn Bè", icon: Users, status: "coming_soon" },
-      { href: "/game/mail", label: "Thư", icon: Mail, status: "partial" },
-      { href: "/game/chat", label: "Chat", icon: MessageSquare, status: "coming_soon" }
+      { href: "/game/friends", label: "Bạn Bè", icon: Users, status: "partial", badge: "friends" },
+      { href: "/game/chat", label: "Tin Nhắn", icon: MessageSquare, status: "partial", badge: "messages" },
+      { href: "/game/settings", label: "Cài Đặt", icon: Settings, status: "partial" }
     ]
   },
   {
-    title: "Nội dung",
+    title: "Quản trị",
     links: [
-      { href: "/game/secret-realm", label: "Bí Cảnh", icon: Map, status: "coming_soon", featureKey: "secretRealm" },
+      { href: "/game/world", label: "Thế Giới", icon: Mountain, status: "implemented", featureKey: "world" },
+      { href: "/game/leaderboard", label: "Xếp Hạng", icon: Trophy, status: "implemented" },
       { href: "/game/heavenly", label: "Thiên Cơ Các", icon: ScrollText, status: "coming_soon" },
-      { href: "/game/settings", label: "Cài Đặt", icon: Settings, status: "coming_soon" },
       { href: "/admin", label: "Admin", icon: Landmark, status: "implemented", adminOnly: true }
     ]
   }
@@ -185,6 +168,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
                     <Link key={label} href={href} className="nav-row">
                       <Icon size={15} />
                       <span>{label}</span>
+                      {link.badge ? <RealtimeBadge type={link.badge} /> : null}
                       <ChevronRight size={13} className="ml-auto text-paper/35" />
                     </Link>
                   ) : (
@@ -212,9 +196,10 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
         {children}
       </main>
       <nav className="fixed inset-x-0 bottom-0 grid grid-cols-5 border-t border-white/10 bg-[#171a18]/95 p-2 lg:hidden">
-        {mobileNav.map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href} className="flex flex-col items-center gap-1 rounded-md p-2 text-[11px] text-paper/75">
+        {mobileNav.map(({ href, label, icon: Icon, badge }) => (
+          <Link key={href} href={href} className="relative flex flex-col items-center gap-1 rounded-md p-2 text-[11px] text-paper/75">
             <Icon size={18} /> {label}
+            {badge ? <RealtimeBadge type={badge} /> : null}
           </Link>
         ))}
       </nav>

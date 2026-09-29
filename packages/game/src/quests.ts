@@ -1,4 +1,5 @@
 import { Currency, Prisma, QuestObjectiveType, QuestStatus, QuestTriggerType, WalletTxType, type PrismaClient } from "@ttg/db";
+import { addItemToInventory } from "./inventory.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -89,7 +90,7 @@ async function applyQuestReward(tx: Tx, characterId: string, quest: { id: string
   for (const item of reward.items ?? []) {
     const template = await tx.itemTemplate.findUnique({ where: { key: item.key } });
     if (!template) continue;
-    await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: Math.max(1, item.quantity ?? 1) } });
+    await addItemToInventory(tx, characterId, template.id, Math.max(1, item.quantity ?? 1));
   }
   for (const flag of [...quest.template.flagsOnComplete, ...(reward.flags ?? []), ...(reward.unlocks ?? [])]) {
     await tx.characterQuestFlag.upsert({

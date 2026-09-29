@@ -79,6 +79,25 @@ const locations = [
   ["trung-chau-thuong-hoi", "Trung Châu Thương Hội", "trung-chau", "city_hub", "Trung tâm thương mại và tin tức của nhiều thế lực.", "HIGH", ["market", "auction", "contract"]]
 ] as const;
 
+const locationVisualMeta: Record<string, { biome: string; visualKey: string; backgroundImage: string; imagePosition?: string; cultivationModifierBps?: number }> = {
+  "thanh-van-dong-thanh": { biome: "cultivation_city", visualKey: "city/xianxia-city", backgroundImage: "/locations/city/xianxia-city.webp", imagePosition: "center center", cultivationModifierBps: -300 },
+  "cho-linh-bao": { biome: "cultivation_city", visualKey: "city/xianxia-city", backgroundImage: "/locations/city/xianxia-city.webp", imagePosition: "center center", cultivationModifierBps: -200 },
+  "bac-mon": { biome: "cultivation_city", visualKey: "city/xianxia-city", backgroundImage: "/locations/city/xianxia-city.webp", imagePosition: "center center", cultivationModifierBps: -100 },
+  "thanh-truc-lam": { biome: "bamboo_forest", visualKey: "forest/bamboo-forest", backgroundImage: "/locations/forest/bamboo-forest.webp", imagePosition: "center center", cultivationModifierBps: 500 },
+  "linh-khe": { biome: "forest", visualKey: "forest/cultivation-forest", backgroundImage: "/locations/forest/cultivation-forest.webp", imagePosition: "center center", cultivationModifierBps: 300 },
+  "thanh-van-quan-dao": { biome: "forest_edge", visualKey: "forest/forest-edge", backgroundImage: "/locations/forest/forest-edge.webp", imagePosition: "center center", cultivationModifierBps: 0 },
+  "hac-son-chan-nui": { biome: "monster_forest", visualKey: "forest/monster-forest", backgroundImage: "/locations/forest/monster-forest.webp", imagePosition: "center center", cultivationModifierBps: 800 },
+  "van-yeu-bia-rung": { biome: "monster_forest", visualKey: "forest/monster-forest", backgroundImage: "/locations/forest/monster-forest.webp", imagePosition: "center center", cultivationModifierBps: 900 },
+  "thanh-van-son": { biome: "mountain", visualKey: "mountain/immortal-mountain", backgroundImage: "/locations/mountain/immortal-mountain.webp", imagePosition: "center center", cultivationModifierBps: 700 },
+  "hac-phong-coc": { biome: "mountain", visualKey: "mountain/immortal-mountain", backgroundImage: "/locations/mountain/immortal-mountain.webp", imagePosition: "center center", cultivationModifierBps: 900 },
+  "thanh-linh-son-mon": { biome: "sect", visualKey: "sect/cultivation-sect", backgroundImage: "/locations/sect/cultivation-sect.webp", imagePosition: "center center", cultivationModifierBps: 1200 },
+  "bang-nguyen-tram-dich": { biome: "village", visualKey: "village/ancient-village", backgroundImage: "/locations/village/ancient-village.webp", imagePosition: "center center", cultivationModifierBps: 200 },
+  "co-dia-ngoai-vi": { biome: "ruins", visualKey: "ruins/ancient-ruins", backgroundImage: "/locations/ruins/ancient-ruins.webp", imagePosition: "center center", cultivationModifierBps: 1100 },
+  "hoa-diem-mach": { biome: "cave", visualKey: "cave/cultivation-cave", backgroundImage: "/locations/cave/cultivation-cave.webp", imagePosition: "center center", cultivationModifierBps: 1000 },
+  "dong-hai-ben-cang": { biome: "cultivation_city", visualKey: "city/xianxia-city", backgroundImage: "/locations/city/xianxia-city.webp", imagePosition: "center center", cultivationModifierBps: -100 },
+  "trung-chau-thuong-hoi": { biome: "cultivation_city", visualKey: "city/xianxia-city", backgroundImage: "/locations/city/xianxia-city.webp", imagePosition: "center center", cultivationModifierBps: 100 }
+};
+
 const routes = [
   ["dong-thanh-to-thanh-truc-lam", "Thanh Vân Đông Thành → Thanh Trúc Lâm", "thanh-van-dong-thanh", "thanh-truc-lam", 5, 0, 1, "MEDIUM", false, true],
   ["thanh-truc-lam-to-dong-thanh", "Thanh Trúc Lâm → Thanh Vân Đông Thành", "thanh-truc-lam", "thanh-van-dong-thanh", 5, 0, 1, "MEDIUM", false, true],
@@ -219,14 +238,20 @@ async function main() {
   const locationByKey = new Map<string, string>();
   for (const [key, name, zoneKey, kind, description, securityLevel, services] of locations) {
     const zone = await prisma.zone.findUniqueOrThrow({ where: { key: zoneKey } });
+    const visual = locationVisualMeta[key] ?? { biome: kind, visualKey: "wilderness/cultivation-wilderness", backgroundImage: "/locations/wilderness/cultivation-wilderness.webp", imagePosition: "center center", cultivationModifierBps: 0 };
     const location = await prisma.location.upsert({
       where: { key },
-      update: { zoneId: zone.id, name, kind, description, securityLevel: securityLevel as never, services: [...services] },
+      update: { zoneId: zone.id, name, kind, biome: visual.biome, visualKey: visual.visualKey, backgroundImage: visual.backgroundImage, imagePosition: visual.imagePosition ?? "center center", cultivationModifierBps: visual.cultivationModifierBps ?? 0, description, securityLevel: securityLevel as never, services: [...services] },
       create: {
         key,
         zoneId: zone.id,
         name,
         kind,
+        biome: visual.biome,
+        visualKey: visual.visualKey,
+        backgroundImage: visual.backgroundImage,
+        imagePosition: visual.imagePosition ?? "center center",
+        cultivationModifierBps: visual.cultivationModifierBps ?? 0,
         description,
         securityLevel: securityLevel as never,
         services: [...services],

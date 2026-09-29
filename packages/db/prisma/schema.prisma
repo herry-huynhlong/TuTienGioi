@@ -269,6 +269,18 @@ enum QuestTriggerType {
   MANUAL
 }
 
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum AssetTransferType {
+  LINH_THACH
+  ITEM
+}
+
 model User {
   id            String        @id @default(cuid())
   username      String        @unique
@@ -361,6 +373,19 @@ model Character {
   notifications   Notification[]
   messagesSent    PrivateMessage[] @relation("SentMessages")
   messagesRecv    PrivateMessage[] @relation("RecvMessages")
+  friendRequestsSent FriendRequest[] @relation("FriendRequestSender")
+  friendRequestsRecv FriendRequest[] @relation("FriendRequestReceiver")
+  friendshipsA    Friendship[] @relation("FriendshipA")
+  friendshipsB    Friendship[] @relation("FriendshipB")
+  blockedPlayers  BlockedPlayer[] @relation("Blocker")
+  blockedBy       BlockedPlayer[] @relation("Blocked")
+  conversationsA  Conversation[] @relation("ConversationA")
+  conversationsB  Conversation[] @relation("ConversationB")
+  conversationMessagesSent Message[] @relation("MessageSender")
+  conversationMessagesRecv Message[] @relation("MessageReceiver")
+  assetTransfersSent AssetTransfer[] @relation("TransferSender")
+  assetTransfersRecv AssetTransfer[] @relation("TransferReceiver")
+  settings        PlayerSettings?
   chatMessages    ChatMessage[]
   logs            GameLog[]
   onboarding      OnboardingProgress[]
@@ -550,6 +575,11 @@ model Location {
   zone         Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
   name         String
   kind         String
+  biome        String @default("wilderness")
+  visualKey    String?
+  backgroundImage String?
+  imagePosition String @default("center center")
+  cultivationModifierBps Int @default(0)
   description  String
   securityLevel RouteSecurityLevel @default(MEDIUM)
   services     String[]
@@ -1325,6 +1355,116 @@ model PrivateMessage {
   receiver  Character @relation("RecvMessages", fields: [receiverId], references: [id])
   body      String
   createdAt DateTime @default(now())
+}
+
+model FriendRequest {
+  id          String @id @default(cuid())
+  requesterId String
+  requester   Character @relation("FriendRequestSender", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   Character @relation("FriendRequestReceiver", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      FriendRequestStatus @default(PENDING)
+  message     String @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  decidedAt   DateTime?
+  @@unique([requesterId, addresseeId, status])
+  @@index([addresseeId, status, createdAt])
+  @@index([requesterId, status, createdAt])
+}
+
+model Friendship {
+  id        String @id @default(cuid())
+  memberAId String
+  memberA   Character @relation("FriendshipA", fields: [memberAId], references: [id], onDelete: Cascade)
+  memberBId String
+  memberB   Character @relation("FriendshipB", fields: [memberBId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@unique([memberAId, memberBId])
+  @@index([memberAId])
+  @@index([memberBId])
+}
+
+model BlockedPlayer {
+  id        String @id @default(cuid())
+  blockerId String
+  blocker   Character @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   Character @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  reason    String @default("")
+  createdAt DateTime @default(now())
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model Conversation {
+  id          String @id @default(cuid())
+  memberAId   String
+  memberA     Character @relation("ConversationA", fields: [memberAId], references: [id], onDelete: Cascade)
+  memberBId   String
+  memberB     Character @relation("ConversationB", fields: [memberBId], references: [id], onDelete: Cascade)
+  lastMessage String @default("")
+  lastMessageAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    Message[]
+  @@unique([memberAId, memberBId])
+  @@index([memberAId, lastMessageAt])
+  @@index([memberBId, lastMessageAt])
+}
+
+model Message {
+  id             String @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         Character @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId     String
+  receiver       Character @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+  @@index([conversationId, createdAt])
+  @@index([receiverId, readAt])
+}
+
+model AssetTransfer {
+  id          String @id @default(cuid())
+  senderId    String
+  sender      Character @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String
+  receiver    Character @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  type        AssetTransferType
+  currency    Currency?
+  amount      BigInt?
+  itemId      String?
+  templateId  String?
+  quantity    Int?
+  metadata    Json?
+  idempotencyKey String?
+  createdAt   DateTime @default(now())
+  @@unique([senderId, idempotencyKey])
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
+}
+
+model PlayerSettings {
+  id          String @id @default(cuid())
+  characterId String @unique
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  animationEnabled Boolean @default(true)
+  fontScale    Int @default(100)
+  messageNotifications Boolean @default(true)
+  friendNotifications Boolean @default(true)
+  transferNotifications Boolean @default(true)
+  allowStrangerMessages Boolean @default(true)
+  allowFriendRequests Boolean @default(true)
+  showOnlineStatus Boolean @default(true)
+  confirmRareSell Boolean @default(true)
+  confirmItemTransfer Boolean @default(true)
+  confirmCurrencyTransfer Boolean @default(true)
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
 }
 
 model ChatMessage {

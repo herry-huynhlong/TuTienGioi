@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, cancelCultivation, cancelExploration, cancelMarketListing, cancelSectApplication, claimCultivation, claimExploration, claimSectMining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectSectApplication, SectError, sellItemToNpc, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTravel, talkToNpc, unassignSectCave, unequipItem, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, claimCultivation, claimExploration, claimSectMining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTravel, talkToNpc, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -69,13 +69,17 @@ async function characterId() {
 }
 
 function redirectGameError(error: unknown, path: string): never {
-  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
+  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError || error instanceof InventoryError || error instanceof SocialError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
   throw error;
+}
+
+function boolField(formData: FormData, name: string) {
+  return formData.get(name) === "on";
 }
 
 export async function cultivateAction(formData: FormData) {
   try {
-    await startCultivation(prisma, await characterId(), Number(formData.get("minutes")));
+    await startCultivation(prisma, await characterId(), String(formData.get("duration")) as never);
   } catch (error) {
     redirectGameError(error, "/game");
   }
@@ -447,8 +451,10 @@ export async function exchangeSectTechniqueAction(formData: FormData) {
 }
 
 export async function buyMarketListingAction(formData: FormData) {
+  const rawQuantity = String(formData.get("quantity") ?? "1").trim();
+  if (!/^\d+$/.test(rawQuantity)) redirect("/game/market?error=Số lượng không hợp lệ.");
   try {
-    await purchaseMarketListing(prisma, await characterId(), String(formData.get("listingId")));
+    await purchaseMarketListing(prisma, await characterId(), String(formData.get("listingId")), Number(rawQuantity), String(formData.get("transactionKey") ?? ""));
   } catch (error) {
     redirectGameError(error, "/game/market");
   }
@@ -459,7 +465,7 @@ export async function buySystemMarketItemAction(formData: FormData) {
   const rawQuantity = String(formData.get("quantity") ?? "1").trim();
   if (!/^\d+$/.test(rawQuantity)) redirect("/game/market?error=Số lượng không hợp lệ.");
   try {
-    const result = await purchaseSystemMarketItem(prisma, await characterId(), String(formData.get("stockId")), Number(rawQuantity));
+    const result = await purchaseSystemMarketItem(prisma, await characterId(), String(formData.get("stockId")), Number(rawQuantity), String(formData.get("transactionKey") ?? ""));
     redirect(`/game/market?ok=${encodeURIComponent(`Đã mua ${result.quantity} ${result.itemName} với giá ${result.totalPrice.toLocaleString("vi-VN")} Linh Thạch.`)}`);
   } catch (error) {
     redirectGameError(error, "/game/market");
@@ -485,7 +491,7 @@ export async function sellItemToNpcAction(formData: FormData) {
   const rawQuantity = String(formData.get("quantity") ?? "1").trim();
   if (!/^\d+$/.test(rawQuantity)) redirect("/game/market?tab=sell");
   try {
-    await sellItemToNpc(prisma, await characterId(), String(formData.get("itemId")), Number(rawQuantity));
+    await sellItemToNpc(prisma, await characterId(), String(formData.get("itemId")), Number(rawQuantity), String(formData.get("transactionKey") ?? ""));
   } catch (error) {
     redirectGameError(error, "/game/market?tab=sell");
   }
@@ -520,8 +526,10 @@ export async function unequipItemAction(formData: FormData) {
 }
 
 export async function consumeItemAction(formData: FormData) {
+  const rawQuantity = String(formData.get("quantity") ?? "1").trim();
+  if (!/^\d+$/.test(rawQuantity)) redirect("/game/inventory?error=Số lượng không hợp lệ.");
   try {
-    await consumeItem(prisma, await characterId(), String(formData.get("itemId")));
+    await consumeItem(prisma, await characterId(), String(formData.get("itemId")), Number(rawQuantity));
   } catch (error) {
     redirectGameError(error, "/game/inventory");
   }
@@ -533,4 +541,124 @@ export async function markNotificationReadAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   await prisma.notification.updateMany({ where: { id, characterId: cid, readAt: null }, data: { readAt: new Date() } });
   redirect("/game/mail");
+}
+
+export async function sendFriendRequestAction(formData: FormData) {
+  try {
+    await sendFriendRequest(prisma, await characterId(), String(formData.get("targetId")), String(formData.get("message") ?? ""));
+  } catch (error) {
+    redirectGameError(error, "/game/friends");
+  }
+  redirect("/game/friends?ok=request");
+}
+
+export async function acceptFriendRequestAction(formData: FormData) {
+  try {
+    await acceptFriendRequest(prisma, await characterId(), String(formData.get("requestId")));
+  } catch (error) {
+    redirectGameError(error, "/game/friends");
+  }
+  redirect("/game/friends?ok=friend");
+}
+
+export async function rejectFriendRequestAction(formData: FormData) {
+  try {
+    await rejectFriendRequest(prisma, await characterId(), String(formData.get("requestId")));
+  } catch (error) {
+    redirectGameError(error, "/game/friends");
+  }
+  redirect("/game/friends");
+}
+
+export async function cancelFriendRequestAction(formData: FormData) {
+  try {
+    await cancelFriendRequest(prisma, await characterId(), String(formData.get("requestId")));
+  } catch (error) {
+    redirectGameError(error, "/game/friends");
+  }
+  redirect("/game/friends");
+}
+
+export async function removeFriendAction(formData: FormData) {
+  try {
+    await removeFriend(prisma, await characterId(), String(formData.get("friendId")));
+  } catch (error) {
+    redirectGameError(error, "/game/friends");
+  }
+  redirect("/game/friends?ok=removed");
+}
+
+export async function blockPlayerAction(formData: FormData) {
+  const targetId = String(formData.get("targetId") ?? "");
+  const back = String(formData.get("back") ?? "/game/friends");
+  try {
+    await blockPlayer(prisma, await characterId(), targetId);
+  } catch (error) {
+    redirectGameError(error, back);
+  }
+  redirect(`${back}${back.includes("?") ? "&" : "?"}ok=blocked`);
+}
+
+export async function unblockPlayerAction(formData: FormData) {
+  try {
+    await unblockPlayer(prisma, await characterId(), String(formData.get("targetId")));
+  } catch (error) {
+    redirectGameError(error, "/game/settings");
+  }
+  redirect("/game/settings?ok=unblocked");
+}
+
+export async function sendMessageAction(formData: FormData) {
+  const receiverId = String(formData.get("receiverId") ?? "");
+  try {
+    await sendDirectMessage(prisma, await characterId(), receiverId, String(formData.get("body") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/chat?with=${encodeURIComponent(receiverId)}`);
+  }
+  redirect(`/game/chat?with=${encodeURIComponent(receiverId)}`);
+}
+
+export async function sendFriendCurrencyAction(formData: FormData) {
+  const receiverId = String(formData.get("receiverId") ?? "");
+  const raw = String(formData.get("amount") ?? "0").trim();
+  if (!/^\d+$/.test(raw)) redirect(`/game/chat?with=${encodeURIComponent(receiverId)}&error=Số Linh Thạch không hợp lệ.`);
+  try {
+    await sendFriendCurrency(prisma, await characterId(), receiverId, BigInt(raw), String(formData.get("transactionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/chat?with=${encodeURIComponent(receiverId)}`);
+  }
+  redirect(`/game/chat?with=${encodeURIComponent(receiverId)}&ok=currency`);
+}
+
+export async function sendFriendItemAction(formData: FormData) {
+  const receiverId = String(formData.get("receiverId") ?? "");
+  const raw = String(formData.get("quantity") ?? "1").trim();
+  if (!/^\d+$/.test(raw)) redirect(`/game/chat?with=${encodeURIComponent(receiverId)}&error=Số lượng không hợp lệ.`);
+  try {
+    await sendFriendItem(prisma, await characterId(), receiverId, String(formData.get("itemId")), Number(raw), String(formData.get("transactionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/chat?with=${encodeURIComponent(receiverId)}`);
+  }
+  redirect(`/game/chat?with=${encodeURIComponent(receiverId)}&ok=item`);
+}
+
+export async function updatePlayerSettingsAction(formData: FormData) {
+  try {
+    await updatePlayerSettings(prisma, await characterId(), {
+      animationEnabled: boolField(formData, "animationEnabled"),
+      fontScale: Number(formData.get("fontScale") ?? 100),
+      messageNotifications: boolField(formData, "messageNotifications"),
+      friendNotifications: boolField(formData, "friendNotifications"),
+      transferNotifications: boolField(formData, "transferNotifications"),
+      allowStrangerMessages: boolField(formData, "allowStrangerMessages"),
+      allowFriendRequests: boolField(formData, "allowFriendRequests"),
+      showOnlineStatus: boolField(formData, "showOnlineStatus"),
+      confirmRareSell: boolField(formData, "confirmRareSell"),
+      confirmItemTransfer: boolField(formData, "confirmItemTransfer"),
+      confirmCurrencyTransfer: boolField(formData, "confirmCurrencyTransfer")
+    });
+  } catch (error) {
+    redirectGameError(error, "/game/settings");
+  }
+  redirect("/game/settings?ok=saved");
 }

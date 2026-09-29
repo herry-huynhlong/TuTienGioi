@@ -205,11 +205,13 @@ function SystemStockCard({ stock, balance, disabled, selected }: { stock: any; b
 }
 
 function PlayerBuyForm({ listing, balance, disabled }: { listing: any; balance: bigint; disabled: boolean }) {
-  const totalPrice = listing.price * BigInt(listing.quantity);
+  const affordable = listing.price > 0n ? Number(balance / listing.price) : listing.quantity;
+  const maxQuantity = Math.max(0, Math.min(listing.quantity, 99, affordable));
+  const disabledReason = disabled ? "Bạn phải đứng tại Chợ Linh Bảo để giao dịch." : listing.quantity <= 0 ? "Tin rao đã hết hàng." : affordable < 1 ? "Không đủ Linh Thạch." : "";
   return (
-    <form action={buyMarketListingAction} className="item-card-action single">
+    <form action={buyMarketListingAction} className="item-card-action">
       <input type="hidden" name="listingId" value={listing.id} />
-      <button className="btn btn-secondary w-full" disabled={disabled || balance < totalPrice}>Mua {formatCurrency(totalPrice)}</button>
+      <ItemQuantityControl max={maxQuantity} unitPrice={listing.price.toString()} submitLabel="Mua" disabled={disabled || maxQuantity < 1} disabledReason={disabledReason} />
     </form>
   );
 }

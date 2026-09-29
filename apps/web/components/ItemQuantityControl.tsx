@@ -25,6 +25,10 @@ export function ItemQuantityControl({
   disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
+  const [transactionKey] = useState(() => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  });
   const safeMax = Math.max(0, Math.floor(max));
   const safeMin = safeMax > 0 ? Math.max(1, Math.floor(min)) : 0;
   const initial = safeMax > 0 ? clamp(defaultValue, safeMin, safeMax) : 0;
@@ -38,6 +42,7 @@ export function ItemQuantityControl({
   const reason = disabledReason ?? (safeMax < 1 ? "Không thể thực hiện" : "");
   return (
     <div className="quantity-purchase">
+      <input type="hidden" name="transactionKey" value={transactionKey} />
       <div className="quantity-control" aria-label="Số lượng">
         <button type="button" disabled={locked || quantity <= safeMin} onClick={() => setQuantity((value) => clamp(value - 1, safeMin, safeMax))}>-</button>
         <input

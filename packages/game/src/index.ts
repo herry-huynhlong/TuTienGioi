@@ -6,3 +6,6 @@ export * from "./sects.js";
 export * from "./payment.js";
 export * from "./onboarding.js";
 export * from "./quests.js";
+export * from "./inventory.js";
+export * from "./social.js";
+export * from "./location-visuals.js";

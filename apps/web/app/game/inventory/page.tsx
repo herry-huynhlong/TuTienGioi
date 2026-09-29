@@ -1,12 +1,13 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { consumeItemAction, equipItemAction, unequipItemAction } from "@/lib/forms";
+import { consumeItemAction, equipItemAction, sellItemToNpcAction, unequipItemAction } from "@/lib/forms";
 import { formatEquipmentSlot } from "@/lib/format";
-import { getItemEconomy, jsonRecord } from "@ttg/game";
+import { getItemEconomy } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
+import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
 const equipmentSlots = ["WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "TALISMAN", "ARTIFACT"] as const;
 
@@ -48,7 +49,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   });
   const filter = params?.filter ?? "ALL";
   const equipped = c.items.filter((item) => item.equippedSlot);
-  const inventory = groupInventoryItems(c.items.filter((item) => !item.equippedSlot && (filter === "ALL" || item.template.category === filter)));
+  const inventory = c.items.filter((item) => !item.equippedSlot && (filter === "ALL" || item.template.category === filter));
   const selected = inventory.find((item) => item.id === params?.item) ?? inventory[0] ?? c.items.find((item) => item.equippedSlot);
   const atMarket = c.currentLocation?.key === "cho-linh-bao";
 
@@ -142,6 +143,7 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
   const canEquip = item.template.category === "EQUIPMENT" && Boolean(item.template.equipSlot) && !activeListing;
   const canConsume = item.template.category === "CONSUMABLE" && !activeListing;
   const canSell = item.template.tradeable && !item.bound && !activeListing;
+  const economy = getItemEconomy(item.template);
   return (
     <ItemDetailPanel
       template={item.template}
@@ -167,9 +169,18 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
           </form>
         ) : null}
         {canConsume ? (
-          <form action={consumeItemAction}>
+          <form action={consumeItemAction} className="sell-mode-card">
             <input type="hidden" name="itemId" value={item.id} />
-            <button className="btn btn-secondary w-full">Sử dụng</button>
+            <h3>Sử dụng vật phẩm</h3>
+            <ItemQuantityControl max={item.quantity} submitLabel="Sử dụng" />
+          </form>
+        ) : null}
+        {canSell && atMarket && economy.sellableToNpc ? (
+          <form action={sellItemToNpcAction} className="sell-mode-card">
+            <input type="hidden" name="itemId" value={item.id} />
+            <h3>Bán nhanh cho Vạn Bảo Lâu</h3>
+            <p className="muted">Giá bán do server tính theo cấu hình vật phẩm.</p>
+            <ItemQuantityControl max={item.quantity} unitPrice={economy.npcBuyPrice.toString()} submitLabel="Bán" />
           </form>
         ) : null}
         {canSell && atMarket ? <Link href={`/game/market?tab=sell&sellItem=${item.id}`} className="btn w-full">Rao bán</Link> : null}
@@ -178,29 +189,5 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
       )}
     />
   );
-}
-
-function groupInventoryItems(items: InventoryItem[]) {
-  const groups = new Map<string, InventoryItem>();
-  for (const item of items) {
-    const key = JSON.stringify({
-      template: item.template.name,
-      rarity: item.template.rarity,
-      category: item.template.category,
-      bound: item.bound,
-      quality: item.quality,
-      enhancement: item.enhancement,
-      equippedSlot: item.equippedSlot,
-      modifiers: jsonRecord(item.template.baseModifiers)
-    });
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, { ...item, listings: [...item.listings] });
-      continue;
-    }
-    existing.quantity += item.quantity;
-    existing.listings.push(...item.listings);
-  }
-  return [...groups.values()];
 }
 

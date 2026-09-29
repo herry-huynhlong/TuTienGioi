@@ -19,6 +19,23 @@ export function calculateCultivationReward(baseReward: bigint, multiplierBps: nu
   return (baseReward * BigInt(multiplierBps)) / 10000n;
 }
 
+export const REAL_TIME_TO_GAME_TIME_MULTIPLIER = 24;
+export const GAME_TIME_EPOCH = new Date("2026-01-01T00:00:00.000Z");
+export const GAME_CALENDAR_START_YEAR = 312;
+export const GAME_DAYS_PER_MONTH = 30;
+export const GAME_MONTHS_PER_YEAR = 12;
+export const REAL_MS_PER_GAME_DAY = Math.floor(86_400_000 / REAL_TIME_TO_GAME_TIME_MULTIPLIER);
+
+export const cultivationActivityOptions = ["day", "week", "month", "year"] as const;
+export type CultivationDurationKey = typeof cultivationActivityOptions[number];
+
+export const cultivationDurationConfigs: Record<CultivationDurationKey, { label: string; gameDays: number; baseReward: bigint; energyCost: number }> = {
+  day: { label: "1 Ngày", gameDays: 1, baseReward: 120n, energyCost: 3 },
+  week: { label: "1 Tuần", gameDays: 7, baseReward: 840n, energyCost: 8 },
+  month: { label: "1 Tháng", gameDays: 30, baseReward: 3600n, energyCost: 16 },
+  year: { label: "1 Năm", gameDays: 360, baseReward: 43200n, energyCost: 30 }
+};
+
 export function explorationEnergyCost(minutes: number): number {
   if (minutes === 10) return 2;
   if (minutes === 30) return 5;
@@ -28,14 +45,65 @@ export function explorationEnergyCost(minutes: number): number {
   return Math.max(1, Math.ceil(minutes / 10));
 }
 
-export const cultivationActivityOptions = [1, 3, 5, 10, 20] as const;
-
-export function cultivationEnergyCost(minutes: number): number {
-  return Math.max(1, Math.ceil(minutes / 5));
+export function isCultivationDurationKey(value: unknown): value is CultivationDurationKey {
+  return typeof value === "string" && cultivationActivityOptions.includes(value as CultivationDurationKey);
 }
 
-export function cultivationBaseReward(minutes: number): bigint {
-  return BigInt(minutes * 10);
+export function cultivationEnergyCost(duration: CultivationDurationKey | number): number {
+  if (typeof duration === "number") return Math.max(1, Math.ceil(duration / 5));
+  return cultivationDurationConfigs[duration].energyCost;
+}
+
+export function cultivationBaseReward(duration: CultivationDurationKey | number): bigint {
+  if (typeof duration === "number") return BigInt(duration * 10);
+  return cultivationDurationConfigs[duration].baseReward;
+}
+
+export function gameDurationToRealMs(duration: CultivationDurationKey): number {
+  return cultivationDurationConfigs[duration].gameDays * REAL_MS_PER_GAME_DAY;
+}
+
+export function realMsToGameMs(realMs: number) {
+  return realMs * REAL_TIME_TO_GAME_TIME_MULTIPLIER;
+}
+
+export function getGameTime(now = new Date()) {
+  const elapsedGameMs = Math.max(0, now.getTime() - GAME_TIME_EPOCH.getTime()) * REAL_TIME_TO_GAME_TIME_MULTIPLIER;
+  const totalGameMinutes = Math.floor(elapsedGameMs / 60_000);
+  const totalGameHours = Math.floor(totalGameMinutes / 60);
+  const totalGameDays = Math.floor(totalGameHours / 24);
+  const minute = totalGameMinutes % 60;
+  const hour = totalGameHours % 24;
+  const dayIndex = totalGameDays % GAME_DAYS_PER_MONTH;
+  const monthIndex = Math.floor(totalGameDays / GAME_DAYS_PER_MONTH) % GAME_MONTHS_PER_YEAR;
+  const year = GAME_CALENDAR_START_YEAR + Math.floor(totalGameDays / (GAME_DAYS_PER_MONTH * GAME_MONTHS_PER_YEAR));
+  return {
+    year,
+    month: monthIndex + 1,
+    day: dayIndex + 1,
+    hour,
+    minute,
+    hourName: earthlyHourName(hour),
+    phase: timePhase(hour),
+    totalGameDays,
+    label: `Tiên Lịch ${year} · Ngày ${dayIndex + 1} tháng ${monthIndex + 1} · ${earthlyHourName(hour)}`
+  };
+}
+
+export function addGameDays(now: Date, gameDays: number) {
+  return new Date(now.getTime() + gameDays * REAL_MS_PER_GAME_DAY);
+}
+
+function earthlyHourName(hour: number) {
+  const names = ["Giờ Tý", "Giờ Sửu", "Giờ Sửu", "Giờ Dần", "Giờ Dần", "Giờ Mão", "Giờ Mão", "Giờ Thìn", "Giờ Thìn", "Giờ Tỵ", "Giờ Tỵ", "Giờ Ngọ", "Giờ Ngọ", "Giờ Mùi", "Giờ Mùi", "Giờ Thân", "Giờ Thân", "Giờ Dậu", "Giờ Dậu", "Giờ Tuất", "Giờ Tuất", "Giờ Hợi", "Giờ Hợi", "Giờ Tý"];
+  return names[Math.max(0, Math.min(23, hour))]!;
+}
+
+function timePhase(hour: number) {
+  if (hour >= 5 && hour < 11) return "morning";
+  if (hour >= 11 && hour < 16) return "noon";
+  if (hour >= 16 && hour < 19) return "evening";
+  return "night";
 }
 
 export function travelDurationSeconds(travelMinutes: number): number {

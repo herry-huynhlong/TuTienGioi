@@ -91,6 +91,10 @@ function huntEndsAt(now: Date, session: Record<string, unknown>) {
   return new Date(now.getTime() + Math.max(0, targetMs - elapsed));
 }
 
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
 function inputJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
@@ -626,7 +630,42 @@ export async function cancelCultivation(db: Db, characterId: string, activityId:
   });
 }
 
-export async function attemptBreakthrough(db: Db, characterId: string, rng = Math.random) {
+function breakthroughSupportFromItem(template: { key: string; name: string; category: ItemCategory; equipSlot: unknown; baseModifiers: unknown; bindRules: unknown }) {
+  const usage = getItemUsageDefinition(template as never);
+  if (usage.action !== "BREAKTHROUGH" || usage.runtime !== "CONTEXT_LOCKED") return null;
+  const bonus = usage.effects.find((effect) => effect.type === "BREAKTHROUGH_BONUS");
+  if (!bonus) return null;
+  const bps = Math.max(0, Math.floor(numberFromRecord(bonus.payload, "bps")));
+  const failurePenaltyReductionBps = Math.min(9000, Math.max(0, Math.floor(numberFromRecord(bonus.payload, "failurePenaltyReductionBps"))));
+  if (bps <= 0 && failurePenaltyReductionBps <= 0) return null;
+  return { itemKey: template.key, itemName: template.name, bps, failurePenaltyReductionBps };
+}
+
+async function consumeBreakthroughSupport(tx: Tx, characterId: string, itemInstanceId?: string | null) {
+  if (!itemInstanceId) return null;
+  const item = await tx.itemInstance.findUnique({
+    where: { id: itemInstanceId },
+    include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 } }
+  });
+  if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_OWNED", "Bạn không sở hữu vật phẩm hỗ trợ này.");
+  if (item.quantity < 1) throw new GameError("ITEM_EMPTY", "Vật phẩm hỗ trợ đã hết.");
+  if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể dùng trang bị đang mặc để hỗ trợ đột phá.");
+  if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang bày bán không thể dùng để đột phá.");
+  await assertItemRequirements(tx, characterId, item.template);
+  const support = breakthroughSupportFromItem(item.template);
+  if (!support) throw new GameError("ITEM_NOT_BREAKTHROUGH_SUPPORT", "Vật phẩm này không hỗ trợ đột phá.");
+  const updated = await tx.itemInstance.updateMany({
+    where: { id: item.id, ownerId: characterId, quantity: { gte: 1 }, equippedSlot: null, listings: { none: { status: ListingStatus.ACTIVE } } },
+    data: { quantity: { decrement: 1 } }
+  });
+  if (updated.count !== 1) throw new GameError("ITEM_CONSUME_CONFLICT", "Vật phẩm đã thay đổi, vui lòng thử lại.");
+  if (item.quantity <= 1) await tx.itemInstance.deleteMany({ where: { id: item.id, ownerId: characterId, quantity: { lte: 0 } } });
+  return support;
+}
+
+export async function attemptBreakthrough(db: Db, characterId: string, supportItemInstanceIdOrRng?: string | null | (() => number), maybeRng = Math.random) {
+  const supportItemInstanceId = typeof supportItemInstanceIdOrRng === "function" ? null : supportItemInstanceIdOrRng;
+  const rng = typeof supportItemInstanceIdOrRng === "function" ? supportItemInstanceIdOrRng : maybeRng;
   return db.$transaction(async (tx) => {
     const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { realmStage: { include: { realm: true } } } });
     const next = await tx.realmStage.findFirst({
@@ -640,16 +679,19 @@ export async function attemptBreakthrough(db: Db, characterId: string, rng = Mat
     });
     if (!next) throw new GameError("MAX_REALM", "Bạn đã chạm đến cực hạn hiện tại.");
     if (character.cultivation < next.requiredCultivation) throw new GameError("NOT_ENOUGH_CULTIVATION", "Bạn chưa đủ tu vi.");
-    const chance = Math.min(9500, character.realmStage.breakthroughChanceBps + character.luck * 30 + character.breakthroughBonusBps);
+    const support = await consumeBreakthroughSupport(tx, characterId, supportItemInstanceId);
+    const chance = Math.min(9500, character.realmStage.breakthroughChanceBps + character.luck * 30 + character.breakthroughBonusBps + (support?.bps ?? 0));
     if (Math.floor(rng() * 10000) < chance) {
       await tx.character.update({ where: { id: characterId }, data: { realmStageId: next.id, cultivation: 0n, maxHp: next.baseHp, maxQi: next.baseQi, hp: next.baseHp, qi: next.baseQi, lifespan: { increment: next.lifespanBonus }, breakthroughBonusBps: 0 } });
       await tx.worldNews.create({ data: { title: `${character.name} đột phá ${next.name}`, body: `${character.name} bước sang ${next.name}, đạo tâm vang vọng.`, category: "realm", permanent: true } });
-      return { success: true, stage: next.name };
+      await tx.gameLog.create({ data: { characterId, type: "realm", message: support ? `Dùng ${support.itemName}, đột phá thành công ${next.name}.` : `Đột phá thành công ${next.name}.`, metadata: inputJson({ nextStageId: next.id, chanceBps: chance, support }) } });
+      return { success: true, stage: next.name, chance, support };
     }
-    const loss = character.cultivation / 20n;
+    const baseLoss = character.cultivation / 20n;
+    const loss = support?.failurePenaltyReductionBps ? (baseLoss * BigInt(10000 - support.failurePenaltyReductionBps)) / 10000n : baseLoss;
     await tx.character.update({ where: { id: characterId }, data: { cultivation: { decrement: loss }, hp: Math.max(1, Math.floor(character.hp * 0.7)), breakthroughBonusBps: 0 } });
-    await tx.gameLog.create({ data: { characterId, type: "realm", message: `Đột phá thất bại, hao tổn ${loss.toString()} tu vi.` } });
-    return { success: false, loss };
+    await tx.gameLog.create({ data: { characterId, type: "realm", message: support ? `Dùng ${support.itemName}, đột phá thất bại, hao tổn ${loss.toString()} tu vi.` : `Đột phá thất bại, hao tổn ${loss.toString()} tu vi.`, metadata: inputJson({ chanceBps: chance, support, baseLoss: baseLoss.toString(), loss: loss.toString() }) } });
+    return { success: false, loss, chance, support };
   });
 }
 
@@ -814,6 +856,210 @@ export async function leaveExplorationEncounter(db: Db, characterId: string, act
   });
 }
 
+function combatStateFromReward(value: Record<string, unknown>, monsterHp: number) {
+  const state = parseJsonRecord(value.combatState);
+  return {
+    monsterHp: Math.max(0, Math.floor(numberFromRecord(state, "monsterHp", monsterHp))),
+    playerShield: Math.max(0, Math.floor(numberFromRecord(state, "playerShield"))),
+    playerDefenseBps: Math.floor(numberFromRecord(state, "playerDefenseBps")),
+    playerSpeedBps: Math.floor(numberFromRecord(state, "playerSpeedBps")),
+    playerStatusResistanceBps: Math.floor(numberFromRecord(state, "playerStatusResistanceBps")),
+    enemySpeedBps: Math.floor(numberFromRecord(state, "enemySpeedBps")),
+    usedGroups: stringArray(state.usedGroups),
+    usedActionKeys: stringArray(state.usedActionKeys),
+    log: stringArray(state.log)
+  };
+}
+
+function modifiedStat(value: number, bps: number) {
+  return Math.max(1, Math.floor((value * (10000 + bps)) / 10000));
+}
+
+function talismanDamage(effect: ItemEffectSpec, character: { spirit: number }, monster: { defense: number }) {
+  const baseDamage = Math.max(0, Math.floor(numberFromRecord(effect.payload, "baseDamage")));
+  const scaling = numberFromRecord(effect.payload, "scaling", 1);
+  const hitCount = Math.max(1, Math.floor(numberFromRecord(effect.payload, "hitCount", 1)));
+  let total = 0;
+  for (let i = 0; i < hitCount; i++) {
+    const raw = baseDamage + Math.floor(character.spirit * scaling);
+    total += Math.max(1, raw - Math.floor(monster.defense * 0.45));
+  }
+  return { total, hitCount, element: typeof effect.payload.element === "string" ? effect.payload.element : "UNKNOWN" };
+}
+
+function applyShieldToHp(virtualRemainingHp: number, maxHp: number) {
+  return Math.max(1, Math.min(maxHp, virtualRemainingHp));
+}
+
+async function consumeCombatItem(tx: Tx, characterId: string, itemId: string) {
+  const updated = await tx.itemInstance.updateMany({
+    where: { id: itemId, ownerId: characterId, quantity: { gte: 1 }, equippedSlot: null, listings: { none: { status: ListingStatus.ACTIVE } } },
+    data: { quantity: { decrement: 1 } }
+  });
+  if (updated.count !== 1) throw new GameError("ITEM_CONSUME_CONFLICT", "Vật phẩm đã thay đổi, vui lòng thử lại.");
+  await tx.itemInstance.deleteMany({ where: { id: itemId, ownerId: characterId, quantity: { lte: 0 } } });
+}
+
+async function findOwnedUtilityItem(tx: Tx, characterId: string, itemId: string, effectType: ItemEffectSpec["type"]) {
+  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 } } });
+  if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_OWNED", "Bạn không sở hữu vật phẩm này.");
+  if (item.quantity < 1) throw new GameError("ITEM_EMPTY", "Vật phẩm đã hết.");
+  if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể dùng trang bị đang mặc.");
+  if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang bày bán.");
+  const usage = getItemUsageDefinition(item.template);
+  const effect = usage.effects.find((entry) => entry.type === effectType);
+  if (!effect) throw new GameError("ITEM_EFFECT_UNSUPPORTED", "Vật phẩm này không phù hợp với hành động hiện tại.");
+  return { item, usage, effect };
+}
+
+function effectGrade(effect: ItemEffectSpec) {
+  return Math.max(0, Math.floor(numberFromRecord(effect.payload, "grade")));
+}
+
+export async function escapeExplorationEncounterWithItem(db: Db, characterId: string, activityId: string, itemId: string, actionKey?: string | null, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const activity = await tx.explorationActivity.findUnique({ where: { id: activityId } });
+    if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy encounter cần thoát.");
+    const reward = parseJsonRecord(activity.reward);
+    if (reward.mode !== "hunt" || typeof reward.monster !== "string" || reward.pending !== true) throw new GameError("BAD_ENCOUNTER", "Không có encounter thường để thoát.");
+    if (reward.bossLocked === true || reward.questLocked === true || reward.escapeBlocked === true) throw new GameError("ESCAPE_BLOCKED", "Không thể bỏ chạy khỏi trận chiến này.");
+    const state = combatStateFromReward(reward, 1);
+    if (actionKey && state.usedActionKeys.includes(actionKey)) return { duplicate: true, escaped: true };
+    const { item, effect } = await findOwnedUtilityItem(tx, characterId, itemId, "ESCAPE");
+    if (effectGrade(effect) < 1) throw new GameError("ITEM_GRADE_TOO_LOW", "Phù này không đủ cấp để thoát encounter.");
+    const session = parseJsonRecord(reward.session);
+    await consumeCombatItem(tx, characterId, item.id);
+    const nextReward = { ...reward, pending: false, monster: null, decision: "escaped", combatState: { ...state, usedActionKeys: actionKey ? [...state.usedActionKeys, actionKey] : state.usedActionKeys, log: [...state.log, `Bạn dùng ${item.template.name} thoát khỏi encounter.`] } };
+    if (Object.keys(session).length > 0) {
+      const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
+      const nextCheckpoints = checkpoints.map((checkpoint) => checkpoint.id === session.pendingCheckpointId ? { ...checkpoint, resolved: true, outcome: "escaped" } : checkpoint);
+      const stats = parseJsonRecord(session.stats);
+      const nextSession = { ...session, pausedAt: null, pendingCheckpointId: null, checkpoints: nextCheckpoints, stats: { ...stats, detected: numberFromRecord(stats, "detected") + 1, skipped: numberFromRecord(stats, "skipped") + 1 }, log: [...(Array.isArray(session.log) ? session.log : []), `Bạn dùng ${item.template.name} độn địa thoát khỏi yêu thú.`] };
+      await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.ACTIVE, startedAt: now, endsAt: huntEndsAt(now, nextSession), reward: inputJson({ ...nextReward, session: nextSession }) } });
+    } else {
+      await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: inputJson(nextReward) } });
+    }
+    await tx.gameLog.create({ data: { characterId, type: "WORLD_ITEM_USED", message: `Dùng ${item.template.name} thoát khỏi encounter.`, metadata: inputJson({ itemId: item.id, effectType: "ESCAPE", locationId: typeof reward.locationId === "string" ? reward.locationId : null, targetId: activityId, result: "ESCAPED", timestamp: now.toISOString() }) } });
+    return { escaped: true, itemName: item.template.name };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function teleportWithItem(db: Db, characterId: string, itemId: string, destinationLocationId: string, actionKey?: string | null, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const character = await tx.character.findUniqueOrThrow({
+      where: { id: characterId },
+      include: { currentLocation: { include: { routesFrom: { where: { active: true }, include: { destination: { include: { zone: true } } } } } }, realmStage: { include: { realm: true } } }
+    });
+    if (!character.currentLocationId || !character.currentLocation) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm hiện tại.");
+    if (destinationLocationId === character.currentLocationId) throw new GameError("CURRENT_LOCATION", "Bạn đang ở địa điểm này.");
+    const [activeTravel, activeExploration, activeCultivation, activeTraining] = await Promise.all([
+      tx.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.explorationActivity.findFirst({ where: { characterId, status: { in: [ActivityStatus.ACTIVE, ActivityStatus.COMPLETED] } } }),
+      tx.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+    ]);
+    if (activeExploration) throw new GameError("COMBAT_OR_ACTIVITY_ACTIVE", "Không thể dịch chuyển khi đang lịch luyện hoặc gặp encounter.");
+    if (activeTravel || activeCultivation || activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Hoàn tất hoạt động hiện tại trước khi dịch chuyển.");
+    const route = character.currentLocation.routesFrom.find((entry) => entry.destinationId === destinationLocationId);
+    if (!route) throw new GameError("DESTINATION_NOT_DISCOVERED", "Chỉ có thể dịch chuyển tới địa điểm đã biết.");
+    if (route.minimumRealmOrder > character.realmStage.realm.order || route.destination.minimumRealmOrder > character.realmStage.realm.order) throw new GameError("DESTINATION_LOCKED", "Địa điểm này vẫn đang bị khóa.");
+    const services = route.destination.services ?? [];
+    if (!route.destination.active || services.includes("boss") || services.includes("quest_only") || services.includes("sealed")) throw new GameError("DESTINATION_LOCKED", "Không thể dịch chuyển tới địa điểm đang bị khóa.");
+    const { item, effect } = await findOwnedUtilityItem(tx, characterId, itemId, "TELEPORT");
+    if (effectGrade(effect) < 1) throw new GameError("ITEM_GRADE_TOO_LOW", "Phù dịch chuyển không đủ cấp.");
+    await consumeCombatItem(tx, characterId, item.id);
+    await tx.character.update({ where: { id: characterId }, data: { currentLocationId: route.destinationId, locationId: route.destination.zoneId } });
+    await progressSectMissionEvent(tx, { characterId, eventType: "LOCATION_VISITED", locationId: route.destinationId, amount: 1 });
+    await progressQuestEvent(tx, { characterId, eventType: "ENTER_LOCATION", locationId: route.destinationId, amount: 1 });
+    await tx.gameLog.create({ data: { characterId, type: "WORLD_ITEM_USED", message: `Dùng ${item.template.name} dịch chuyển tới ${route.destination.name}.`, metadata: inputJson({ itemId: item.id, effectType: "TELEPORT", locationId: character.currentLocationId, destinationId: route.destinationId, result: "TELEPORTED", actionKey, timestamp: now.toISOString() }) } });
+    return { teleported: true, destinationName: route.destination.name };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function breakWorldSealWithItem(db: Db, characterId: string, sealId: string, itemId: string, actionKey?: string | null, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, select: { currentLocationId: true } });
+    const seal = await tx.worldSeal.findUnique({ where: { id: sealId }, include: { location: true } });
+    if (!seal) throw new GameError("SEAL_NOT_FOUND", "Không tìm thấy phong ấn.");
+    if (seal.locationId !== character.currentLocationId) throw new GameError("WRONG_LOCATION", "Bạn phải đứng trước phong ấn để phá cấm.");
+    if (seal.status !== "SEALED") throw new GameError("SEAL_ALREADY_OPEN", "Phong ấn đã được mở.");
+    const { item, effect } = await findOwnedUtilityItem(tx, characterId, itemId, "BREAK_SEAL");
+    if (effectGrade(effect) < seal.requiredBreakSealGrade) throw new GameError("ITEM_GRADE_TOO_LOW", "Phù không đủ cấp để phá phong ấn này.");
+    await consumeCombatItem(tx, characterId, item.id);
+    await tx.worldSeal.update({ where: { id: seal.id }, data: { status: "OPEN", unlockedAt: now, unlockedByCharacterId: characterId, metadata: inputJson({ ...(parseJsonRecord(seal.metadata)), actionKey }) } });
+    await tx.gameLog.create({ data: { characterId, type: "WORLD_ITEM_USED", message: `Dùng ${item.template.name} phá ${seal.name}.`, metadata: inputJson({ itemId: item.id, effectType: "BREAK_SEAL", locationId: seal.locationId, targetId: seal.id, result: "UNLOCKED", actionKey, timestamp: now.toISOString() }) } });
+    return { unlocked: true, sealName: seal.name };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function useExplorationCombatItem(db: Db, characterId: string, activityId: string, itemId: string, targetId?: string | null, actionKey?: string | null) {
+  return db.$transaction(async (tx) => {
+    const activity = await tx.explorationActivity.findUnique({ where: { id: activityId } });
+    if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy tình huống chiến đấu.");
+    const pending = parseJsonRecord(activity.reward);
+    if (pending.mode !== "hunt" || typeof pending.monster !== "string" || pending.pending !== true) throw new GameError("BAD_ENCOUNTER", "Chưa có combat phù hợp để dùng phù.");
+    const [character, monster, item] = await Promise.all([
+      tx.character.findUniqueOrThrow({ where: { id: characterId } }),
+      tx.monster.findUniqueOrThrow({ where: { key: pending.monster } }),
+      tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 } } })
+    ]);
+    if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_OWNED", "Bạn không sở hữu vật phẩm này.");
+    if (item.quantity < 1) throw new GameError("ITEM_EMPTY", "Vật phẩm đã hết.");
+    if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể dùng trang bị đang mặc.");
+    if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang bày bán.");
+    const usage = getItemUsageDefinition(item.template);
+    if (!usage.combatUsable) throw new GameError("ITEM_NOT_COMBAT_USABLE", "Vật phẩm này không dùng trong chiến đấu hiện tại.");
+    const state = combatStateFromReward(pending, monster.hp);
+    const key = actionKey || `${activityId}:${item.id}:${state.usedActionKeys.length}`;
+    if (state.usedActionKeys.includes(key)) return { duplicate: true, state };
+    const cooldownGroups = usage.effects.map((effect) => typeof effect.payload.cooldownGroup === "string" ? effect.payload.cooldownGroup : null).filter((group): group is string => Boolean(group));
+    if (cooldownGroups.some((group) => state.usedGroups.includes(group))) throw new GameError("ITEM_COOLDOWN", "Loại phù cao cấp này chỉ dùng một lần trong trận.");
+    if (state.monsterHp <= 0) throw new GameError("TARGET_DEAD", "Mục tiêu đã bị đánh bại.");
+    if (usage.targetType === "ENEMY" && targetId !== monster.key) throw new GameError("INVALID_TARGET", "Mục tiêu không hợp lệ.");
+    if (usage.targetType === "SELF" && targetId && targetId !== characterId) throw new GameError("INVALID_TARGET", "Phù này chỉ dùng lên bản thân.");
+    const nextState = { ...state, usedActionKeys: [...state.usedActionKeys, key], log: [...state.log] };
+    const messages: string[] = [`${character.name} sử dụng ${item.template.name}.`];
+    for (const effect of usage.effects) {
+      if (effect.type === "DEAL_DAMAGE") {
+        const cooldownGroup = typeof effect.payload.cooldownGroup === "string" ? effect.payload.cooldownGroup : null;
+        const damage = talismanDamage(effect, character, monster);
+        nextState.monsterHp = Math.max(0, nextState.monsterHp - damage.total);
+        if (cooldownGroup) nextState.usedGroups = [...nextState.usedGroups, cooldownGroup];
+        messages.push(`Gây ${damage.total} sát thương ${damage.element === "FIRE" ? "Hỏa" : damage.element === "LIGHTNING" ? "Lôi" : damage.element}${damage.hitCount > 1 ? ` (${damage.hitCount} lần cộng dồn)` : ""} lên ${monster.name}.`);
+      } else if (effect.type === "APPLY_SHIELD") {
+        const hpPercent = numberFromRecord(effect.payload, "hpPercent", 10);
+        const spiritScaling = numberFromRecord(effect.payload, "spiritScaling", 2);
+        const shield = Math.max(1, Math.floor((character.maxHp * hpPercent) / 100 + character.spirit * spiritScaling));
+        nextState.playerShield = Math.max(nextState.playerShield, shield);
+        nextState.playerStatusResistanceBps = Math.max(nextState.playerStatusResistanceBps, Math.floor(numberFromRecord(effect.payload, "statusResistanceBps")));
+        messages.push(`Nhận ${shield} Hộ Thuẫn.`);
+      } else if (effect.type === "BUFF_STAT") {
+        const effectType = typeof effect.payload.effectType === "string" ? effect.payload.effectType : "";
+        if (effectType === "DEFENSE_BPS") {
+          nextState.playerDefenseBps = Math.max(nextState.playerDefenseBps, Math.floor(numberFromRecord(effect.payload, "defenseBps")));
+          messages.push("Phòng ngự tăng 25% trong trận này.");
+        } else if (effectType === "SPEED_BPS") {
+          nextState.playerSpeedBps = Math.max(nextState.playerSpeedBps, Math.floor(numberFromRecord(effect.payload, "speedBps")));
+          messages.push("Thân pháp tăng trong trận này.");
+        } else if (effectType === "STATUS_RESISTANCE_BPS") {
+          nextState.playerStatusResistanceBps = Math.max(nextState.playerStatusResistanceBps, Math.floor(numberFromRecord(effect.payload, "statusResistanceBps")));
+          messages.push("Kháng trạng thái tăng trong trận này.");
+        }
+      } else if (effect.type === "APPLY_DEBUFF") {
+        nextState.enemySpeedBps = Math.min(nextState.enemySpeedBps, Math.floor(numberFromRecord(effect.payload, "speedBps")));
+        messages.push(`${monster.name} bị giảm 30% Thân Pháp trong trận này.`);
+      } else {
+        throw new GameError("ITEM_EFFECT_UNSUPPORTED", "Hiệu ứng phù này chưa dùng được trong combat.");
+      }
+    }
+    nextState.log = [...nextState.log, ...messages];
+    await consumeCombatItem(tx, characterId, item.id);
+    await tx.explorationActivity.update({ where: { id: activityId }, data: { reward: inputJson({ ...pending, combatState: nextState }) } });
+    await tx.gameLog.create({ data: { characterId, type: "encounter", message: messages.join(" "), metadata: inputJson({ activityId, itemKey: item.template.key, targetId, combatState: nextState }) } });
+    return { itemName: item.template.name, messages, state: nextState };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 export async function attackExplorationEncounter(db: Db, characterId: string, activityId: string, seed = Date.now(), now = new Date()) {
   return db.$transaction(async (tx) => {
     const activity = await tx.explorationActivity.findUnique({ where: { id: activityId } });
@@ -824,16 +1070,17 @@ export async function attackExplorationEncounter(db: Db, characterId: string, ac
       tx.character.findUniqueOrThrow({ where: { id: characterId } }),
       tx.monster.findUniqueOrThrow({ where: { key: pending.monster } })
     ]);
+    const combatState = combatStateFromReward(pending, monster.hp);
     const result = simulateCombat(
-      { name: character.name, hp: character.hp, attack: character.attack, defense: character.defense, speed: character.speed },
-      { name: monster.name, hp: monster.hp, attack: monster.attack, defense: monster.defense, speed: monster.speed },
+      { name: character.name, hp: character.hp + combatState.playerShield, attack: character.attack, defense: modifiedStat(character.defense, combatState.playerDefenseBps), speed: modifiedStat(character.speed, combatState.playerSpeedBps) },
+      { name: monster.name, hp: combatState.monsterHp, attack: monster.attack, defense: monster.defense, speed: modifiedStat(monster.speed, combatState.enemySpeedBps) },
       seededRng(seed)
     );
-    await tx.character.update({ where: { id: characterId }, data: { hp: result.remainingHp || Math.max(1, Math.floor(character.maxHp * 0.25)) } });
+    await tx.character.update({ where: { id: characterId }, data: { hp: result.remainingHp ? applyShieldToHp(result.remainingHp, character.maxHp) : Math.max(1, Math.floor(character.maxHp * 0.25)) } });
     const loot = result.winner === "player" ? await resolveMonsterLoot(tx, characterId, monster, activityId) : { linhThach: "0", items: [] };
     const reward = result.winner === "player" ? { cultivation: 80, linhThach: Number(loot.linhThach), loot } : { cultivation: 10, linhThach: 0, loot };
     if (reward.cultivation) await addCultivationClamped(tx, characterId, BigInt(reward.cultivation));
-    await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: result.log, reward } });
+    await tx.combat.create({ data: { characterId, monsterKey: monster.key, winner: result.winner, log: [...combatState.log, ...result.log], reward: { ...reward, combatState } } });
     if (result.winner === "player") {
       await progressSectMissionEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, locationId: typeof pending.locationId === "string" ? pending.locationId : null, amount: 1 });
       await progressQuestEvent(tx, { characterId, eventType: "MONSTER_KILLED", monsterKey: monster.key, locationId: typeof pending.locationId === "string" ? pending.locationId : null, amount: 1 });

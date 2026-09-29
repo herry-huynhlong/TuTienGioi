@@ -2782,9 +2782,26 @@ select.field option {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.9rem;
+  align-items: start;
   border-left: 3px solid var(--gold);
   background: rgba(0, 0, 0, 0.16);
   padding: 1rem;
+}
+
+.dialogue-avatar {
+  width: 3rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(214, 184, 103, 0.35);
+  background: rgba(214, 184, 103, 0.1);
+}
+
+.dialogue-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .dialogue-box p {

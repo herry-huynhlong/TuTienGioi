@@ -2,7 +2,7 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { breakthroughAction, cancelCultivationAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
-import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, getGameTime, getOnboardingState, realMsToGameMs, resolveLocationBackground, resolveLocationImagePosition } from "@ttg/game";
+import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, getGameTime, getItemUsageDefinition, getOnboardingState, realMsToGameMs, resolveLocationBackground, resolveLocationImagePosition } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
@@ -37,6 +37,11 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
     }),
     getOnboardingState(prisma, c.id)
   ]);
+  const breakthroughItems = (await prisma.itemInstance.findMany({
+    where: { ownerId: c.id, quantity: { gt: 0 }, equippedSlot: null, listings: { none: { status: "ACTIVE" } }, template: { category: "CONSUMABLE" } },
+    include: { template: true },
+    orderBy: { createdAt: "desc" }
+  })).map((item) => ({ item, usage: getItemUsageDefinition(item.template) })).filter(({ usage }) => usage.action === "BREAKTHROUGH" && usage.effects.some((effect) => effect.type === "BREAKTHROUGH_BONUS"));
   const nextRequirement = next?.requiredCultivation ?? c.realmStage.requiredCultivation;
   const cappedCultivation = c.cultivation > nextRequirement ? nextRequirement : c.cultivation;
   const progress = next ? Number((cappedCultivation * 100n) / next.requiredCultivation) : 100;
@@ -89,7 +94,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
                   </div>
                   <span className="status-pill">Bình cảnh</span>
                 </div>
-                <form action={breakthroughAction} className="mt-4">
+                <form action={breakthroughAction} className="mt-4 grid gap-3">
+                  <BreakthroughSupportSelect items={breakthroughItems} />
                   <button className="btn">Đột phá ngay</button>
                 </form>
               </>
@@ -208,7 +214,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             })}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
-            <form action={breakthroughAction}>
+            <form action={breakthroughAction} className="grid gap-3 sm:min-w-80">
+              <BreakthroughSupportSelect items={breakthroughItems} compact />
               <button className="btn" disabled={!canBreakthrough}>{canBreakthrough ? "Đột phá" : "Chưa đủ tu vi"}</button>
             </form>
             <Link href="/game/character" className="btn btn-secondary">Nhân vật</Link>
@@ -314,6 +321,28 @@ function Info({ label, value, accent = false }: { label: string; value: React.Re
       <span>{label}</span>
       <b className={accent ? "text-gold" : ""}>{value}</b>
     </div>
+  );
+}
+
+function BreakthroughSupportSelect({ items, compact = false }: { items: Array<{ item: { id: string; quantity: number; template: { name: string } }; usage: ReturnType<typeof getItemUsageDefinition> }>; compact?: boolean }) {
+  if (items.length === 0) return <p className="muted text-sm">Không có đan dược hỗ trợ đột phá trong túi.</p>;
+  return (
+    <label className={`grid gap-2 ${compact ? "text-sm" : ""}`}>
+      <span className="font-bold text-gold">Đan hỗ trợ</span>
+      <select name="supportItemInstanceId" className="form-input">
+        <option value="">Không dùng vật phẩm</option>
+        {items.map(({ item, usage }) => {
+          const bonus = usage.effects.find((effect) => effect.type === "BREAKTHROUGH_BONUS");
+          const bps = typeof bonus?.payload.bps === "number" ? bonus.payload.bps : 0;
+          const penalty = typeof bonus?.payload.failurePenaltyReductionBps === "number" ? bonus.payload.failurePenaltyReductionBps : 0;
+          return (
+            <option key={item.id} value={item.id}>
+              {item.template.name} x{item.quantity} · +{Math.round(bps / 100)}%{penalty ? ` · giảm hao tổn ${Math.round(penalty / 100)}%` : ""}
+            </option>
+          );
+        })}
+      </select>
+    </label>
   );
 }
 

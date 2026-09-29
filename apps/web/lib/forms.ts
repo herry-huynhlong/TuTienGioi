@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimTraining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimTraining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -104,9 +104,10 @@ export async function cancelCultivationAction(formData: FormData) {
   redirect("/game");
 }
 
-export async function breakthroughAction() {
+export async function breakthroughAction(formData?: FormData) {
   try {
-    await attemptBreakthrough(prisma, await characterId());
+    const supportItemInstanceId = String(formData?.get("supportItemInstanceId") ?? "");
+    await attemptBreakthrough(prisma, await characterId(), supportItemInstanceId || null);
   } catch (error) {
     redirectGameError(error, "/game");
   }
@@ -199,6 +200,42 @@ export async function attackEncounterAction(formData: FormData) {
 export async function leaveEncounterAction(formData: FormData) {
   try {
     await leaveExplorationEncounter(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location");
+}
+
+export async function useCombatItemAction(formData: FormData) {
+  try {
+    await useExplorationCombatItem(prisma, await characterId(), String(formData.get("id")), String(formData.get("itemId")), String(formData.get("targetId") || ""), String(formData.get("actionKey") || ""));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location");
+}
+
+export async function escapeEncounterItemAction(formData: FormData) {
+  try {
+    await escapeExplorationEncounterWithItem(prisma, await characterId(), String(formData.get("id")), String(formData.get("itemId")), String(formData.get("actionKey") || ""));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location");
+}
+
+export async function teleportItemAction(formData: FormData) {
+  try {
+    await teleportWithItem(prisma, await characterId(), String(formData.get("itemId")), String(formData.get("destinationLocationId")), String(formData.get("actionKey") || ""));
+  } catch (error) {
+    redirectGameError(error, "/game/inventory");
+  }
+  redirect("/game/location");
+}
+
+export async function breakSealItemAction(formData: FormData) {
+  try {
+    await breakWorldSealWithItem(prisma, await characterId(), String(formData.get("sealId")), String(formData.get("itemId")), String(formData.get("actionKey") || ""));
   } catch (error) {
     redirectGameError(error, "/game/location");
   }

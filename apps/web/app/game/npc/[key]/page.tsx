@@ -3,7 +3,7 @@ import { getUser } from "@/lib/auth";
 import { acceptQuestAction, completeQuestAction, talkToNpcAction } from "@/lib/forms";
 import { prisma, QuestStatus } from "@ttg/db";
 import { getAvailableQuestTemplates, QuestError, talkToNpc } from "@ttg/game";
-import { ArrowLeft, CheckCircle2, CircleDot, Gift, MapPin, MessageCircle, ScrollText, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleDot, Gift, MapPin, ScrollText, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -18,6 +18,7 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
   const activeQuests = data.quests.filter((quest) => quest.status === QuestStatus.ACTIVE || quest.status === QuestStatus.READY_TO_TURN_IN);
   const completedQuests = data.quests.filter((quest) => quest.status === QuestStatus.COMPLETED).slice(0, 3);
   const hasQuestPanel = data.available.length > 0 || activeQuests.length > 0 || completedQuests.length > 0;
+  const npcImage = data.npc.avatarUrl ?? data.npc.portraitUrl;
 
   return (
     <div className="p-5 lg:p-8">
@@ -35,7 +36,7 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
       <section className="npc-dialogue-layout">
         <aside className="npc-profile-panel panel">
           <div className="npc-profile-portrait">
-            {data.npc.portraitUrl ? <img src={data.npc.portraitUrl} alt="" /> : <UserRound size={54} aria-hidden />}
+            {npcImage ? <img src={npcImage} alt="" /> : <UserRound size={54} aria-hidden />}
           </div>
           <h2>{data.npc.name}</h2>
           <p className="text-gold">{data.npc.title}</p>
@@ -53,7 +54,9 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
         <main className="grid gap-5">
           <section className="panel rounded-lg p-5">
             <div className="dialogue-box">
-              <MessageCircle size={20} aria-hidden />
+              <div className="dialogue-avatar">
+                {npcImage ? <img src={npcImage} alt="" /> : <UserRound size={20} aria-hidden />}
+              </div>
               <div>
                 <b>{data.dialogue.speaker}</b>
                 <p>{data.dialogue.text}</p>

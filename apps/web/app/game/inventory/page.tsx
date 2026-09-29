@@ -1,8 +1,8 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { consumeItemAction, equipItemAction, sellItemToNpcAction, unequipItemAction } from "@/lib/forms";
-import { formatEquipmentSlot } from "@/lib/format";
+import { consumeItemAction, equipItemAction, sellItemToNpcAction, teleportItemAction, unequipItemAction } from "@/lib/forms";
+import { formatEquipmentSlot, formatLocationKind } from "@/lib/format";
 import { getItemEconomy, getItemUsageDefinition } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
@@ -41,7 +41,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   const c = await prisma.character.findUniqueOrThrow({
     where: { userId: user.id },
     include: {
-      currentLocation: true,
+      currentLocation: { include: { routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } } } },
       items: {
         where: { quantity: { gt: 0 } },
         include: { template: true, listings: { where: { status: "ACTIVE" }, select: { id: true, price: true, expiresAt: true } } },
@@ -54,6 +54,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   const inventory = c.items.filter((item) => !item.equippedSlot && matchesInventoryFilter(item, filter));
   const selected = inventory.find((item) => item.id === params?.item) ?? inventory[0] ?? c.items.find((item) => item.equippedSlot);
   const atMarket = Array.isArray(c.currentLocation?.services) && c.currentLocation.services.includes("market");
+  const teleportDestinations = c.currentLocation?.routesFrom.map((route) => route.destination).filter((destination) => destination.id !== c.currentLocationId && destination.active && !destination.services.includes("boss") && !destination.services.includes("quest_only") && !destination.services.includes("sealed")) ?? [];
 
   return (
     <div className="p-5 lg:p-8">
@@ -95,7 +96,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
         </Panel>
 
         <Panel title="Chi tiết vật phẩm">
-          {selected ? <ItemDetail item={selected} atMarket={atMarket} /> : <p className="muted">Chọn một vật phẩm để xem chi tiết.</p>}
+          {selected ? <ItemDetail item={selected} atMarket={atMarket} teleportDestinations={teleportDestinations} /> : <p className="muted">Chọn một vật phẩm để xem chi tiết.</p>}
         </Panel>
       </section>
     </div>
@@ -151,22 +152,24 @@ function ItemTile({ item, selected }: { item: InventoryItem; selected: boolean }
   );
 }
 
-function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean }) {
+function ItemDetail({ item, atMarket, teleportDestinations }: { item: InventoryItem; atMarket: boolean; teleportDestinations: Array<{ id: string; name: string; kind: string }> }) {
   const activeListing = item.listings[0];
   const usage = getItemUsageDefinition(item.template);
   const canEquip = item.template.category === "EQUIPMENT" && Boolean(item.template.equipSlot) && !activeListing;
   const canConsume = usage.action === "USE" && usage.runtime === "ACTIVE" && !activeListing;
   const canSell = item.template.tradeable && !item.bound && !activeListing;
   const economy = getItemEconomy(item.template);
+  const canTeleport = usage.effects.some((effect) => effect.type === "TELEPORT") && !activeListing;
   return (
     <ItemDetailPanel
       template={item.template}
       source="Túi Đồ"
       details={[
         { label: "Số lượng", value: `x${item.quantity}` },
-        { label: "Công dụng", value: usage.usable ? usage.effects.map((effect) => effect.type).join(", ") || "Theo ngữ cảnh" : "Nguyên liệu / không dùng trực tiếp" },
+        { label: "Công dụng", value: usage.usable ? usage.effects.map(describeEffect).join(", ") || "Theo ngữ cảnh" : "Nguyên liệu / không dùng trực tiếp" },
         { label: "Có thể dùng", value: usage.usable ? `${usage.combatUsable ? "Combat" : ""}${usage.combatUsable && usage.outOfCombatUsable ? " / " : ""}${usage.outOfCombatUsable ? "Ngoài combat" : ""}` || "Theo ngữ cảnh" : "Không" },
-        { label: "Tiêu hao", value: usage.consumptionMode === "NONE" ? "Không" : usage.consumptionMode },
+        { label: "Mục tiêu", value: usage.targetType === "ENEMY" ? "Kẻ địch" : usage.targetType === "SELF" ? "Bản thân" : usage.targetType === "LOCATION" ? "Địa điểm" : usage.targetType === "DESTINATION" ? "Điểm đến" : usage.targetType === "SEAL" ? "Phong ấn" : "Theo ngữ cảnh" },
+        { label: "Tiêu hao", value: usage.consumptionMode === "CONSUME_ONE" ? "1 vật phẩm" : usage.consumptionMode === "NONE" ? "Không" : usage.consumptionMode },
         ...(usage.durationSeconds ? [{ label: "Thời lượng", value: `${Math.round(usage.durationSeconds / 60)} phút` }] : []),
         ...(usage.reason ? [{ label: "Điều kiện dùng", value: usage.reason }] : []),
         { label: "Điều kiện", value: item.bound || !item.template.tradeable ? "Không thể giao dịch" : "Có thể giao dịch" },
@@ -194,6 +197,24 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
             <ItemQuantityControl max={item.quantity} submitLabel="Sử dụng" />
           </form>
         ) : null}
+        {canTeleport ? (
+          <form action={teleportItemAction} className="sell-mode-card">
+            <input type="hidden" name="itemId" value={item.id} />
+            <input type="hidden" name="actionKey" value={`teleport:${item.id}:${item.quantity}`} />
+            <h3>Dịch chuyển</h3>
+            <p className="muted">Chỉ tới địa điểm đã biết và không bị khóa.</p>
+            {teleportDestinations.length > 0 ? (
+              <>
+                <select name="destinationLocationId" className="form-input">
+                  {teleportDestinations.map((destination) => <option key={destination.id} value={destination.id}>{destination.name} · {formatLocationKind(destination.kind)}</option>)}
+                </select>
+                <button className="btn w-full">Dịch chuyển</button>
+              </>
+            ) : (
+              <button className="btn w-full" disabled>Không có điểm đến hợp lệ</button>
+            )}
+          </form>
+        ) : null}
         {canSell && atMarket && economy.sellableToNpc ? (
           <form action={sellItemToNpcAction} className="sell-mode-card">
             <input type="hidden" name="itemId" value={item.id} />
@@ -208,5 +229,25 @@ function ItemDetail({ item, atMarket }: { item: InventoryItem; atMarket: boolean
       )}
     />
   );
+}
+
+function describeEffect(effect: { type: string; payload: Record<string, unknown> }) {
+  if (effect.type === "DEAL_DAMAGE") {
+    const element = effect.payload.element === "FIRE" ? "Hỏa" : effect.payload.element === "LIGHTNING" ? "Lôi" : "thuộc tính";
+    const hitCount = typeof effect.payload.hitCount === "number" && effect.payload.hitCount > 1 ? ` x${effect.payload.hitCount}` : "";
+    return `Gây sát thương ${element}${hitCount}`;
+  }
+  if (effect.type === "APPLY_SHIELD") return `Tạo Hộ Thuẫn ${String(effect.payload.durationTurns ?? 3)} lượt`;
+  if (effect.type === "APPLY_DEBUFF") return "Giảm 30% Speed trong 3 lượt";
+  if (effect.type === "BUFF_STAT") {
+    if (effect.payload.effectType === "DEFENSE_BPS") return "Tăng 25% phòng ngự trong 5 lượt";
+    if (effect.payload.effectType === "STATUS_RESISTANCE_BPS") return "Tăng 30% kháng trạng thái";
+    if (effect.payload.effectType === "SPEED_BPS") return "Tăng Speed tạm thời";
+  }
+  if (effect.type === "BREAKTHROUGH_BONUS") return "Hỗ trợ đột phá";
+  if (effect.type === "ESCAPE") return "Thoát khỏi encounter thường";
+  if (effect.type === "TELEPORT") return "Dịch chuyển tới địa điểm đã biết";
+  if (effect.type === "BREAK_SEAL") return `Phá phong ấn cấp ${String(effect.payload.grade ?? 1)}`;
+  return effect.type;
 }
 

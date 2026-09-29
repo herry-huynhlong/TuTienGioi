@@ -1,8 +1,8 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
-import { attackEncounterAction, cancelExploreAction, exploreAction, leaveEncounterAction, startTravelAction } from "@/lib/forms";
+import { attackEncounterAction, breakSealItemAction, cancelExploreAction, escapeEncounterItemAction, exploreAction, leaveEncounterAction, startTravelAction, useCombatItemAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { advanceExplorationActivity, currentEnergy, getItemEconomy, getNpcsAtLocation, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
+import { advanceExplorationActivity, currentEnergy, getItemEconomy, getItemUsageDefinition, getNpcsAtLocation, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
@@ -48,6 +48,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
       travels: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
       currentLocation: { include: { zone: { include: { region: true } }, routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } } } },
       location: true,
+      items: { where: { quantity: { gt: 0 }, equippedSlot: null, listings: { none: { status: "ACTIVE" } } }, include: { template: true }, orderBy: { createdAt: "desc" } },
       quests: { where: { status: { in: ["ACTIVE", "READY_TO_TURN_IN", "COMPLETED"] } }, include: { template: true } }
     }
   });
@@ -68,7 +69,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
   const activities = getLocationActivities(services);
   const facilities = getLocationFacilities(services, location?.kind);
   const routes = location?.routesFrom ?? [];
-  const [logs, itemTemplates, monsters, npcsAtLocation] = await Promise.all([
+  const [logs, itemTemplates, monsters, npcsAtLocation, worldSeals] = await Promise.all([
     prisma.gameLog.findMany({
     where: { characterId: c.id, type: { in: ["exploration", "encounter"] } },
     take: 6,
@@ -76,10 +77,14 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
     }),
     prisma.itemTemplate.findMany(),
     prisma.monster.findMany({ select: { key: true, name: true, hp: true, realmOrder: true } }),
-    location ? getNpcsAtLocation(prisma, c.id, location.id) : []
+    location ? getNpcsAtLocation(prisma, c.id, location.id) : [],
+    location ? prisma.worldSeal.findMany({ where: { locationId: location.id, status: "SEALED" }, orderBy: { createdAt: "asc" } }) : []
   ]);
   const itemTemplatesByKey = new Map(itemTemplates.map((item) => [item.key, item]));
   const monsterByKey = new Map(monsters.map((monster) => [monster.key, monster]));
+  const usableItems = c.items.map((item) => ({ item, usage: getItemUsageDefinition(item.template) }));
+  const combatItems = usableItems.filter(({ usage }) => usage.combatUsable && usage.effects.some((effect) => effect.type === "DEAL_DAMAGE" || effect.type === "APPLY_SHIELD" || effect.type === "APPLY_DEBUFF" || effect.type === "BUFF_STAT" || effect.type === "ESCAPE"));
+  const breakSealItems = usableItems.filter(({ usage }) => usage.effects.some((effect) => effect.type === "BREAK_SEAL"));
 
   return (
     <div className="p-5 lg:p-8">
@@ -121,6 +126,14 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
             <Panel title="Nhân vật">
               <div className="npc-grid">
                 {npcsAtLocation.map((npc) => <NpcCard key={npc.id} npc={npc} quests={c.quests} />)}
+              </div>
+            </Panel>
+          ) : null}
+
+          {worldSeals.length > 0 ? (
+            <Panel title="Phong ấn / Cấm chế">
+              <div className="action-grid">
+                {worldSeals.map((seal) => <WorldSealCard key={seal.id} seal={seal} items={breakSealItems} />)}
               </div>
             </Panel>
           ) : null}
@@ -170,7 +183,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
         </div>
 
         <Panel title="Tình huống hiện tại">
-          <SituationPanel active={activeExploration} pending={pendingEncounter} latest={latestResolved} logs={logs} itemTemplatesByKey={itemTemplatesByKey} monsterByKey={monsterByKey} />
+          <SituationPanel active={activeExploration} pending={pendingEncounter} latest={latestResolved} logs={logs} combatItems={combatItems} itemTemplatesByKey={itemTemplatesByKey} monsterByKey={monsterByKey} />
         </Panel>
       </section>
     </div>
@@ -184,6 +197,7 @@ function NpcCard({
   npc: { key: string; name: string; title: string; description: string; portraitUrl: string | null; avatarUrl?: string | null; iconKey: string; questStarts: Array<{ id: string }>; questTurnIns: Array<{ id: string }>; playerState?: { timesMet: number; relationshipState: string } | null };
   quests: Array<{ status: string; templateId: string; template: { startNpcId: string | null; turnInNpcId: string | null } }>;
 }) {
+  const npcImage = npc.avatarUrl ?? npc.portraitUrl;
   const ready = quests.some((quest) => quest.status === "READY_TO_TURN_IN" && npc.questTurnIns.some((template) => template.id === quest.templateId));
   const active = quests.some((quest) => quest.status === "ACTIVE" && (npc.questStarts.some((template) => template.id === quest.templateId) || npc.questTurnIns.some((template) => template.id === quest.templateId)));
   const completed = new Set(quests.filter((quest) => quest.status === "COMPLETED").map((quest) => quest.templateId));
@@ -192,7 +206,7 @@ function NpcCard({
   return (
     <article className="npc-card">
       <div className="npc-portrait">
-        {npc.portraitUrl ? <img src={npc.portraitUrl} alt="" /> : <UserRound size={30} aria-hidden />}
+        {npcImage ? <img src={npcImage} alt="" /> : <UserRound size={30} aria-hidden />}
         {badge ? <span className={`npc-badge npc-badge-${ready ? "ready" : hasNew ? "new" : "active"}`}>{badge}</span> : null}
       </div>
       <div>
@@ -259,6 +273,7 @@ function SituationPanel({
   pending,
   latest,
   logs,
+  combatItems,
   itemTemplatesByKey,
   monsterByKey
 }: {
@@ -266,6 +281,7 @@ function SituationPanel({
   pending: { id: string; reward: unknown } | undefined;
   latest: { id: string; eventKey: string | null; reward: unknown; claimedAt: Date | null } | undefined;
   logs: Array<{ id: string; message: string; createdAt: Date }>;
+  combatItems: Array<{ item: { id: string; quantity: number; template: ItemTemplateReward }; usage: ReturnType<typeof getItemUsageDefinition> }>;
   itemTemplatesByKey: Map<string, ItemTemplateReward>;
   monsterByKey: Map<string, { key: string; name: string; hp: number; realmOrder: number }>;
 }) {
@@ -293,6 +309,9 @@ function SituationPanel({
   if (pending) {
     const reward = parseReward(pending.reward);
     const monster = typeof reward.monster === "string" ? monsterByKey.get(reward.monster) : null;
+    const combatState = parseReward(reward.combatState);
+    const monsterHp = typeof combatState.monsterHp === "number" && monster ? Math.max(0, combatState.monsterHp) : monster?.hp;
+    const stateLog = Array.isArray(combatState.log) ? combatState.log.filter((entry): entry is string => typeof entry === "string") : [];
     return (
       <div className="situation-card">
         <p className="text-xs font-bold uppercase text-jade">Phát hiện</p>
@@ -300,9 +319,15 @@ function SituationPanel({
         <p className="muted mt-2">Bạn nghe tiếng lá khô chuyển động gần đó. Một sinh vật đang quan sát bạn từ phía xa.</p>
         <div className="info-table mt-4">
           <div><span>Cảnh giới</span><b>Bậc {monster?.realmOrder ?? "?"}</b></div>
-          <div><span>HP</span><b>{monster ? `${monster.hp}/${monster.hp}` : "Chưa rõ"}</b></div>
+          <div><span>HP</span><b>{monster ? `${monsterHp}/${monster.hp}` : "Chưa rõ"}</b></div>
           <div><span>Nguy hiểm</span><b>Thấp</b></div>
         </div>
+        <CombatItemPanel activityId={pending.id} monsterKey={monster?.key ?? ""} combatItems={combatItems} />
+        {stateLog.length > 0 ? (
+          <div className="event-list mt-4">
+            {stateLog.slice(-4).map((entry, index) => <p key={`${entry}-${index}`}>{entry}</p>)}
+          </div>
+        ) : null}
         <p className="muted mt-3">Bạn muốn làm gì?</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <form action={attackEncounterAction}>
@@ -364,6 +389,68 @@ function SituationPanel({
         {logs.length === 0 ? <p className="muted">Chưa có ghi chép tại địa điểm này.</p> : null}
       </div>
     </div>
+  );
+}
+
+function CombatItemPanel({ activityId, monsterKey, combatItems }: { activityId: string; monsterKey: string; combatItems: Array<{ item: { id: string; quantity: number; template: ItemTemplateReward }; usage: ReturnType<typeof getItemUsageDefinition> }> }) {
+  if (combatItems.length === 0) return <p className="muted mt-4 text-sm">Không có phù chiến đấu có thể dùng.</p>;
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-bold uppercase text-jade">Vật phẩm</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        {combatItems.map(({ item, usage }) => {
+          const targetId = usage.targetType === "ENEMY" ? monsterKey : "";
+          const effect = usage.effects[0];
+          const action = effect?.type === "ESCAPE" ? escapeEncounterItemAction : useCombatItemAction;
+          return (
+            <form key={item.id} action={action} className="activity-row activity-row-stacked">
+              <input type="hidden" name="id" value={activityId} />
+              <input type="hidden" name="itemId" value={item.id} />
+              <input type="hidden" name="targetId" value={targetId} />
+              <input type="hidden" name="actionKey" value={`${activityId}:${item.id}:${item.quantity}`} />
+              <span>
+                <b>{item.template.name} x{item.quantity}</b>
+                <small>{combatEffectText(effect)}</small>
+              </span>
+              <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Dùng</button>
+            </form>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function combatEffectText(effect: { type: string; payload: Record<string, unknown> } | undefined) {
+  if (!effect) return "Dùng trong chiến đấu.";
+  if (effect.type === "DEAL_DAMAGE") return `Gây sát thương ${effect.payload.element === "FIRE" ? "Hỏa" : "Lôi"} lên một mục tiêu.`;
+  if (effect.type === "APPLY_SHIELD") return "Tạo Hộ Thuẫn cho bản thân.";
+  if (effect.type === "APPLY_DEBUFF") return "Giảm Thân Pháp mục tiêu.";
+  if (effect.type === "BUFF_STAT") return "Tăng chỉ số trong trận.";
+  if (effect.type === "ESCAPE") return "Thoát khỏi encounter thường.";
+  return "Dùng trong chiến đấu.";
+}
+
+function WorldSealCard({ seal, items }: { seal: { id: string; name: string; description: string; requiredBreakSealGrade: number }; items: Array<{ item: { id: string; quantity: number; template: ItemTemplateReward }; usage: ReturnType<typeof getItemUsageDefinition> }> }) {
+  const usable = items.find(({ usage }) => usage.effects.some((effect) => effect.type === "BREAK_SEAL" && typeof effect.payload.grade === "number" && effect.payload.grade >= seal.requiredBreakSealGrade));
+  return (
+    <article className="facility-card">
+      <div>
+        <b>{seal.name}</b>
+        <p>{seal.description}</p>
+        <small>Cấp phong ấn {seal.requiredBreakSealGrade} · cần Phá Cấm Phù cấp {seal.requiredBreakSealGrade}+</small>
+      </div>
+      {usable ? (
+        <form action={breakSealItemAction} className="mt-3">
+          <input type="hidden" name="sealId" value={seal.id} />
+          <input type="hidden" name="itemId" value={usable.item.id} />
+          <input type="hidden" name="actionKey" value={`${seal.id}:${usable.item.id}:${usable.item.quantity}`} />
+          <button className="btn btn-secondary w-full">Dùng {usable.item.template.name}</button>
+        </form>
+      ) : (
+        <button className="btn btn-secondary mt-3 w-full" disabled>Thiếu Phá Cấm Phù phù hợp</button>
+      )}
+    </article>
   );
 }
 

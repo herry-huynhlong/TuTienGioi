@@ -19,7 +19,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "validate:profession-recipes": "tsx prisma/validateProfessionRecipes.ts",
-    "report:item-visuals": "tsx prisma/reportItemVisualCoverage.ts"
+    "report:item-visuals": "tsx prisma/reportItemVisualCoverage.ts",
+    "report:npc-visuals": "tsx prisma/reportNpcVisualCoverage.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

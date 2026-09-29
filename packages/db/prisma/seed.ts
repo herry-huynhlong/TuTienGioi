@@ -325,6 +325,28 @@ async function main() {
     locationByKey.set(key, location.id);
   }
 
+  await prisma.worldSeal.upsert({
+    where: { key: "co-dia-ngoai-vi-co-cam" },
+    update: {
+      locationId: locationByKey.get("co-dia-ngoai-vi")!,
+      name: "Phong Ấn Cổ",
+      description: "Một tầng cấm chế phủ trên lối vào sâu hơn của cổ địa.",
+      targetType: "RUIN_GATE",
+      targetId: "co-dia-noi-vi",
+      requiredBreakSealGrade: 1
+    },
+    create: {
+      key: "co-dia-ngoai-vi-co-cam",
+      locationId: locationByKey.get("co-dia-ngoai-vi")!,
+      name: "Phong Ấn Cổ",
+      description: "Một tầng cấm chế phủ trên lối vào sâu hơn của cổ địa.",
+      targetType: "RUIN_GATE",
+      targetId: "co-dia-noi-vi",
+      requiredBreakSealGrade: 1,
+      metadata: { source: "world_seed" }
+    }
+  });
+
   for (const [key, name, originKey, destinationKey, travelMinutes, travelCost, dangerLevel, securityLevel, ambushAllowed, caravanAllowed] of routes) {
     await prisma.route.upsert({
       where: { key },
@@ -393,6 +415,56 @@ async function main() {
   const teachingDialogue = await dialogue("dlg-truyen-cong-truong-lao", "Truyền Công Trưởng Lão", "Truyền Công Trưởng Lão", "Công pháp không nằm ở trang giấy, mà ở cách ngươi vận chuyển từng hơi thở.", ["Hỏi về công pháp", "Rời đi"]);
 
   const npcProfiles = {
+    "luc-minh": {
+      portraitUrl: "/npc/luc-minh.webp",
+      avatarUrl: "/npc/luc-minh.webp",
+      visualKey: "luc-minh",
+      metadata: {
+        dialogueProfile: {
+          first: "Ta là Lục Minh, quen đường quanh Đông Thành. Người mới đừng ngại hỏi, đi đúng đường thì ít vấp đá hơn.",
+          repeat: "Đạo hữu lại tới rồi. Thanh Vân Vực rộng, nhưng từng bước nắm chắc là được.",
+          activeQuest: "Việc đầu tiên cứ nhìn đường, nhớ lối, rồi hãy nghĩ tới chuyện săn yêu.",
+          readyQuest: "Ánh mắt đã bớt lạ lẫm. Xem ra đạo hữu đã hiểu đường ra ngoài thành.",
+          helped: "Tốt. Từ nay nếu lạc đường, cứ tìm dấu cũ mà đi."
+        },
+        movementProfile: { type: "fixed", route: [] },
+        role: "beginner-guide",
+        relationshipType: "mentor"
+      }
+    },
+    "thanh-van-su-gia": {
+      portraitUrl: "/npc/thanh-van-su-gia.webp",
+      avatarUrl: "/npc/thanh-van-su-gia.webp",
+      visualKey: "thanh-van-su-gia",
+      metadata: {
+        dialogueProfile: {
+          first: "Thanh Vân các sơn môn đều có quy củ. Muốn nhập môn, trước hết phải hiểu mình hợp con đường nào.",
+          repeat: "Tông môn không chỉ là danh phận. Đó là trách nhiệm, công lao và quan hệ lâu dài.",
+          activeQuest: "Cứ quan sát thêm Thanh Linh Sơn Môn, chưa cần vội quyết định.",
+          readyQuest: "Nếu đã hiểu đại khái, ta sẽ ghi nhận ngươi đã nghe qua chuyện sơn môn.",
+          helped: "Ngươi có tâm tìm hiểu, sau này vào núi sẽ bớt nhiều đường vòng."
+        },
+        movementProfile: { type: "fixed", route: [] },
+        role: "sect-emissary",
+        relationshipType: "official"
+      }
+    },
+    "van-bao-lau-quan-su": {
+      portraitUrl: "/npc/van-bao-lau-quan-su.webp",
+      avatarUrl: "/npc/van-bao-lau-quan-su.webp",
+      visualKey: "van-bao-lau-quan-su",
+      metadata: {
+        dialogueProfile: {
+          first: "Vạn Bảo Lâu trọng chữ tín. Có vật muốn bán thì cứ đưa ta xem, nhưng giá tốt hay không còn tùy nhãn lực.",
+          repeat: "Lại có hàng mới sao? Bảo lâu không thiếu khách, chỉ thiếu người biết giữ thứ đáng giữ.",
+          friendly: "Ngươi mua bán cẩn thận, ta cũng nguyện chỉ vài giá thật.",
+          helped: "Người biết giao dịch lâu dài luôn đáng nhớ hơn người chỉ mặc cả một lần."
+        },
+        movementProfile: { type: "fixed", route: [] },
+        role: "treasure-pavilion-steward",
+        relationshipType: "commercial"
+      }
+    },
     "duoc-nong": {
       portraitUrl: "/npc/duoc-nong.webp",
       avatarUrl: "/npc/duoc-nong.webp",
@@ -448,6 +520,54 @@ async function main() {
         movementProfile: { type: "route", route: ["thanh-truc-lam", "thanh-van-dong-thanh", "bia-rung"] },
         role: "wandering-sage",
         relationshipType: "fate"
+      }
+    },
+    "ngoai-mon-chap-su": {
+      portraitUrl: "/npc/ngoai-mon-chap-su.webp",
+      avatarUrl: "/npc/ngoai-mon-chap-su.webp",
+      visualKey: "ngoai-mon-chap-su",
+      metadata: {
+        dialogueProfile: {
+          first: "Ngoài sơn môn, quy củ là thứ giữ người mới khỏi tự hại mình. Muốn vào núi, trước hết phải biết lễ.",
+          repeat: "Danh sách tiếp dẫn vẫn còn đây. Ngươi muốn hỏi chuyện nhập môn hay nhiệm vụ ngoại môn?",
+          activeQuest: "Việc sơn môn không khó, khó là làm đều và làm đúng.",
+          readyQuest: "Nếu đã chuẩn bị xong, ta sẽ ghi nhận vào sổ ngoại môn."
+        },
+        movementProfile: { type: "fixed", route: [] },
+        role: "outer-sect-registrar",
+        relationshipType: "official"
+      }
+    },
+    "nhiem-vu-chap-su": {
+      portraitUrl: "/npc/nhiem-vu-chap-su.webp",
+      avatarUrl: "/npc/nhiem-vu-chap-su.webp",
+      visualKey: "nhiem-vu-chap-su",
+      metadata: {
+        dialogueProfile: {
+          first: "Nhiệm Vụ Đường chỉ ghi công lao đã hoàn thành. Nhận việc vừa sức, nộp đúng hạn, tích tiểu thành đại.",
+          repeat: "Muốn nhận việc thì xem rõ điều kiện. Nhiều người thất bại không vì yếu, mà vì đọc thiếu một dòng.",
+          activeQuest: "Nhiệm vụ đang làm thì cứ theo dấu ghi trong lệnh bài.",
+          readyQuest: "Đủ chứng vật rồi sao? Đưa ta kiểm công."
+        },
+        movementProfile: { type: "fixed", route: [] },
+        role: "mission-hall-clerk",
+        relationshipType: "official"
+      }
+    },
+    "truyen-cong-truong-lao": {
+      portraitUrl: "/npc/truyen-cong-truong-lao.webp",
+      avatarUrl: "/npc/truyen-cong-truong-lao.webp",
+      visualKey: "truyen-cong-truong-lao",
+      metadata: {
+        dialogueProfile: {
+          first: "Công pháp nhập môn không quý ở chữ nhiều, mà quý ở hơi thở đầu tiên vận đúng.",
+          repeat: "Đừng tham nhanh. Một vòng chu thiên vững còn hơn mười lần cưỡng ép.",
+          friendly: "Ngươi chịu lắng tâm, vậy ta có thể nói sâu hơn một chút.",
+          helped: "Nếu sau này khí mạch rối, hãy nhớ quay về căn bản."
+        },
+        movementProfile: { type: "fixed", route: [] },
+        role: "scripture-elder",
+        relationshipType: "teacher"
       }
     }
   } as const;

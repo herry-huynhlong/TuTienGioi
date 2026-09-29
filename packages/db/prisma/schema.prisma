@@ -367,6 +367,7 @@ model Character {
   location        Zone? @relation(fields: [locationId], references: [id])
   currentLocationId String?
   currentLocation   Location? @relation(fields: [currentLocationId], references: [id])
+  unlockedSeals  WorldSeal[] @relation("WorldSealUnlockedBy")
   sectId          String?
   sect            Sect? @relation(fields: [sectId], references: [id])
   linhThach       BigInt @default(1000)
@@ -639,8 +640,31 @@ model Location {
   npcs         Npc[]
   npcHomes     Npc[] @relation("NpcHomeLocation")
   npcWorldStates NpcWorldState[]
+  worldSeals   WorldSeal[]
   @@index([zoneId])
   @@index([securityLevel])
+}
+
+model WorldSeal {
+  id          String @id @default(cuid())
+  key         String @unique
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  targetType  String
+  targetId    String?
+  requiredBreakSealGrade Int @default(1)
+  status      String @default("SEALED")
+  unlockedAt  DateTime?
+  unlockedByCharacterId String?
+  unlockedByCharacter Character? @relation("WorldSealUnlockedBy", fields: [unlockedByCharacterId], references: [id], onDelete: SetNull)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([locationId, status])
+  @@index([targetType, targetId])
 }
 
 model Route {

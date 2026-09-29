@@ -97,15 +97,19 @@ function immediateSelf(effects: ItemEffectSpec[], options: Partial<ItemUsageDefi
   };
 }
 
-function locked(reason: string, effects: ItemEffectSpec[], action: ItemActionKind = "TARGETED"): ItemUsageDefinition {
+function locked(reason: string, effects: ItemEffectSpec[], action: ItemActionKind = "TARGETED", options: Partial<ItemUsageDefinition> = {}): ItemUsageDefinition {
   return {
     ...baseDefinition(),
     usable: true,
     action,
-    targetType: action === "BREAKTHROUGH" ? "SELF" : "NONE",
+    targetType: options.targetType ?? (action === "BREAKTHROUGH" ? "SELF" : "NONE"),
     consumptionMode: "CONSUME_ONE",
+    combatUsable: options.combatUsable ?? false,
+    outOfCombatUsable: options.outOfCombatUsable ?? false,
     runtime: "CONTEXT_LOCKED",
     reason,
+    durationSeconds: options.durationSeconds ?? null,
+    stackRule: options.stackRule ?? "NONE",
     effects
   };
 }
@@ -145,24 +149,32 @@ function pillDefinition(template: ItemUsageTemplate, modifiers: Record<string, u
     return immediateSelf(effects, { combatUsable: true, cooldownSeconds: day });
   }
   if (numberValue(modifiers, "fateGrade") > 0) {
-    return locked("Đoạt Thiên Đan chỉ dùng trong đột phá cao cấp khi hệ này mở.", [{ type: "BREAKTHROUGH_BONUS", payload: { fateGrade: numberValue(modifiers, "fateGrade") } }], "BREAKTHROUGH");
+    return locked("Đoạt Thiên Đan chỉ dùng trong lần đột phá, giảm tổn thất khi thất bại.", [{ type: "BREAKTHROUGH_BONUS", payload: { fateGrade: numberValue(modifiers, "fateGrade"), bps: 3000, failurePenaltyReductionBps: 5000 } }], "BREAKTHROUGH");
   }
 
   return effects.length > 0 ? immediateSelf(effects, { combatUsable: effects.some((effect) => effect.type === "HEAL_HP" || effect.type === "RESTORE_QI") }) : null;
 }
 
 function talismanDefinition(template: ItemUsageTemplate, modifiers: Record<string, unknown>): ItemUsageDefinition | null {
-  const spiritScaling = { stat: "spirit" };
-  if (numberValue(modifiers, "fireDamage") > 0) return locked("Cần mục tiêu trong chiến đấu.", [{ type: "DEAL_DAMAGE", payload: { element: "FIRE", baseDamage: numberValue(modifiers, "fireDamage"), scaling: spiritScaling } }]);
-  if (numberValue(modifiers, "lightningDamage") > 0) return locked("Cần mục tiêu trong chiến đấu.", [{ type: "DEAL_DAMAGE", payload: { element: "LIGHTNING", baseDamage: numberValue(modifiers, "lightningDamage"), scaling: spiritScaling } }]);
-  if (numberValue(modifiers, "shield") > 0) return locked("Cần combat/self buff context để tạo hộ thuẫn.", [{ type: "APPLY_SHIELD", payload: { shield: numberValue(modifiers, "shield") } }]);
+  const damageConfigs: Record<string, { element: "FIRE" | "LIGHTNING"; baseDamage: number; scaling: number; hitCount?: number; cooldownGroup?: string }> = {
+    "hoa-cau-phu": { element: "FIRE", baseDamage: 60, scaling: 1.2 },
+    "bao-viem-phu": { element: "FIRE", baseDamage: 150, scaling: 1.8 },
+    "thien-loi-phu": { element: "LIGHTNING", baseDamage: 220, scaling: 2 },
+    "ngu-loi-phu": { element: "LIGHTNING", baseDamage: 70, scaling: 0.55, hitCount: 5 },
+    "thai-hu-loi-phu": { element: "LIGHTNING", baseDamage: 500, scaling: 3, cooldownGroup: "HIGH_TIER_COMBAT_TALISMAN" }
+  };
+  const damageConfig = damageConfigs[template.key];
+  if (damageConfig) return locked("Cần mục tiêu trong chiến đấu.", [{ type: "DEAL_DAMAGE", payload: { ...damageConfig, scalingStat: "spirit", target: "SINGLE_ENEMY" } }], "TARGETED", { combatUsable: true, targetType: "ENEMY" });
+  if (numberValue(modifiers, "fireDamage") > 0) return locked("Cần mục tiêu trong chiến đấu.", [{ type: "DEAL_DAMAGE", payload: { element: "FIRE", baseDamage: numberValue(modifiers, "fireDamage"), scalingStat: "spirit", scaling: 1, target: "SINGLE_ENEMY" } }], "TARGETED", { combatUsable: true, targetType: "ENEMY" });
+  if (numberValue(modifiers, "lightningDamage") > 0) return locked("Cần mục tiêu trong chiến đấu.", [{ type: "DEAL_DAMAGE", payload: { element: "LIGHTNING", baseDamage: numberValue(modifiers, "lightningDamage"), scalingStat: "spirit", scaling: 1, target: "SINGLE_ENEMY" } }], "TARGETED", { combatUsable: true, targetType: "ENEMY" });
+  if (numberValue(modifiers, "shield") > 0) return locked("Cần combat/self buff context để tạo hộ thuẫn.", [{ type: "APPLY_SHIELD", payload: { shield: numberValue(modifiers, "shield"), hpPercent: template.key === "van-pha-ho-than-phu" ? 50 : 10, spiritScaling: template.key === "van-pha-ho-than-phu" ? 0 : 2, durationTurns: template.key === "van-pha-ho-than-phu" ? 5 : 3, statusResistanceBps: template.key === "van-pha-ho-than-phu" ? 3000 : 0 } }], "TARGETED", { combatUsable: true, targetType: "SELF", stackRule: "HIGHEST_ONLY" });
   if (numberValue(modifiers, "speedBps") > 0) return immediateSelf([buff("SPEED_BPS", { speedBps: numberValue(modifiers, "speedBps") }, 30 * 60, template.key)], { combatUsable: true, stackRule: "REFRESH_DURATION" });
-  if (numberValue(modifiers, "defenseBps") > 0) return locked("Cần combat context để nhận phòng ngự tạm thời.", [buff("DEFENSE_BPS", { defenseBps: numberValue(modifiers, "defenseBps") }, 5 * 60, template.key)]);
-  if (numberValue(modifiers, "resistEvilBps") > 0) return immediateSelf([buff("RESIST_EVIL_BPS", { resistEvilBps: numberValue(modifiers, "resistEvilBps") }, 30 * 60, template.key)], { combatUsable: true, stackRule: "REFRESH_DURATION" });
-  if (numberValue(modifiers, "escapeGrade") > 0) return locked("Chỉ dùng khi đang gặp encounter thường có thể thoát.", [{ type: "ESCAPE", payload: { grade: numberValue(modifiers, "escapeGrade") } }]);
-  if (numberValue(modifiers, "bindBps") > 0) return locked("Cần mục tiêu trong chiến đấu để phong cấm.", [{ type: "APPLY_DEBUFF", payload: { effectType: "BIND", bindBps: numberValue(modifiers, "bindBps") } }]);
-  if (numberValue(modifiers, "breakSealGrade") > 0) return locked("Cần phong ấn/cấm chế hợp lệ tại location.", [{ type: "BREAK_SEAL", payload: { grade: numberValue(modifiers, "breakSealGrade") } }]);
-  if (numberValue(modifiers, "teleportGrade") > 0) return locked("Cần chọn waypoint đã khám phá và hợp lệ.", [{ type: "TELEPORT", payload: { grade: numberValue(modifiers, "teleportGrade") } }]);
+  if (numberValue(modifiers, "defenseBps") > 0) return locked("Cần combat context để nhận phòng ngự tạm thời.", [{ type: "BUFF_STAT", payload: { effectType: "DEFENSE_BPS", defenseBps: 2500, durationTurns: 5, sourceKey: template.key } }], "TARGETED", { combatUsable: true, targetType: "SELF", stackRule: "REFRESH_DURATION" });
+  if (numberValue(modifiers, "resistEvilBps") > 0) return locked("Cần combat context để kháng trạng thái.", [{ type: "BUFF_STAT", payload: { effectType: "STATUS_RESISTANCE_BPS", statusResistanceBps: 3000, durationTurns: 5, sourceKey: template.key } }], "TARGETED", { combatUsable: true, targetType: "SELF", stackRule: "REFRESH_DURATION" });
+  if (numberValue(modifiers, "escapeGrade") > 0) return locked("Chỉ dùng khi đang gặp encounter thường có thể thoát.", [{ type: "ESCAPE", payload: { grade: numberValue(modifiers, "escapeGrade") } }], "TARGETED", { combatUsable: true, targetType: "NONE" });
+  if (numberValue(modifiers, "bindBps") > 0) return locked("Cần mục tiêu trong chiến đấu để phong cấm.", [{ type: "APPLY_DEBUFF", payload: { effectType: "SPEED_BPS", speedBps: -3000, durationTurns: 3 } }], "TARGETED", { combatUsable: true, targetType: "ENEMY", stackRule: "REFRESH_DURATION" });
+  if (numberValue(modifiers, "breakSealGrade") > 0) return locked("Cần phong ấn/cấm chế hợp lệ tại location.", [{ type: "BREAK_SEAL", payload: { grade: numberValue(modifiers, "breakSealGrade") } }], "TARGETED", { targetType: "SEAL" });
+  if (numberValue(modifiers, "teleportGrade") > 0) return locked("Cần chọn waypoint đã khám phá và hợp lệ.", [{ type: "TELEPORT", payload: { grade: numberValue(modifiers, "teleportGrade") } }], "TARGETED", { outOfCombatUsable: true, targetType: "DESTINATION" });
   return null;
 }
 

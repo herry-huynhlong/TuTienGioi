@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory } from "@ttg/db";
-import { calculateCultivationReward, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, isCultivationDurationKey, locationActivityConfigs, parseEncounterTable, simulateCombat, travelDurationSeconds, type CultivationDurationKey, type LocationActivityMode } from "./rules.js";
+import { calculateCultivationReward, calculateTrainingGain, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, isCultivationDurationKey, isTrainingDurationKey, isTrainingType, locationActivityConfigs, parseEncounterTable, simulateCombat, trainingDurationConfigs, trainingStatCap, trainingTypeConfigs, travelDurationSeconds, type CultivationDurationKey, type LocationActivityMode, type TrainingDurationKey, type TrainingTypeKey } from "./rules.js";
 import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
@@ -267,6 +267,125 @@ export async function debitWallet(db: Db | Tx, characterId: string, currency: Cu
   return isClient(db) ? db.$transaction((tx) => mutateWallet(tx, characterId, currency, -amount, type, referenceType, referenceId, idempotencyKey)) : mutateWallet(db, characterId, currency, -amount, type, referenceType, referenceId, idempotencyKey);
 }
 
+export async function previewTraining(db: Db | Tx, characterId: string, trainingType: TrainingTypeKey, duration: TrainingDurationKey) {
+  if (!isTrainingType(trainingType)) throw new GameError("BAD_TRAINING_TYPE", "Loại rèn luyện không hợp lệ.");
+  if (!isTrainingDurationKey(duration)) throw new GameError("BAD_DURATION", "Thời gian rèn luyện không hợp lệ.");
+  const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { realmStage: { include: { realm: true } }, currentLocation: true } });
+  return calculateTrainingPreview(character, trainingType, duration);
+}
+
+function trainingLocationModifierBps(character: { currentLocation?: { services?: string[]; kind?: string } | null }, trainingType: TrainingTypeKey) {
+  const services = character.currentLocation?.services ?? [];
+  const kind = character.currentLocation?.kind;
+  if (services.includes("training")) return 11000;
+  if (kind === "sect_land" && (trainingType === "SPIRIT" || trainingType === "BODY")) return 10500;
+  return 10000;
+}
+
+function calculateTrainingPreview(character: { body: number; attack: number; defense: number; speed: number; spirit: number; realmStage: { order: number; realm: { order: number } }; currentLocation?: { services?: string[]; kind?: string; id?: string; name?: string } | null }, trainingType: TrainingTypeKey, duration: TrainingDurationKey) {
+  const typeConfig = trainingTypeConfigs[trainingType];
+  const durationConfig = trainingDurationConfigs[duration];
+  const statBefore = character[typeConfig.statKey];
+  const statCap = trainingStatCap(character.realmStage.realm.order, character.realmStage.order);
+  const locationModifierBps = trainingLocationModifierBps(character, trainingType);
+  const modifierBps = Math.max(0, Math.floor((typeConfig.modifierBps * locationModifierBps) / 10000));
+  const finalGain = calculateTrainingGain({ stat: statBefore, statCap, baseGain: durationConfig.baseGain, modifierBps });
+  return {
+    trainingType,
+    duration,
+    typeConfig,
+    durationConfig,
+    statBefore,
+    statCap,
+    modifierBps,
+    finalGain,
+    locationModifierBps,
+    capped: statBefore >= statCap
+  };
+}
+
+export async function startTraining(db: Db, characterId: string, trainingType: TrainingTypeKey, duration: TrainingDurationKey, now = new Date()) {
+  if (!isTrainingType(trainingType)) throw new GameError("BAD_TRAINING_TYPE", "Loại rèn luyện không hợp lệ.");
+  if (!isTrainingDurationKey(duration)) throw new GameError("BAD_DURATION", "Thời gian rèn luyện không hợp lệ.");
+  const character = await db.character.findUniqueOrThrow({ where: { id: characterId }, include: { realmStage: { include: { realm: true } }, currentLocation: true } });
+  const [activeTraining, activeCultivation, activeExploration, activeTravel] = await Promise.all([
+    db.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+  ]);
+  if (activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang rèn luyện.");
+  if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang bế quan.");
+  if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
+  if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
+  const preview = calculateTrainingPreview(character, trainingType, duration);
+  if (preview.finalGain <= 0) throw new GameError("TRAINING_CAP", "Chỉ số này đã đạt giới hạn rèn luyện hiện tại.");
+  const energy = currentEnergy(character, now);
+  if (energy < preview.durationConfig.energyCost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực để rèn luyện.");
+  return db.$transaction(async (tx) => {
+    await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - preview.durationConfig.energyCost, energyUpdatedAt: now } });
+    const activity = await tx.trainingActivity.create({
+      data: {
+        characterId,
+        trainingType,
+        durationKey: duration,
+        durationSeconds: preview.durationConfig.durationSeconds,
+        startedAt: now,
+        endsAt: new Date(now.getTime() + preview.durationConfig.durationSeconds * 1000),
+        energyCost: preview.durationConfig.energyCost,
+        baseGain: preview.durationConfig.baseGain,
+        modifierBps: preview.modifierBps,
+        finalGain: preview.finalGain,
+        statBefore: preview.statBefore,
+        statCap: preview.statCap,
+        metadata: {
+          label: preview.typeConfig.label,
+          durationLabel: preview.durationConfig.label,
+          statKey: preview.typeConfig.statKey,
+          locationId: character.currentLocation?.id ?? null,
+          locationName: character.currentLocation?.name ?? null,
+          locationModifierBps: preview.locationModifierBps
+        }
+      }
+    });
+    await tx.gameLog.create({ data: { characterId, type: "training", message: `Bắt đầu rèn ${preview.typeConfig.label} trong ${preview.durationConfig.label}, tiêu hao ${preview.durationConfig.energyCost} Thể Lực.` } });
+    return activity;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function claimTraining(db: Db, characterId: string, activityId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const activity = await tx.trainingActivity.findUnique({ where: { id: activityId } });
+    if (!activity || activity.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy phiên rèn luyện.");
+    if (activity.status === ActivityStatus.CLAIMED) throw new GameError("ALREADY_CLAIMED", "Kết quả rèn luyện đã được nhận.");
+    if (activity.endsAt > now) throw new GameError("NOT_READY", "Phiên rèn luyện chưa hoàn thành.");
+    const typeConfig = trainingTypeConfigs[activity.trainingType as TrainingTypeKey];
+    if (!typeConfig) throw new GameError("BAD_TRAINING_TYPE", "Loại rèn luyện không hợp lệ.");
+    const updated = await tx.trainingActivity.updateMany({
+      where: { id: activityId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
+      data: { status: ActivityStatus.CLAIMED, claimedAt: now }
+    });
+    if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Kết quả rèn luyện đã được nhận.");
+    if (activity.finalGain > 0) {
+      await tx.character.update({ where: { id: characterId }, data: { [typeConfig.statKey]: { increment: activity.finalGain } } });
+    }
+    await tx.gameLog.create({ data: { characterId, type: "training", message: `Hoàn thành rèn ${typeConfig.label}, ${typeConfig.statKey} +${activity.finalGain}.`, metadata: { trainingType: activity.trainingType, duration: activity.durationKey, gain: activity.finalGain } } });
+    return { trainingType: activity.trainingType, statKey: typeConfig.statKey, label: typeConfig.label, gain: activity.finalGain };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function cancelTraining(db: Db, characterId: string, activityId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const updated = await tx.trainingActivity.updateMany({
+      where: { id: activityId, characterId, status: ActivityStatus.ACTIVE },
+      data: { status: ActivityStatus.CANCELLED, claimedAt: now }
+    });
+    if (updated.count !== 1) throw new GameError("CANNOT_CANCEL", "Không thể dừng phiên rèn luyện này.");
+    await tx.gameLog.create({ data: { characterId, type: "training", message: "Bạn đã dừng phiên rèn luyện. Thể Lực đã tiêu hao không hoàn lại." } });
+    return { cancelled: true };
+  });
+}
+
 export async function startCultivation(db: Db, characterId: string, duration: CultivationDurationKey, now = new Date()) {
   if (!isCultivationDurationKey(duration)) throw new GameError("BAD_DURATION", "Thời gian tu luyện không hợp lệ.");
   const character = await db.character.findUniqueOrThrow({
@@ -277,14 +396,16 @@ export async function startCultivation(db: Db, characterId: string, duration: Cu
       currentLocation: { include: { zone: true } }
     }
   });
-  const [activeCultivation, activeExploration, activeTravel] = await Promise.all([
+  const [activeCultivation, activeExploration, activeTravel, activeTraining] = await Promise.all([
     db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
     db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
-    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
   ]);
   if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang có hoạt động tu luyện.");
   if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
   if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
+  if (activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang rèn luyện.");
   const energy = currentEnergy(character, now);
   const cost = cultivationEnergyCost(duration);
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
@@ -403,14 +524,16 @@ export async function startExploration(db: Db, characterId: string, durationSeco
   if (mode === "gather" && !services.includes("resource")) throw new GameError("LOCATION_NOT_GATHERABLE", "Địa điểm hiện tại không có tài nguyên để thu thập.");
   const zoneId = character.currentLocation?.zoneId ?? character.locationId;
   if (!zoneId) throw new GameError("NO_LOCATION", "Bạn chưa có địa điểm.");
-  const [activeExploration, activeCultivation, activeTravel] = await Promise.all([
+  const [activeExploration, activeCultivation, activeTravel, activeTraining] = await Promise.all([
     db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
     db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
-    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+    db.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
   ]);
   if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang thám hiểm.");
   if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang bế quan.");
   if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
+  if (activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang rèn luyện.");
   const energy = currentEnergy(character, now);
   const cost = config.energyCost;
   if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
@@ -599,14 +722,16 @@ export async function startTravel(db: Db, characterId: string, routeId: string, 
       where: { id: characterId },
       include: { currentLocation: true, location: true, realmStage: { include: { realm: true } } }
     });
-    const [activeTravel, activeCultivation, activeExploration] = await Promise.all([
+    const [activeTravel, activeCultivation, activeExploration, activeTraining] = await Promise.all([
       tx.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
       tx.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
-      tx.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+      tx.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
     ]);
     if (activeTravel) throw new GameError("ACTIVE_TRAVEL", "Bạn đang di chuyển.");
     if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang bế quan.");
     if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
+    if (activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang rèn luyện.");
     const route = await tx.route.findUnique({
       where: { id: routeId },
       include: { origin: { include: { zone: true } }, destination: { include: { zone: true } } }

@@ -27,6 +27,14 @@ enum ActivityStatus {
   FAILED
 }
 
+enum TrainingType {
+  BODY
+  ATTACK
+  DEFENSE
+  SPEED
+  SPIRIT
+}
+
 enum Currency {
   LINH_THACH
   TIEN_NGOC
@@ -354,6 +362,7 @@ model Character {
   items           ItemInstance[]
   sectInventoryLogs SectInventoryLog[]
   cultivationJobs CultivationActivity[]
+  trainingJobs    TrainingActivity[]
   explorations    ExplorationActivity[]
   travels         Travel[]
   craftJobs       CraftJob[]
@@ -661,6 +670,32 @@ model CultivationActivity {
   metadata    Json?
   @@index([characterId, status])
   @@index([endsAt, status])
+}
+
+model TrainingActivity {
+  id            String @id @default(cuid())
+  characterId   String
+  character     Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  trainingType  TrainingType
+  durationKey   String
+  durationSeconds Int
+  startedAt     DateTime @default(now())
+  endsAt        DateTime
+  status        ActivityStatus @default(ACTIVE)
+  energyCost    Int
+  baseGain      Int
+  modifierBps   Int @default(10000)
+  finalGain     Int
+  statBefore    Int
+  statCap       Int
+  claimedAt     DateTime?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([characterId, status])
+  @@index([endsAt, status])
+  @@index([trainingType])
 }
 
 model ExplorationActivity {

@@ -121,6 +121,49 @@ export const locationActivityConfigs = {
 
 export type LocationActivityMode = keyof typeof locationActivityConfigs;
 
+export const trainingTypes = ["BODY", "ATTACK", "DEFENSE", "SPEED", "SPIRIT"] as const;
+export type TrainingTypeKey = typeof trainingTypes[number];
+
+export const trainingDurationOptions = ["short", "medium", "long", "day"] as const;
+export type TrainingDurationKey = typeof trainingDurationOptions[number];
+
+export const trainingDurationConfigs: Record<TrainingDurationKey, { label: string; gameMinutes: number; durationSeconds: number; energyCost: number; baseGain: number }> = {
+  short: { label: "30 phút", gameMinutes: 30, durationSeconds: Math.ceil((30 * 60) / REAL_TIME_TO_GAME_TIME_MULTIPLIER), energyCost: 2, baseGain: 1 },
+  medium: { label: "2 giờ", gameMinutes: 120, durationSeconds: Math.ceil((120 * 60) / REAL_TIME_TO_GAME_TIME_MULTIPLIER), energyCost: 5, baseGain: 3 },
+  long: { label: "8 giờ", gameMinutes: 480, durationSeconds: Math.ceil((480 * 60) / REAL_TIME_TO_GAME_TIME_MULTIPLIER), energyCost: 12, baseGain: 8 },
+  day: { label: "1 ngày", gameMinutes: 1440, durationSeconds: Math.ceil((1440 * 60) / REAL_TIME_TO_GAME_TIME_MULTIPLIER), energyCost: 24, baseGain: 20 }
+};
+
+export const trainingTypeConfigs: Record<TrainingTypeKey, { label: string; statKey: "body" | "attack" | "defense" | "speed" | "spirit"; description: string; modifierBps: number }> = {
+  BODY: { label: "Thể Phách", statKey: "body", description: "Rèn luyện thân thể, tăng sức chịu đựng và nền tảng thể chất.", modifierBps: 10500 },
+  ATTACK: { label: "Công Kích", statKey: "attack", description: "Luyện chiêu thức và lực bộc phát trong giao chiến.", modifierBps: 10000 },
+  DEFENSE: { label: "Phòng Ngự", statKey: "defense", description: "Củng cố thủ thế, khí giáp và khả năng chịu đòn.", modifierBps: 10000 },
+  SPEED: { label: "Thân Pháp", statKey: "speed", description: "Rèn bộ pháp, phản xạ và tốc độ ra tay.", modifierBps: 10000 },
+  SPIRIT: { label: "Thần Thức", statKey: "spirit", description: "Tĩnh tâm luyện niệm, tăng cảm nhận và khống chế.", modifierBps: 9500 }
+};
+
+export function isTrainingType(value: unknown): value is TrainingTypeKey {
+  return typeof value === "string" && trainingTypes.includes(value as TrainingTypeKey);
+}
+
+export function isTrainingDurationKey(value: unknown): value is TrainingDurationKey {
+  return typeof value === "string" && trainingDurationOptions.includes(value as TrainingDurationKey);
+}
+
+export function trainingStatCap(realmOrder: number, stageOrder: number) {
+  return 60 + realmOrder * 80 + stageOrder * 20;
+}
+
+export function calculateTrainingGain(input: { stat: number; statCap: number; baseGain: number; modifierBps: number }) {
+  if (input.stat >= input.statCap) return 0;
+  const modified = Math.max(0, Math.floor((input.baseGain * input.modifierBps) / 10000));
+  if (modified <= 0) return 0;
+  const remaining = Math.max(0, input.statCap - input.stat);
+  const pressureBps = Math.max(1500, Math.min(10000, Math.floor((remaining * 10000) / Math.max(1, input.statCap))));
+  const diminished = Math.max(1, Math.floor((modified * pressureBps) / 10000));
+  return Math.min(remaining, diminished);
+}
+
 export function calculateCharacterStats(
   character: Pick<Character, "body" | "attack" | "defense" | "speed">,
   stage: Pick<RealmStage, "baseHp" | "baseQi" | "baseAttack" | "baseDefense" | "baseSpeed">,

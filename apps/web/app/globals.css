@@ -968,6 +968,26 @@ select.field option {
   line-height: 1.5;
 }
 
+.training-duration-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.training-duration-card {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.55rem;
+}
+
+.training-duration-card span {
+  color: #d6b25e;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
 .facility-tier-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));

@@ -1,17 +1,17 @@
 import { ActionAlert } from "@/components/ActionAlert";
 import { getUser } from "@/lib/auth";
-import { acceptQuestAction, completeQuestAction, talkToNpcAction } from "@/lib/forms";
+import { acceptQuestAction, completeQuestAction } from "@/lib/forms";
 import { prisma, QuestStatus } from "@ttg/db";
 import { getAvailableQuestTemplates, QuestError, talkToNpc } from "@ttg/game";
 import { ArrowLeft, CheckCircle2, CircleDot, Gift, MapPin, ScrollText, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-export default async function NpcPage({ params, searchParams }: { params: Promise<{ key: string }>; searchParams?: Promise<{ error?: string; ok?: string }> }) {
+export default async function NpcPage({ params, searchParams }: { params: Promise<{ key: string }>; searchParams?: Promise<{ error?: string; ok?: string; node?: string }> }) {
   const [{ key }, query] = await Promise.all([params, searchParams]);
   const user = await getUser();
   if (!user?.character) redirect("/");
-  const data = await talkToNpc(prisma, user.character.id, key).catch((error) => {
+  const data = await talkToNpc(prisma, user.character.id, key, query?.node).catch((error) => {
     if (error instanceof QuestError) redirect(`/game/location?error=${encodeURIComponent(error.message)}`);
     throw error;
   });
@@ -24,7 +24,6 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
     <div className="p-5 lg:p-8">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-xs font-bold uppercase text-jade">NPC</p>
           <h1 className="mt-1 text-3xl font-black">{data.npc.name}</h1>
           <p className="muted mt-2">{data.npc.title} · {data.currentLocation.name}</p>
         </div>
@@ -43,11 +42,8 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
           <p className="muted mt-3">{data.npc.description}</p>
           <div className="npc-profile-meta">
             <span><MapPin size={14} aria-hidden />{data.currentLocation.name}</span>
-            <span>{data.playerNpcState.relationshipState}</span>
+            <span>Quan hệ: {data.playerNpcState.relationshipState}</span>
             <span>Đã gặp {data.playerNpcState.timesMet} lần</span>
-          </div>
-          <div className="npc-type-list">
-            {data.npc.npcTypes.map((type) => <span key={type}>{formatNpcType(type)}</span>)}
           </div>
         </aside>
 
@@ -64,13 +60,9 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
             </div>
             {data.dialogue.choices.length ? (
               <div className="dialogue-choice-list">
-                {data.dialogue.choices.map((choice) => <span key={choice.id}>{choice.label}</span>)}
+                {data.dialogue.choices.map((choice) => <DialogueChoice key={choice.id} npcKey={data.npc.key} choice={choice} />)}
               </div>
             ) : null}
-            <form action={talkToNpcAction} className="mt-4">
-              <input type="hidden" name="npcKey" value={data.npc.key} />
-              <button className="btn btn-secondary">Ghi nhận đã trò chuyện</button>
-            </form>
           </section>
 
           {hasQuestPanel ? (
@@ -98,6 +90,37 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
   );
 }
 
+function DialogueChoice({
+  npcKey,
+  choice
+}: {
+  npcKey: string;
+  choice: Awaited<ReturnType<typeof talkToNpc>>["dialogue"]["choices"][number];
+}) {
+  if (choice.disabled) return <button className="dialogue-choice-button" disabled title={choice.hint}>{choice.label}</button>;
+  if (choice.action === "LEAVE") return <Link className="dialogue-choice-button" href={choice.payload.route ?? "/game/location"}>{choice.label}</Link>;
+  if (choice.action === "DIALOGUE") return <Link className="dialogue-choice-button" href={choice.nextNodeKey ? `/game/npc/${npcKey}?node=${choice.nextNodeKey}` : `/game/npc/${npcKey}`}>{choice.label}</Link>;
+  if (choice.action === "ACCEPT_QUEST") {
+    return (
+      <form action={acceptQuestAction}>
+        <input type="hidden" name="npcKey" value={npcKey} />
+        <input type="hidden" name="questKey" value={choice.payload.questKey ?? ""} />
+        <button className="dialogue-choice-button">{choice.label}</button>
+      </form>
+    );
+  }
+  if (choice.action === "COMPLETE_QUEST") {
+    return (
+      <form action={completeQuestAction}>
+        <input type="hidden" name="npcKey" value={npcKey} />
+        <input type="hidden" name="questId" value={choice.payload.questId ?? ""} />
+        <button className="dialogue-choice-button">{choice.label}</button>
+      </form>
+    );
+  }
+  return <Link className="dialogue-choice-button" href={choice.payload.route ?? "/game"}>{choice.label}</Link>;
+}
+
 function QuestTemplateCard({ npcKey, quest }: { npcKey: string; quest: Awaited<ReturnType<typeof getAvailableQuestTemplates>>[number] }) {
   return (
     <article className="quest-card">
@@ -106,6 +129,7 @@ function QuestTemplateCard({ npcKey, quest }: { npcKey: string; quest: Awaited<R
         <b>{quest.title}</b>
         <p>{quest.description}</p>
         <small>{formatObjective(quest.objectiveType, quest.targetCount)} · {"★".repeat(quest.difficulty)}</small>
+        <small>{formatReward(quest.reward)}</small>
       </div>
       <form action={acceptQuestAction}>
         <input type="hidden" name="npcKey" value={npcKey} />
@@ -125,6 +149,7 @@ function CharacterQuestCard({ npcKey, quest }: { npcKey: string; quest: { id: st
         <b>{quest.template.title}</b>
         <p>{quest.template.description}</p>
         <small>{ready ? "Có thể nộp" : `Tiến độ ${quest.progress}/${quest.targetCount}`}</small>
+        <small>{formatReward(quest.template.reward)}</small>
       </div>
       {ready ? (
         <form action={completeQuestAction}>
@@ -137,12 +162,25 @@ function CharacterQuestCard({ npcKey, quest }: { npcKey: string; quest: { id: st
   );
 }
 
-function formatNpcType(type: string) {
-  const labels: Record<string, string> = { GUIDE: "Dẫn đường", SECT: "Tông môn", QUEST: "Nhiệm vụ", MERCHANT: "Thương nhân", CRAFTSMAN: "Nghề nghiệp", GUARD: "Hộ vệ", ELDER: "Trưởng lão", WANDERER: "Du phương", EVENT: "Sự kiện", LORE: "Điển cố" };
-  return labels[type] ?? type;
-}
-
 function formatObjective(type: string, count: number) {
   const labels: Record<string, string> = { TALK_TO_NPC: "Trò chuyện", VISIT_LOCATION: "Tới địa điểm", KILL_MONSTER: "Săn yêu", COLLECT_ITEM: "Thu thập", VISIT_SECT_PAGE: "Tìm hiểu tông môn" };
   return `${labels[type] ?? type} ${count > 1 ? count : ""}`.trim();
+}
+
+function formatReward(reward: unknown) {
+  if (!reward || typeof reward !== "object" || Array.isArray(reward)) return "Phần thưởng sẽ được ghi khi hoàn thành.";
+  const data = reward as { cultivation?: number; linhThach?: number; tienNgoc?: number; items?: Array<{ key?: string; quantity?: number }> };
+  const parts = [];
+  if (data.cultivation) parts.push(`Tu vi +${data.cultivation}`);
+  if (data.linhThach) parts.push(`Linh Thạch +${data.linhThach}`);
+  if (data.tienNgoc) parts.push(`Tiên Ngọc +${data.tienNgoc}`);
+  for (const item of data.items ?? []) {
+    if (item.key) parts.push(`${formatItemKey(item.key)} x${item.quantity ?? 1}`);
+  }
+  return parts.length ? `Thưởng: ${parts.join(" · ")}` : "Phần thưởng sẽ được ghi khi hoàn thành.";
+}
+
+function formatItemKey(key: string) {
+  const labels: Record<string, string> = { "duong-the-dan": "Dưỡng Thể Đan", "hoi-khi-dan": "Hồi Khí Đan" };
+  return labels[key] ?? key;
 }

@@ -1,5 +1,6 @@
 import { Currency, Prisma, QuestObjectiveType, QuestStatus, QuestTriggerType, WalletTxType, type PrismaClient } from "@ttg/db";
 import { addItemToInventory } from "./inventory.js";
+import { changeSectContribution } from "./sect-contribution.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -29,6 +30,7 @@ type QuestReward = {
   cultivation?: number;
   linhThach?: number;
   tienNgoc?: number;
+  contribution?: number;
   items?: Array<{ key: string; quantity?: number }>;
   flags?: string[];
   unlocks?: string[];
@@ -43,6 +45,29 @@ type DialogueProfile = {
   readyQuest?: string;
   locked?: string;
   friendly?: string;
+};
+
+type DialogueActionType =
+  | "DIALOGUE"
+  | "NAVIGATE"
+  | "ACCEPT_QUEST"
+  | "COMPLETE_QUEST"
+  | "OPEN_SHOP"
+  | "OPEN_AUCTION"
+  | "OPEN_PROFESSION"
+  | "OPEN_SECT"
+  | "OPEN_INVENTORY"
+  | "OPEN_QUEST_BOARD"
+  | "OPEN_TRAINING"
+  | "LEAVE";
+
+type DialogueActionPayload = {
+  route?: string;
+  nodeKey?: string;
+  questKey?: string;
+  questId?: string;
+  filter?: string;
+  reason?: string;
 };
 
 type QuestWithTemplate = {
@@ -64,7 +89,7 @@ export type NpcInteractionDialogue = {
   speaker: string;
   text: string;
   state: "first" | "repeat" | "moved" | "helped" | "activeQuest" | "readyQuest" | "friendly" | "locked";
-  choices: Array<{ id: string; label: string; action: string | null; nextNodeKey: string | null }>;
+  choices: Array<{ id: string; label: string; action: DialogueActionType; nextNodeKey: string | null; payload: DialogueActionPayload; disabled?: boolean; hint?: string }>;
 };
 
 function jsonRecord(value: unknown): Record<string, unknown> {
@@ -84,6 +109,7 @@ function rewardFromJson(value: unknown): QuestReward {
     ...(typeof data.cultivation === "number" ? { cultivation: data.cultivation } : {}),
     ...(typeof data.linhThach === "number" ? { linhThach: data.linhThach } : {}),
     ...(typeof data.tienNgoc === "number" ? { tienNgoc: data.tienNgoc } : {}),
+    ...(typeof data.contribution === "number" ? { contribution: data.contribution } : {}),
     items,
     flags: stringArray(data.flags),
     unlocks: stringArray(data.unlocks)
@@ -143,8 +169,172 @@ function firstString(...values: Array<unknown>) {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
-function choice(id: string, label: string, action: string | null = null, nextNodeKey: string | null = null) {
-  return { id, label, action, nextNodeKey };
+function choice(id: string, label: string, action: DialogueActionType = "DIALOGUE", nextNodeKey: string | null = null, payload: DialogueActionPayload = {}, disabled = false, hint?: string) {
+  return { id, label, action, nextNodeKey, payload, disabled, hint };
+}
+
+const npcDialogueNodes: Record<string, Record<string, { text: string; choices: ReturnType<typeof choice>[] }>> = {
+  "luc-minh": {
+    cultivation: {
+      text: "Tu Vi viên mãn mới có thể nghĩ tới đột phá. Đừng chỉ chăm chăm tăng cảnh giới; căn cơ và thân thể cũng rất quan trọng.",
+      choices: [choice("go-cultivation", "Đi tới Tu Luyện", "NAVIGATE", null, { route: "/game" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    inventory: {
+      text: "Đan dược, pháp khí, linh tài ngươi nhặt được đều nằm trong Túi Đồ. Có thứ dùng trực tiếp, có thứ phải trang bị hoặc mang đi luyện chế.",
+      choices: [choice("open-inventory", "Mở Túi Đồ", "OPEN_INVENTORY", null, { route: "/game/inventory" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    market: {
+      text: "Nếu thiếu vật tư cơ bản, tới Chợ Linh Bảo tìm Vạn Bảo Lâu. Nhưng đồ thực sự quý thì nên để ý Đấu Giá hoặc tự luyện.",
+      choices: [choice("open-market", "Đi tới Chợ", "OPEN_SHOP", null, { route: "/game/market" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    quests: {
+      text: "Nhiệm vụ là cách nhanh nhất để làm quen thế giới này. Làm việc cho người khác đôi khi cũng mở ra những mối quan hệ về sau.",
+      choices: [choice("open-quests", "Xem Nhiệm Vụ", "OPEN_QUEST_BOARD", null, { route: "/game/quests" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "thanh-van-su-gia": {
+    thanhvan: {
+      text: "Thanh Vân truyền thừa đã nhiều năm, môn nhân đông đảo. Ngoại môn, nội môn, các phong đều có quy củ riêng.",
+      choices: [choice("sect", "Đến Sơn Môn", "OPEN_SECT", null, { route: "/game/sect" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    join: {
+      text: "Muốn bước sâu vào sơn môn, trước hết phải có căn cơ ổn định và biết quy củ. Cứ tới sơn môn xem điều kiện hiện tại của mình.",
+      choices: [choice("sect", "Xem Tông Môn", "OPEN_SECT", null, { route: "/game/sect" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    rules: {
+      text: "Trong sơn môn, danh phận đi cùng trách nhiệm. Nhận bổng lộc thì phải góp công; muốn tiến xa thì phải có thực lực lẫn tín nhiệm.",
+      choices: [choice("sect", "Tìm hiểu Tông Môn", "OPEN_SECT", null, { route: "/game/sect" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "van-bao-lau-quan-su": {
+    about: {
+      text: "Vạn Bảo Lâu thu mua và bán đủ loại vật tư tu hành thông thường. Những thứ thực sự hiếm có lại không phải lúc nào cũng đặt trên quầy. Có khi phải chờ người mang tới bán, có khi lại xuất hiện ở Đấu Giá.",
+      choices: [choice("shop", "Xem hàng hóa", "OPEN_SHOP", null, { route: "/game/market" }), choice("auction", "Hỏi về Đấu Giá", "DIALOGUE", "auction"), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    auction: {
+      text: "Đồ quý khó định giá thường không bán trực tiếp. Nếu đạo hữu có kỳ vật, cũng có thể đưa lên đấu giá. Có người cần, giá tự nhiên sẽ cao hơn bán thẳng cho cửa hàng.",
+      choices: [choice("go-auction", "Đi tới Đấu Giá", "OPEN_AUCTION", null, { route: "/game/auction" }), choice("shop", "Xem hàng hóa", "OPEN_SHOP", null, { route: "/game/market" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    rare: {
+      text: "Thứ càng quý càng ít khi nằm yên trên quầy. Đan dược cao cấp, pháp khí tốt, trận bàn hiếm... phần nhiều phải do tu sĩ tự luyện chế hoặc trao đổi với nhau.",
+      choices: [choice("profession", "Tìm hiểu Nghề Nghiệp", "OPEN_PROFESSION", null, { route: "/game/profession" }), choice("auction", "Đi tới Đấu Giá", "OPEN_AUCTION", null, { route: "/game/auction" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "duoc-nong": {
+    herbs: {
+      text: "Thanh Linh Thảo mọc khá nhiều ở nơi linh khí ẩm. Hồi Khí Thảo lại thích bóng râm. Còn những loại quý hơn, phải dựa vào duyên phận.",
+      choices: [choice("profession", "Tìm hiểu nghề dược", "OPEN_PROFESSION", null, { route: "/game/profession" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    gather: {
+      text: "Người không hiểu dược tính mà nhổ linh thảo bừa bãi, mười phần thường hỏng mất bảy tám. Sau này nếu muốn học Linh Thực hay Dược Sư, trước hết phải nhận biết được những thứ dưới chân.",
+      choices: [choice("profession", "Đi tới Nghề Nghiệp", "OPEN_PROFESSION", null, { route: "/game/profession" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "tu-si-bi-thuong": {
+    wound: {
+      text: "Không nguy đến tính mạng, nhưng nếu đám Yêu Lang vẫn quanh quẩn gần đây, ta e khó rời khỏi nơi này.",
+      choices: [choice("help", "Ta có thể giúp gì?", "DIALOGUE", "help"), choice("leave", "Rời đi", "LEAVE", null, { route: "/game/location" })]
+    },
+    help: {
+      text: "Đạo hữu nếu chịu ra tay, xin giúp ta xử lý ba con Yêu Lang quanh Thanh Trúc Lâm. Khi nguy hiểm được giải quyết, ta nhất định có hậu tạ.",
+      choices: [choice("accept", "Nhận lời", "ACCEPT_QUEST", null, { questKey: "san-yeu-dau-tien" }), choice("back", "Để ta suy nghĩ", "DIALOGUE")]
+    },
+    where: {
+      text: "Chúng thường lảng vảng ở rìa rừng, nơi trúc thưa và có mùi máu cũ. Nếu nghe tiếng lá khô động liên tục, hãy chuẩn bị trước.",
+      choices: [choice("back", "Ta sẽ tiếp tục", "DIALOGUE"), choice("leave", "Rời đi", "LEAVE", null, { route: "/game/location" })]
+    }
+  },
+  "du-phuong-dao-nhan": {
+    travel: {
+      text: "Ta không có nơi cố định. Nơi nào có chuyện thú vị thì tới, khi duyên hết lại đi.",
+      choices: [choice("back", "Quay lại", "DIALOGUE")]
+    },
+    cultivation: {
+      text: "Tu vi chỉ là một phần. Căn cơ không vững, thân thể không đủ, tâm cảnh không ổn thì cảnh giới càng cao lại càng dễ gặp họa.",
+      choices: [choice("training", "Tới Rèn Luyện", "OPEN_TRAINING", null, { route: "/game/training" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    fate: {
+      text: "Thứ gọi là cơ duyên đôi khi không nằm trong bí cảnh. Một người ngươi từng giúp, một con đường ngươi từng bỏ qua... nhiều năm sau đều có thể trở thành nhân quả.",
+      choices: [choice("back", "Ghi nhớ lời này", "DIALOGUE")]
+    }
+  },
+  "ngoai-mon-chap-su": {
+    rules: {
+      text: "Đã vào ngoại môn thì phải biết quy củ. Nhiệm vụ, bổng lộc, chỗ ở và việc khảo hạch đều do các chấp sự phụ trách.",
+      choices: [choice("sect", "Xem Tông Môn", "OPEN_SECT", null, { route: "/game/sect" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    promotion: {
+      text: "Muốn thăng tiến phải có tu vi, công lao và không phạm giới luật. Cảnh giới chỉ là một phần, cống hiến mới khiến sơn môn nhớ tên ngươi.",
+      choices: [choice("sect", "Xem điều kiện Tông Môn", "OPEN_SECT", null, { route: "/game/sect" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    stipend: {
+      text: "Bổng lộc ngoại môn không nhiều, nhưng đủ giúp người mới đứng vững. Muốn nhiều hơn thì nhận việc ở Nhiệm Vụ Đường.",
+      choices: [choice("quests", "Tới Nhiệm Vụ Đường", "OPEN_QUEST_BOARD", null, { route: "/game/quests" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "nhiem-vu-chap-su": {
+    contribution: {
+      text: "Hoàn thành việc tông môn sẽ được ghi công. Cống hiến có thể dùng để đổi tài nguyên, công pháp hoặc tư cách tiến vào một số nơi.",
+      choices: [choice("sect", "Xem Tông Môn", "OPEN_SECT", null, { route: "/game/sect" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "duoc-vo-tran": {
+    alchemy: {
+      text: "Đan dược mua ngoài chợ không tính. Ta muốn xem chính tay ngươi có luyện được hay không. Tự luyện đủ Tụ Khí Đan rồi mang thành phẩm tới Đan Đường nộp lại.",
+      choices: [choice("profession", "Tới Nghề Nghiệp", "OPEN_PROFESSION", null, { route: "/game/profession" }), choice("inventory", "Xem Túi Đồ", "OPEN_INVENTORY", null, { route: "/game/inventory" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  },
+  "lac-tinh-ha": {
+    formation: {
+      text: "Phía đông Trận Đường có một bộ trận kỳ dùng cho đệ tử luyện tập. Ngươi tới đó kiểm tra linh văn trên bốn lá trận kỳ. Nếu có chỗ nào linh lực không đều, ghi lại rồi quay về báo ta.",
+      choices: [choice("location", "Tới Trận Đường", "NAVIGATE", null, { route: "/game/location" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    report: {
+      text: "Đã xem xong? Nếu lá trận kỳ phía bắc yếu hơn ba lá còn lại thì báo đúng, đừng chỉ nhìn bề ngoài trận văn.",
+      choices: [choice("back", "Ta sẽ báo lại khi nộp nhiệm vụ", "DIALOGUE")]
+    }
+  },
+  "truyen-cong-truong-lao": {
+    insight: {
+      text: "Có được bí tịch chỉ là bước đầu. Muốn biến chữ trên giấy thành năng lực của bản thân, còn phải lĩnh ngộ.",
+      choices: [choice("manuals", "Xem công pháp đang có", "OPEN_INVENTORY", null, { route: "/game/inventory?filter=MANUAL", filter: "MANUAL" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    suitable: {
+      text: "Công pháp hợp người mới phải ổn định khí tức trước, sau đó mới bàn tới uy lực. Học quá tạp khi căn cơ còn mỏng chỉ khiến linh lực phân tán.",
+      choices: [choice("manuals", "Mở Túi Đồ phần Công Pháp", "OPEN_INVENTORY", null, { route: "/game/inventory?filter=MANUAL", filter: "MANUAL" }), choice("back", "Quay lại", "DIALOGUE")]
+    },
+    consult: {
+      text: "Tạm thời hãy rèn hơi thở và hiểu công pháp mình đang có. Khi căn cơ dày hơn, lão phu sẽ nói tới những pháp môn sâu hơn.",
+      choices: [choice("training", "Tới Rèn Luyện", "OPEN_TRAINING", null, { route: "/game/training" }), choice("back", "Quay lại", "DIALOGUE")]
+    }
+  }
+};
+
+function rootChoices(npcKey: string, context: { activeQuests: QuestWithTemplate[]; readyQuests: QuestWithTemplate[]; available: Array<{ key: string; title: string }> }) {
+  const ready = context.readyQuests.map((quest) => choice(`turn-in:${quest.id}`, `Nộp: ${quest.template.title}`, "COMPLETE_QUEST", null, { questId: quest.id }));
+  const available = context.available.map((quest) => choice(`accept:${quest.key}`, `Nhận: ${quest.title}`, "ACCEPT_QUEST", null, { questKey: quest.key }));
+  const active = context.activeQuests.length ? [choice("progress", "Hỏi lại mục tiêu", "DIALOGUE", "where")] : [];
+  const byNpc: Record<string, ReturnType<typeof choice>[]> = {
+    "luc-minh": [choice("cultivation", "Hỏi về Tu Luyện", "DIALOGUE", "cultivation"), choice("inventory", "Hỏi về Túi Đồ", "DIALOGUE", "inventory"), choice("market", "Hỏi về Chợ", "DIALOGUE", "market"), choice("quests", "Hỏi về Nhiệm Vụ", "DIALOGUE", "quests")],
+    "thanh-van-su-gia": [choice("thanhvan", "Hỏi về Thanh Vân", "DIALOGUE", "thanhvan"), choice("join", "Hỏi về gia nhập tông môn", "DIALOGUE", "join"), choice("rules", "Hỏi về quy củ", "DIALOGUE", "rules")],
+    "van-bao-lau-quan-su": [choice("shop", "Xem hàng hóa", "OPEN_SHOP", null, { route: "/game/market" }), choice("about", "Hỏi về Vạn Bảo Lâu", "DIALOGUE", "about"), choice("rare", "Hỏi về vật phẩm quý", "DIALOGUE", "rare")],
+    "duoc-nong": [choice("herbs", "Hỏi về linh thảo", "DIALOGUE", "herbs"), choice("gather", "Hỏi về hái dược", "DIALOGUE", "gather")],
+    "tu-si-bi-thuong": [choice("wound", "Ngươi bị thương thế nào?", "DIALOGUE", "wound"), choice("help", "Ta có thể giúp gì?", "DIALOGUE", "help")],
+    "du-phuong-dao-nhan": [choice("travel", "Đạo trưởng đi đâu?", "DIALOGUE", "travel"), choice("cultivation", "Hỏi về con đường tu hành", "DIALOGUE", "cultivation"), choice("fate", "Hỏi về cơ duyên", "DIALOGUE", "fate")],
+    "ngoai-mon-chap-su": [choice("rules", "Xem quy củ Ngoại Môn", "DIALOGUE", "rules"), choice("promotion", "Hỏi về thăng tiến", "DIALOGUE", "promotion"), choice("quests", "Hỏi về nhiệm vụ", "OPEN_QUEST_BOARD", null, { route: "/game/quests" }), choice("stipend", "Hỏi về bổng lộc", "DIALOGUE", "stipend")],
+    "nhiem-vu-chap-su": [choice("board", "Xem nhiệm vụ khả dụng", "OPEN_QUEST_BOARD", null, { route: "/game/quests" }), choice("contribution", "Hỏi về điểm cống hiến", "DIALOGUE", "contribution")],
+    "duoc-vo-tran": [choice("alchemy", "Hỏi về Luyện Tụ Khí Đan", "DIALOGUE", "alchemy"), choice("profession", "Mở Nghề Nghiệp", "OPEN_PROFESSION", null, { route: "/game/profession" })],
+    "lac-tinh-ha": [choice("formation", "Hỏi về trận kỳ", "DIALOGUE", "formation"), choice("report", "Hỏi cách báo cáo", "DIALOGUE", "report")],
+    "truyen-cong-truong-lao": [choice("manuals", "Xem công pháp đang có", "OPEN_INVENTORY", null, { route: "/game/inventory?filter=MANUAL", filter: "MANUAL" }), choice("insight", "Hỏi về lĩnh ngộ", "DIALOGUE", "insight"), choice("suitable", "Hỏi về công pháp thích hợp", "DIALOGUE", "suitable"), choice("consult", "Thỉnh giáo", "DIALOGUE", "consult")]
+  };
+  return [...ready, ...available, ...active, ...(byNpc[npcKey] ?? []), choice("leave", "Rời đi", "LEAVE", null, { route: "/game/location" })];
+}
+
+export function npcWorldDialoguePreview(npcKey: string) {
+  return {
+    choices: rootChoices(npcKey, { activeQuests: [], readyQuests: [], available: [] }),
+    nodes: npcDialogueNodes[npcKey] ?? {}
+  };
 }
 
 async function ensureNpcWorldState(tx: Tx, npc: { id: string; locationId: string; spawnMode: string; metadata: unknown }) {
@@ -245,6 +435,12 @@ async function applyQuestReward(tx: Tx, characterId: string, quest: { id: string
   }
   if (reward.tienNgoc && reward.tienNgoc > 0) {
     await creditQuestWallet(tx, characterId, Currency.TIEN_NGOC, BigInt(reward.tienNgoc), quest);
+  }
+  if (reward.contribution && reward.contribution !== 0) {
+    const member = await tx.sectMember.findUnique({ where: { characterId } });
+    if (member) {
+      await changeSectContribution(tx, { sectId: member.sectId, characterId, delta: reward.contribution, sourceType: "QUEST_REWARD", reason: quest.template.title, sourceId: quest.template.key, idempotencyKey: `quest:${quest.id}:contribution` });
+    }
   }
   for (const item of reward.items ?? []) {
     const template = await tx.itemTemplate.findUnique({ where: { key: item.key } });
@@ -378,8 +574,12 @@ export async function progressQuestEvent(db: Db | Tx, input: QuestEventInput, no
   return "$transaction" in db ? db.$transaction(runner) : runner(db);
 }
 
-function chooseDialogue(npc: { name: string; description: string; metadata: unknown }, context: { previous: { timesMet: number; lastLocationMetId: string | null; relationshipScore: number; flags: unknown } | null; locationId: string; activeQuests: QuestWithTemplate[]; readyQuests: QuestWithTemplate[]; availableCount: number }) {
+function chooseDialogue(npc: { key: string; name: string; description: string; metadata: unknown }, context: { previous: { timesMet: number; lastLocationMetId: string | null; relationshipScore: number; flags: unknown } | null; locationId: string; activeQuests: QuestWithTemplate[]; readyQuests: QuestWithTemplate[]; available: Array<{ key: string; title: string }>; nodeKey?: string }) {
   const profile = dialogueProfile(npc);
+  const requestedNode = context.nodeKey ? npcDialogueNodes[npc.key]?.[context.nodeKey] : null;
+  if (requestedNode) {
+    return { speaker: npc.name, text: requestedNode.text, state: "repeat" as const, choices: requestedNode.choices };
+  }
   const flags = jsonRecord(context.previous?.flags);
   const helped = flags.helped === true || Object.keys(flags).some((key) => key.startsWith("completed:"));
   const moved = Boolean(context.previous && context.previous.timesMet > 0 && context.previous.lastLocationMetId && context.previous.lastLocationMetId !== context.locationId);
@@ -390,7 +590,7 @@ function chooseDialogue(npc: { name: string; description: string; metadata: unkn
     relationshipScore: context.previous?.relationshipScore ?? 0,
     activeQuestCount: context.activeQuests.length,
     readyQuestCount: context.readyQuests.length,
-    availableQuestCount: context.availableCount
+    availableQuestCount: context.available.length
   });
   const text = firstString(
     state === "readyQuest" ? profile.readyQuest : undefined,
@@ -403,23 +603,17 @@ function chooseDialogue(npc: { name: string; description: string; metadata: unkn
     profile.locked,
     npc.description
   )!;
-  const choices = [
-    ...(context.readyQuests.length ? [choice("turn-in", "Nộp nhiệm vụ", "TURN_IN")] : []),
-    ...(context.availableCount ? [choice("accept-quest", "Nhận nhiệm vụ", "QUEST")] : []),
-    ...(context.activeQuests.length ? [choice("ask-progress", "Hỏi lại mục tiêu", "QUEST_STATUS")] : []),
-    choice("ask-place", "Hỏi về nơi này", "LORE"),
-    choice("leave", "Rời đi", null)
-  ];
+  const choices = rootChoices(npc.key, { activeQuests: context.activeQuests, readyQuests: context.readyQuests, available: context.available });
   return { speaker: npc.name, text, state, choices };
 }
 
-export async function talkToNpc(db: Db, characterId: string, npcKey: string, now = new Date()) {
+export async function talkToNpc(db: Db, characterId: string, npcKey: string, nodeKey?: string, now = new Date()) {
   return db.$transaction(async (tx) => {
     const npc = await tx.npc.findUnique({ where: { key: npcKey }, include: { location: true, dialogueSet: { include: { nodes: { include: { choices: { orderBy: { sortOrder: "asc" } } }, orderBy: { sortOrder: "asc" } } } } } });
-    if (!npc || !npc.active) throw new QuestError("NPC_NOT_FOUND", "Không tìm thấy NPC.");
+    if (!npc || !npc.active) throw new QuestError("NPC_NOT_FOUND", "Không tìm thấy nhân vật.");
     const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, select: { currentLocationId: true } });
     const resolved = await resolveNpcLocation(tx, npc);
-    if (character.currentLocationId && character.currentLocationId !== resolved.location.id) throw new QuestError("NPC_NOT_HERE", "NPC này hiện không ở địa điểm của bạn.");
+    if (character.currentLocationId && character.currentLocationId !== resolved.location.id) throw new QuestError("NPC_NOT_HERE", "Nhân vật này hiện không ở địa điểm của bạn.");
     const previous = await tx.playerNpcState.findUnique({ where: { characterId_npcId: { characterId, npcId: npc.id } } });
     await progressQuestEvent(tx, { characterId, eventType: "TALK_TO_NPC", npcId: npc.id, npcKey }, now);
     const available = await getAvailableQuestTemplates(tx, characterId, npc.id);
@@ -430,7 +624,7 @@ export async function talkToNpc(db: Db, characterId: string, npcKey: string, now
     });
     const activeQuests = quests.filter((quest) => quest.status === QuestStatus.ACTIVE);
     const readyQuests = quests.filter((quest) => quest.status === QuestStatus.READY_TO_TURN_IN);
-    const dialogue = chooseDialogue(npc, { previous, locationId: resolved.location.id, activeQuests, readyQuests, availableCount: available.length });
+    const dialogue = chooseDialogue(npc, { previous, locationId: resolved.location.id, activeQuests, readyQuests, available, ...(nodeKey ? { nodeKey } : {}) });
     const touched = await touchPlayerNpcState(tx, characterId, npc.id, resolved.location.id, now);
     await tx.playerNpcState.update({ where: { id: touched.state.id }, data: { lastDialogueNode: dialogue.state } });
     return { npc, currentLocation: resolved.location, worldState: resolved.state, playerNpcState: touched.state, dialogue, available, quests };

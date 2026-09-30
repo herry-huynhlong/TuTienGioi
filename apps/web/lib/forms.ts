@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimTraining, claimTravel, completeQuest, completeSectMission, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
+import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -69,7 +70,7 @@ async function characterId() {
 }
 
 function redirectGameError(error: unknown, path: string): never {
-  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError || error instanceof InventoryError || error instanceof SocialError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
+  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError || error instanceof InventoryError || error instanceof SocialError || error instanceof ThanhVanError || error instanceof WorldInteractionError || error instanceof MentorshipError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
   throw error;
 }
 
@@ -224,6 +225,15 @@ export async function escapeEncounterItemAction(formData: FormData) {
   redirect("/game/location");
 }
 
+export async function interactWorldObjectAction(formData: FormData) {
+  try {
+    await interactWorldObject(prisma, await characterId(), String(formData.get("objectKey")), String(formData.get("actionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, "/game/location");
+  }
+  redirect("/game/location?ok=world-interaction");
+}
+
 export async function teleportItemAction(formData: FormData) {
   try {
     await teleportWithItem(prisma, await characterId(), String(formData.get("itemId")), String(formData.get("destinationLocationId")), String(formData.get("actionKey") || ""));
@@ -323,6 +333,117 @@ export async function applyToSectAction(formData: FormData) {
     redirectGameError(error, `/game/sect?sect=${encodeURIComponent(String(formData.get("sectId") ?? ""))}`);
   }
   redirect(`/game/sect?sect=${encodeURIComponent(String(formData.get("sectId") ?? ""))}&applied=1`);
+}
+
+export async function revealThanhVanSpiritualRootAction(formData: FormData) {
+  const back = String(formData.get("back") ?? "/game/sect");
+  try {
+    await revealThanhVanSpiritualRoot(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, back);
+  }
+  redirect(`${back}${back.includes("?") ? "&" : "?"}ok=spiritual-root`);
+}
+
+export async function completeThanhVanAdmissionAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  const back = sectId ? `/game/sect/${sectId}` : "/game/sect";
+  try {
+    await completeThanhVanAdmission(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, back);
+  }
+  redirect(`${back}?ok=admission`);
+}
+
+export async function claimThanhVanAllowanceAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await claimThanhVanAllowance(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=allowance`);
+}
+
+export async function requestThanhVanInnerExamAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await requestThanhVanInnerExam(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=inner-request`);
+}
+
+export async function completeThanhVanInnerExamAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await completeThanhVanInnerExam(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=inner-exam`);
+}
+
+export async function acceptMentorInvitationAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await acceptMentorInvitation(prisma, await characterId(), String(formData.get("invitationId")));
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=mentor-accepted`);
+}
+
+export async function rejectMentorInvitationAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await rejectMentorInvitation(prisma, await characterId(), String(formData.get("invitationId")));
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=mentor-rejected`);
+}
+
+export async function completeMentorQuestAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await completeMentorQuest(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=mentor-quest`);
+}
+
+export async function requestTrueDiscipleExamAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await requestTrueDiscipleExam(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=true-request`);
+}
+
+export async function reviewTrueDiscipleExamAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await reviewTrueDiscipleExam(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=true-review`);
+}
+
+export async function completeTrueDisciplePromotionAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await completeTrueDisciplePromotion(prisma, await characterId());
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}`);
+  }
+  redirect(`/game/sect/${sectId}?ok=true-disciple`);
 }
 
 export async function cancelSectApplicationAction(formData: FormData) {

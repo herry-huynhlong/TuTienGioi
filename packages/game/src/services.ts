@@ -6,6 +6,7 @@ import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
 import { progressQuestEvent } from "./quests.js";
 import { professionExpGain, professionRankOrder, professionStationServices, promoteProfessionRank } from "./professions.js";
+import { canAccessSectLocation } from "./sect-access.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -224,7 +225,7 @@ async function grantStackableItem(tx: Tx, characterId: string, templateId: strin
   return addItemToInventory(tx, characterId, templateId, quantity, options);
 }
 
-async function progressSectMissionEvent(tx: Tx, input: { characterId: string; eventType: "MONSTER_KILLED" | "ITEM_COLLECTED" | "LOCATION_VISITED" | "RESOURCE_MINED" | "ITEM_DONATED" | "FARM_HARVESTED"; monsterKey?: string; itemKey?: string; locationId?: string | null; amount?: number }) {
+async function progressSectMissionEvent(tx: Tx, input: { characterId: string; eventType: "MONSTER_KILLED" | "ITEM_COLLECTED" | "LOCATION_VISITED" | "RESOURCE_MINED" | "ITEM_DONATED" | "FARM_HARVESTED" | "CRAFT_COMPLETED" | "INTERACT_WORLD_OBJECT"; monsterKey?: string; itemKey?: string; recipeKey?: string; professionKey?: string; worldObjectKey?: string; locationId?: string | null; amount?: number }) {
   const { progressSectMissionObjective } = await import("./sects.js");
   return progressSectMissionObjective(tx, input);
 }
@@ -523,8 +524,27 @@ export async function claimCraft(db: Db, characterId: string, craftJobId: string
     const totalExperience = characterProfession.experience + gainedExp;
     const nextRank = promoteProfessionRank(characterProfession.rank, totalExperience);
     await tx.characterProfession.update({ where: { id: characterProfession.id }, data: { experience: totalExperience, rank: nextRank, level: professionRankOrder(nextRank) + 1 } });
+    await progressSectMissionEvent(tx, { characterId, eventType: "CRAFT_COMPLETED", itemKey: job.recipe.outputTemplate.key, recipeKey: job.recipe.key, professionKey: job.recipe.profession.key, amount: outputQuantity });
     await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: job.recipe.outputTemplate.key, amount: outputQuantity });
-    await tx.gameLog.create({ data: { characterId, type: "profession", message: `Hoàn thành ${job.recipe.name}, nhận ${job.recipe.outputTemplate.name} x${outputQuantity}, +${gainedExp} EXP ${job.recipe.profession.name}.` } });
+    await tx.gameLog.create({
+      data: {
+        characterId,
+        type: "profession",
+        message: `Hoàn thành ${job.recipe.name}, nhận ${job.recipe.outputTemplate.name} x${outputQuantity}, +${gainedExp} EXP ${job.recipe.profession.name}.`,
+        metadata: {
+          eventType: "CRAFT_COMPLETED",
+          professionId: job.recipe.professionId,
+          professionKey: job.recipe.profession.key,
+          recipeId: job.recipeId,
+          recipeKey: job.recipe.key,
+          outputItemId: outputTemplateId,
+          outputItemKey: job.recipe.outputTemplate.key,
+          quantity: outputQuantity,
+          craftJobId: job.id,
+          completedAt: now.toISOString()
+        } as Prisma.InputJsonValue
+      }
+    });
     return { job, output: job.recipe.outputTemplate, quantity: outputQuantity, gainedExp, rank: nextRank };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -1129,6 +1149,8 @@ export async function startTravel(db: Db, characterId: string, routeId: string, 
     } else if (character.locationId !== route.origin.zoneId) {
       throw new GameError("WRONG_ORIGIN", "Bạn không đứng ở điểm xuất phát của tuyến này.");
     }
+    const sectAccess = await canAccessSectLocation(tx, characterId, route.destinationId);
+    if (!sectAccess.allowed) throw new GameError("SECT_LOCATION_LOCKED", sectAccess.reason ?? "Bạn chưa đủ thân phận để vào khu vực này.");
     if (route.travelCost > 0n) {
       await debitWallet(tx, characterId, Currency.LINH_THACH, route.travelCost, WalletTxType.DEBIT, "Route", route.id, `travel:${route.id}:${characterId}:${now.getTime()}`);
     }

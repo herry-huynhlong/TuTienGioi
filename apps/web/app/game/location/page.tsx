@@ -1,8 +1,8 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
-import { attackEncounterAction, breakSealItemAction, cancelExploreAction, escapeEncounterItemAction, exploreAction, leaveEncounterAction, startTravelAction, useCombatItemAction } from "@/lib/forms";
+import { attackEncounterAction, breakSealItemAction, cancelExploreAction, escapeEncounterItemAction, exploreAction, interactWorldObjectAction, leaveEncounterAction, startTravelAction, useCombatItemAction } from "@/lib/forms";
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { advanceExplorationActivity, currentEnergy, getItemEconomy, getItemUsageDefinition, getNpcsAtLocation, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
+import { advanceExplorationActivity, currentEnergy, getItemEconomy, getItemUsageDefinition, getNpcsAtLocation, getWorldInteractionsForLocation, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
@@ -14,7 +14,7 @@ import { Compass, Home, Landmark, Mail, MessageCircle, Route, ScrollText, Shield
 const activityLabels: Record<string, string> = {
   market: "Vạn Bảo Lâu",
   auction: "Đấu giá",
-  npc_shop: "Cửa hàng NPC",
+  npc_shop: "Quầy giao dịch",
   inn: "Khách điếm",
   mail: "Thư tín",
   travel: "Dịch trạm",
@@ -69,7 +69,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
   const activities = getLocationActivities(services);
   const facilities = getLocationFacilities(services, location?.kind);
   const routes = location?.routesFrom ?? [];
-  const [logs, itemTemplates, monsters, npcsAtLocation, worldSeals] = await Promise.all([
+  const [logs, itemTemplates, monsters, npcsAtLocation, worldSeals, interactions] = await Promise.all([
     prisma.gameLog.findMany({
     where: { characterId: c.id, type: { in: ["exploration", "encounter"] } },
     take: 6,
@@ -78,7 +78,8 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
     prisma.itemTemplate.findMany(),
     prisma.monster.findMany({ select: { key: true, name: true, hp: true, realmOrder: true } }),
     location ? getNpcsAtLocation(prisma, c.id, location.id) : [],
-    location ? prisma.worldSeal.findMany({ where: { locationId: location.id, status: "SEALED" }, orderBy: { createdAt: "asc" } }) : []
+    location ? prisma.worldSeal.findMany({ where: { locationId: location.id, status: "SEALED" }, orderBy: { createdAt: "asc" } }) : [],
+    location ? getWorldInteractionsForLocation(prisma, c.id, location.id) : []
   ]);
   const itemTemplatesByKey = new Map(itemTemplates.map((item) => [item.key, item]));
   const monsterByKey = new Map(monsters.map((monster) => [monster.key, monster]));
@@ -134,6 +135,14 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
             <Panel title="Phong ấn / Cấm chế">
               <div className="action-grid">
                 {worldSeals.map((seal) => <WorldSealCard key={seal.id} seal={seal} items={breakSealItems} />)}
+              </div>
+            </Panel>
+          ) : null}
+
+          {interactions.length > 0 ? (
+            <Panel title="Có thể tương tác">
+              <div className="action-grid">
+                {interactions.map((node) => <WorldInteractionCard key={node.key} node={node} />)}
               </div>
             </Panel>
           ) : null}
@@ -249,6 +258,20 @@ function FacilityCard({ facility }: { facility: { label: string; description: st
     </>
   );
   return facility.href && !facility.disabled ? <Link href={facility.href} className="action-card">{body}</Link> : <div className="action-card">{body}</div>;
+}
+
+function WorldInteractionCard({ node }: { node: { key: string; name: string; description: string; actionLabel: string; missionParticipant: { status: string; title: string; progress: number; targetCount: number } | null } }) {
+  const usable = node.missionParticipant?.status === "ACTIVE";
+  return (
+    <form action={interactWorldObjectAction} className="action-card">
+      <input type="hidden" name="objectKey" value={node.key} />
+      <input type="hidden" name="actionKey" value={`${node.key}:${node.missionParticipant?.progress ?? 0}`} />
+      <div className="facility-card-title"><Shield size={18} aria-hidden /><b>{node.name}</b></div>
+      <p className="muted text-sm">{node.description}</p>
+      {node.missionParticipant ? <p className="muted text-sm">Nhiệm vụ: {node.missionParticipant.title} · {node.missionParticipant.progress}/{node.missionParticipant.targetCount}</p> : <p className="muted text-sm">Chưa có nhiệm vụ yêu cầu thao tác này.</p>}
+      <button className="btn btn-secondary w-full" type="submit" disabled={!usable}>{usable ? node.actionLabel : "Chưa thể kiểm tra"}</button>
+    </form>
+  );
 }
 
 function ExploreForm({ mode, disabled, reason }: { mode: LocationActivityMode; disabled: boolean; reason: string }) {

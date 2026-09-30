@@ -16,6 +16,7 @@ import {
 import { creditWallet, debitWallet } from "./services.js";
 import { cultivationBaseReward, cultivationEnergyCost, currentEnergy } from "./rules.js";
 import { getItemEconomy } from "./items.js";
+import { changeSectContribution } from "./sect-contribution.js";
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -69,8 +70,9 @@ export const sectRoles: Record<SectRoleName, { label: string; order: number; per
   VICE_LEADER: { label: "Phó Tông Chủ", order: 2, permissions: ["VIEW_ADMIN", "APPROVE_APPLICATION", "MANAGE_MEMBERS", "MANAGE_NOTICE", "UPGRADE_SECT", "MANAGE_BUILDINGS", "MANAGE_TREASURY", "MANAGE_STORAGE", "CREATE_MISSION", "MANAGE_CAVES", "MANAGE_LIBRARY"] },
   ELDER: { label: "Trưởng Lão", order: 3, permissions: ["VIEW_ADMIN", "APPROVE_APPLICATION", "MANAGE_NOTICE", "MANAGE_BUILDINGS", "MANAGE_STORAGE", "CREATE_MISSION", "MANAGE_CAVES", "MANAGE_LIBRARY"] },
   OFFICER: { label: "Chấp Sự", order: 4, permissions: ["VIEW_ADMIN", "APPROVE_APPLICATION", "CREATE_MISSION"] },
-  INNER: { label: "Nội Môn Đệ Tử", order: 5, permissions: [] },
-  OUTER: { label: "Ngoại Môn Đệ Tử", order: 6, permissions: [] }
+  TRUE_DISCIPLE: { label: "Chân Truyền Đệ Tử", order: 5, permissions: [] },
+  INNER: { label: "Nội Môn Đệ Tử", order: 6, permissions: [] },
+  OUTER: { label: "Ngoại Môn Đệ Tử", order: 7, permissions: [] }
 };
 
 export const sectAlignments: Record<SectAlignment, string> = {
@@ -136,6 +138,7 @@ export const sectCaveConfig = {
   roleBaseBps: {
     [SectRoleName.OUTER]: { name: "Ngoại Môn Động Phủ", cultivationBonusBps: 500, breakthroughBonusBps: 0 },
     [SectRoleName.INNER]: { name: "Nội Môn Động Phủ", cultivationBonusBps: 1000, breakthroughBonusBps: 100 },
+    [SectRoleName.TRUE_DISCIPLE]: { name: "Chân Truyền Động Phủ", cultivationBonusBps: 1500, breakthroughBonusBps: 220 },
     [SectRoleName.OFFICER]: { name: "Chấp Sự Động Phủ", cultivationBonusBps: 1200, breakthroughBonusBps: 150 },
     [SectRoleName.ELDER]: { name: "Trưởng Lão Động Phủ", cultivationBonusBps: 1800, breakthroughBonusBps: 300 },
     [SectRoleName.VICE_LEADER]: { name: "Phó Tông Chủ Động Phủ", cultivationBonusBps: 2200, breakthroughBonusBps: 400 },
@@ -168,7 +171,7 @@ export const sectLibraryConfig = {
 };
 
 export type SectMissionType = "HUNT" | "COLLECT" | "EXPLORE" | "DELIVER" | "PATROL" | "MINE" | "FARM" | "DONATE";
-export type SectMissionEventType = "MONSTER_KILLED" | "ITEM_COLLECTED" | "LOCATION_VISITED" | "RESOURCE_MINED" | "ITEM_DONATED" | "FARM_HARVESTED";
+export type SectMissionEventType = "MONSTER_KILLED" | "ITEM_COLLECTED" | "LOCATION_VISITED" | "RESOURCE_MINED" | "ITEM_DONATED" | "FARM_HARVESTED" | "CRAFT_COMPLETED" | "INTERACT_WORLD_OBJECT";
 
 export const sectMissionConfig = {
   refreshHours: 6,
@@ -268,22 +271,12 @@ async function mutateContribution(
   referenceId?: string,
   idempotencyKey?: string
 ) {
-  if (!Number.isInteger(amount) || amount === 0) throw new SectError("INVALID_CONTRIBUTION", "Điểm cống hiến không hợp lệ.");
-  if (idempotencyKey) {
-    const existing = await tx.sectContributionTransaction.findUnique({ where: { characterId_idempotencyKey: { characterId, idempotencyKey } } });
-    if (existing) return existing;
+  try {
+    return await changeSectContribution(tx, { sectId, characterId, delta: amount, sourceType: type, reason, sourceId: referenceId ?? referenceType ?? null, idempotencyKey: idempotencyKey ?? null });
+  } catch (error) {
+    if (error instanceof Error) throw new SectError("CONTRIBUTION_CHANGE_FAILED", error.message);
+    throw error;
   }
-  const member = await tx.sectMember.findUniqueOrThrow({ where: { characterId } });
-  if (member.sectId !== sectId) throw new SectError("NOT_IN_SECT", "Bạn không thuộc tông môn này.");
-  const after = member.contribution + amount;
-  if (after < 0) throw new SectError("INSUFFICIENT_CONTRIBUTION", "Không đủ điểm cống hiến.");
-  await tx.sectMember.update({
-    where: { id: member.id },
-    data: amount > 0 ? { contribution: after, weeklyContribution: { increment: amount } } : { contribution: after }
-  });
-  return tx.sectContributionTransaction.create({
-    data: { sectId, characterId, amount, before: member.contribution, after, type, reason, referenceType: referenceType ?? null, referenceId: referenceId ?? null, idempotencyKey: idempotencyKey ?? null }
-  });
 }
 
 function missionDefinition(key: string) {
@@ -773,8 +766,9 @@ export async function acceptSectMission(db: Db, characterId: string, missionIdOr
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function progressSectMissionObjective(db: Db | Tx, input: { characterId: string; eventType: SectMissionEventType; targetId?: string; locationId?: string | null; itemKey?: string; monsterKey?: string; amount?: number }) {
+export async function progressSectMissionObjective(db: Db | Tx, input: { characterId: string; eventType: SectMissionEventType; targetId?: string; locationId?: string | null; itemKey?: string; monsterKey?: string; recipeKey?: string; professionKey?: string; worldObjectKey?: string; amount?: number }) {
   const run = async (tx: Tx) => {
+    if (!(tx as unknown as { sectMissionParticipant?: unknown }).sectMissionParticipant) return [];
     const amount = Math.max(1, input.amount ?? 1);
     const active = await tx.sectMissionParticipant.findMany({ where: { characterId: input.characterId, status: SectMissionStatus.ACTIVE }, include: { mission: true } });
     const progressed = [];
@@ -786,6 +780,9 @@ export async function progressSectMissionObjective(db: Db | Tx, input: { charact
       if (objective.locationId && objective.locationId !== input.locationId) continue;
       if (objective.monsterKey && objective.monsterKey !== input.monsterKey) continue;
       if (objective.itemKey && objective.itemKey !== input.itemKey) continue;
+      if (objective.recipeKey && objective.recipeKey !== input.recipeKey) continue;
+      if (objective.professionKey && objective.professionKey !== input.professionKey) continue;
+      if (objective.worldObjectKey && objective.worldObjectKey !== input.worldObjectKey) continue;
       const nextProgress = Math.min(participant.targetCount, participant.progress + amount);
       const nextStatus = nextProgress >= participant.targetCount ? SectMissionStatus.READY_TO_TURN_IN : SectMissionStatus.ACTIVE;
       await tx.sectMissionParticipant.update({ where: { id: participant.id }, data: { progress: nextProgress, status: nextStatus } });
@@ -801,14 +798,18 @@ export async function completeSectMission(db: Db, characterId: string, participa
     const participant = await tx.sectMissionParticipant.findUnique({ where: { id: participantId }, include: { mission: true } });
     if (!participant || participant.characterId !== characterId) throw new SectError("MISSION_NOT_FOUND", "Không tìm thấy nhiệm vụ.");
     if (participant.status === SectMissionStatus.COMPLETED) return { alreadyCompleted: true, reward: participant.reward };
-    if (participant.status === SectMissionStatus.ACTIVE && participant.progress < participant.targetCount) throw new SectError("MISSION_NOT_READY", "Mục tiêu nhiệm vụ chưa hoàn thành.");
     if (participant.status !== SectMissionStatus.ACTIVE && participant.status !== SectMissionStatus.READY_TO_TURN_IN) throw new SectError("MISSION_CLOSED", "Nhiệm vụ đã đóng.");
     const mission = participant.mission;
     if (!mission) throw new SectError("MISSION_NOT_FOUND", "Không tìm thấy nhiệm vụ.");
+    const objective = objectiveRecord(mission.objective);
+    const itemKey = typeof objective.itemKey === "string" ? objective.itemKey : null;
+    const requiresProgressBeforeTurnIn = objective.requiresProgressBeforeTurnIn === true || objective.eventType === "CRAFT_COMPLETED" || objective.eventType === "INTERACT_WORLD_OBJECT";
+    const canTurnInByInventory = !requiresProgressBeforeTurnIn && (mission.type === "COLLECT" || mission.type === "DELIVER" || mission.type === "DONATE") && itemKey
+      ? await characterItemQuantityForMission(tx, characterId, itemKey) >= mission.targetCount
+      : false;
+    if (participant.status === SectMissionStatus.ACTIVE && participant.progress < participant.targetCount && !canTurnInByInventory) throw new SectError("MISSION_NOT_READY", "Mục tiêu nhiệm vụ chưa hoàn thành.");
     const reward = objectiveRecord(mission.reward) as { cultivation?: number; linhThach?: number; contribution?: number; reputation?: number; itemKey?: string; itemQuantity?: number };
     if (mission.type === "COLLECT" || mission.type === "DELIVER" || mission.type === "DONATE") {
-      const objective = objectiveRecord(mission.objective);
-      const itemKey = typeof objective.itemKey === "string" ? objective.itemKey : null;
       if (itemKey) await consumeCharacterItemForMission(tx, characterId, itemKey, mission.targetCount);
     }
     const updated = await tx.sectMissionParticipant.updateMany({ where: { id: participantId, status: { in: [SectMissionStatus.ACTIVE, SectMissionStatus.READY_TO_TURN_IN] } }, data: { status: SectMissionStatus.COMPLETED, completedAt: now, reward: reward as Prisma.InputJsonValue } });
@@ -824,6 +825,11 @@ export async function completeSectMission(db: Db, characterId: string, participa
     await tx.sectLog.create({ data: { sectId: participant.sectId, actorId: characterId, type: SectLogType.MISSION, message: `Nộp nhiệm vụ "${mission.title}".` } });
     return { alreadyCompleted: false, reward };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+async function characterItemQuantityForMission(tx: Tx, characterId: string, itemKey: string) {
+  const items = await tx.itemInstance.findMany({ where: { ownerId: characterId, template: { key: itemKey }, quantity: { gt: 0 }, equippedSlot: null }, select: { quantity: true } });
+  return items.reduce((sum, item) => sum + item.quantity, 0);
 }
 
 async function consumeCharacterItemForMission(tx: Tx, characterId: string, itemKey: string, quantity: number) {

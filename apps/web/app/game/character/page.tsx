@@ -26,6 +26,7 @@ export default async function CharacterPage() {
       techniques: { include: { technique: true } },
       items: { include: { template: true }, orderBy: { createdAt: "desc" } },
       sect: true,
+      mentorshipsAsDisciple: { where: { status: "ACTIVE" }, include: { masterCharacter: true }, take: 1 },
       currentLocation: { include: { zone: { include: { region: true } } } }
     }
   });
@@ -49,6 +50,7 @@ export default async function CharacterPage() {
             <Info label="Danh hiệu" value={c.title} />
             <Info label="Cảnh giới" value={`${c.realmStage.realm.name} ${c.realmStage.name}`} accent />
             <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
+            <Info label="Sư phụ" value={c.mentorshipsAsDisciple[0]?.masterCharacter.name ?? "Chưa bái sư"} />
             <Info label="Địa điểm" value={c.currentLocation?.name ?? "Chưa rõ"} />
             <Info label="Địa vực" value={c.currentLocation?.zone.region?.name ?? "Chưa rõ"} />
           </div>

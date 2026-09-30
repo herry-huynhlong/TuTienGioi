@@ -1,7 +1,7 @@
 import { prisma, SectAlignment } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { applyToSectAction, cancelSectApplicationAction, createSectAction } from "@/lib/forms";
+import { applyToSectAction, cancelSectApplicationAction, completeThanhVanAdmissionAction, createSectAction, revealThanhVanSpiritualRootAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { getSectRank, progressQuestEvent, sectAlignments, sectCreateCost } from "@ttg/game";
@@ -155,11 +155,25 @@ function PublicSectProfile({ sect, pendingApplicationId }: { sect: any; pendingA
           <button className="btn btn-secondary" type="submit">Hủy đơn đang chờ</button>
         </form>
       ) : (
-        <form action={applyToSectAction} className="sect-apply-form">
-          <input type="hidden" name="sectId" value={sect.id} />
-          <textarea name="message" className="field" placeholder="Lời nhắn xin nhập môn..." rows={3} />
-          <button className="btn" type="submit" disabled={!sect.recruiting || sect.members.length >= sect.memberLimit}>Xin gia nhập</button>
-        </form>
+        sect.tag === "TVM" ? (
+          <div className="sect-apply-form">
+            <form action={revealThanhVanSpiritualRootAction}>
+              <input type="hidden" name="back" value={`/game/sect?sect=${sect.id}`} />
+              <button className="btn btn-secondary" type="submit">Giám định Linh Căn</button>
+            </form>
+            <form action={completeThanhVanAdmissionAction}>
+              <input type="hidden" name="sectId" value={sect.id} />
+              <button className="btn" type="submit">Nhận Ngoại Môn Lệnh</button>
+            </form>
+            <p className="muted">Thanh Vân Môn dùng chuỗi nhiệm vụ nhập môn riêng. Hoàn thành khảo hạch rồi quay lại nhận lệnh bài.</p>
+          </div>
+        ) : (
+          <form action={applyToSectAction} className="sect-apply-form">
+            <input type="hidden" name="sectId" value={sect.id} />
+            <textarea name="message" className="field" placeholder="Lời nhắn xin nhập môn..." rows={3} />
+            <button className="btn" type="submit" disabled={!sect.recruiting || sect.members.length >= sect.memberLimit}>Xin gia nhập</button>
+          </form>
+        )
       )}
     </div>
   );

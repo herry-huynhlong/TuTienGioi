@@ -21,9 +21,8 @@ export default async function QuestLogPage({ searchParams }: { searchParams?: Pr
   return (
     <div className="p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
-        <p className="text-xs font-bold uppercase text-jade">Quest Log</p>
         <h1 className="mt-1 text-3xl font-black">Nhiệm Vụ</h1>
-        <p className="muted mt-2">Theo dõi nhiệm vụ NPC, thế giới và tuyến dẫn đạo.</p>
+        <p className="muted mt-2">Theo dõi việc đã nhận, việc có thể nộp và tuyến dẫn đạo trong thế giới.</p>
       </header>
       <nav className="tab-strip mb-5">
         <Link className={tab === "active" ? "active" : ""} href="/game/quests?tab=active">Đang làm</Link>
@@ -44,11 +43,11 @@ export default async function QuestLogPage({ searchParams }: { searchParams?: Pr
                 <span>Độ khó <b>{"★".repeat(quest.template.difficulty)}</b></span>
               </div>
             </div>
-            {quest.status === "READY_TO_TURN_IN" && quest.template.turnInNpc ? <Link href={`/game/npc/${quest.template.turnInNpc.key}`} className="btn">Tới NPC</Link> : null}
+            {quest.status === "READY_TO_TURN_IN" && quest.template.turnInNpc ? <Link href={`/game/npc/${quest.template.turnInNpc.key}`} className="btn">Tới gặp</Link> : null}
             {quest.status === "ACTIVE" && quest.template.startNpc ? <Link href="/game/location" className="btn btn-secondary">Xem địa điểm</Link> : null}
           </article>
         ))}
-        {quests.length === 0 ? <div className="empty-state"><b>Không có nhiệm vụ trong mục này.</b><p>Hãy nói chuyện với NPC ở địa điểm hiện tại để nhận nhiệm vụ mới.</p></div> : null}
+        {quests.length === 0 ? <div className="empty-state"><b>Không có nhiệm vụ trong mục này.</b><p>Hãy trò chuyện với nhân vật ở địa điểm hiện tại để nhận việc mới.</p></div> : null}
       </section>
     </div>
   );
@@ -62,6 +61,6 @@ function QuestIcon({ status }: { status: string }) {
 }
 
 function formatQuestType(type: string) {
-  const labels: Record<string, string> = { MAIN: "Chính tuyến", SIDE: "Phụ tuyến", NPC: "NPC", SECT: "Tông môn", WORLD: "Thế giới", EVENT: "Sự kiện" };
+  const labels: Record<string, string> = { MAIN: "Chính tuyến", SIDE: "Phụ tuyến", NPC: "Nhân vật", SECT: "Tông môn", WORLD: "Thế giới", EVENT: "Sự kiện" };
   return labels[type] ?? type;
 }

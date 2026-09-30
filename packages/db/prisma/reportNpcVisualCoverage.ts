@@ -8,15 +8,23 @@ const seedSource = readFileSync(seedPath, "utf8");
 
 const npcDataBlock = seedSource.match(/const npcData = \[([\s\S]*?)\] as const;/)?.[1] ?? "";
 const npcProfileBlock = seedSource.match(/const npcProfiles = \{([\s\S]*?)\n  \} as const;/)?.[1] ?? "";
+const thanhVanPersonnelBlock = seedSource.match(/const thanhVanPersonnel = \[([\s\S]*?)\] as const;/)?.[1] ?? "";
 
 const npcs = [...npcDataBlock.matchAll(/^\s*\["([^"]+)",\s*"([^"]+)"/gm)].map((match) => ({
   key: match[1],
   name: match[2]
 }));
 
+for (const match of thanhVanPersonnelBlock.matchAll(/key:\s*"([^"]+)",\s*\n\s*name:\s*"([^"]+)"/g)) {
+  npcs.push({ key: match[1], name: match[2] });
+}
+
 const profileVisuals = new Map<string, string>();
 for (const match of npcProfileBlock.matchAll(/"([^"]+)":\s*\{[\s\S]*?visualKey:\s*"([^"]+)"/g)) {
   profileVisuals.set(match[1], match[2]);
+}
+for (const match of thanhVanPersonnelBlock.matchAll(/key:\s*"([^"]+)"/g)) {
+  profileVisuals.set(match[1], match[1]);
 }
 
 const assetFiles = existsSync(npcAssetDir)

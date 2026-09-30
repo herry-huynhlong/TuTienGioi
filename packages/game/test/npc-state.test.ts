@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { npcDialogueState, npcRelationshipState } from "../src/quests.js";
+import { npcDialogueState, npcRelationshipState, npcWorldDialoguePreview } from "../src/quests.js";
 
 describe("npc state helpers", () => {
   it("maps relationship score into stable labels", () => {
@@ -27,5 +27,26 @@ describe("npc state helpers", () => {
     expect(npcDialogueState({ ...base, previouslyMet: true, relationshipScore: 30 })).toBe("friendly");
     expect(npcDialogueState({ ...base, previouslyMet: true, activeQuestCount: 1 })).toBe("activeQuest");
     expect(npcDialogueState({ ...base, previouslyMet: true, readyQuestCount: 1 })).toBe("readyQuest");
+  });
+
+  it("exposes world dialogue actions without generic technical labels", () => {
+    const merchant = npcWorldDialoguePreview("van-bao-lau-quan-su");
+    expect(merchant.choices.find((choice) => choice.label === "Xem hàng hóa")).toMatchObject({
+      action: "OPEN_SHOP",
+      payload: { route: "/game/market" }
+    });
+    expect(merchant.choices.some((choice) => choice.label === "Hỏi về nơi này")).toBe(false);
+
+    const wounded = npcWorldDialoguePreview("tu-si-bi-thuong");
+    expect(wounded.nodes.help?.choices.find((choice) => choice.label === "Nhận lời")).toMatchObject({
+      action: "ACCEPT_QUEST",
+      payload: { questKey: "san-yeu-dau-tien" }
+    });
+
+    const elder = npcWorldDialoguePreview("truyen-cong-truong-lao");
+    expect(elder.choices.find((choice) => choice.label === "Xem công pháp đang có")).toMatchObject({
+      action: "OPEN_INVENTORY",
+      payload: { route: "/game/inventory?filter=MANUAL" }
+    });
   });
 });

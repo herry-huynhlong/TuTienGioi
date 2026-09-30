@@ -104,7 +104,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-bold text-gold">Nhiệm vụ đang theo</p>
-                    <p className="muted mt-1 text-sm">NPC và thế giới sẽ tự cập nhật khi bạn di chuyển, săn yêu hoặc nhặt vật phẩm.</p>
+                    <p className="muted mt-1 text-sm">Nhân vật và thế giới sẽ tự cập nhật khi bạn di chuyển, săn yêu hoặc nhặt vật phẩm.</p>
                   </div>
                   <Link href="/game/quests" className="status-pill">Mở</Link>
                 </div>

@@ -1,10 +1,10 @@
 import { prisma, SectFacilityType, SectWorkStatus, type SectRoleName } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, completeSectMissionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectSectApplicationAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
+import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, claimThanhVanAllowanceAction, completeMentorQuestAction, completeSectMissionAction, completeThanhVanInnerExamAction, completeTrueDisciplePromotionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectMentorInvitationAction, rejectSectApplicationAction, requestThanhVanInnerExamAction, requestTrueDiscipleExamAction, reviewTrueDiscipleExamAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
-import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
+import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
@@ -68,6 +68,8 @@ export default async function SectHomePage({ params, searchParams }: { params: P
     }
   });
   const selfMember = sect.members.find((member) => member.characterId === character.id);
+  const thanhVanProgression = sect.tag === "TVM" ? await getThanhVanProgression(prisma, character.id) : null;
+  const thanhVanMentorship = sect.tag === "TVM" ? await getThanhVanMentorshipProgression(prisma, character.id) : null;
   const canAdmin = hasSectPermission(selfMember?.role, "VIEW_ADMIN");
   const activeTab = tabs.some(([key]) => key === query?.tab) ? query!.tab! : "overview";
   if (activeTab === "admin" && !canAdmin) redirect(`/game/sect/${id}`);
@@ -114,7 +116,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       </nav>
 
       {activeTab === "members" ? <MembersTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_MEMBERS")} /> : null}
-      {activeTab === "missions" ? <MissionsTab sect={sect} /> : null}
+      {activeTab === "missions" ? <MissionsTab sect={sect} inventoryItems={character.items} /> : null}
       {activeTab === "domain" ? <DomainTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_BUILDINGS")} canRankUp={hasSectPermission(selfMember?.role, "UPGRADE_SECT")} /> : null}
       {activeTab === "caves" ? <CavesTab sect={sect} role={selfMember?.role} /> : null}
       {activeTab === "library" ? <LibraryTab sect={sect} selfRole={selfMember?.role} contribution={selfMember?.contribution ?? 0} ownedTechniqueIds={character.techniques.map((item) => item.techniqueId)} /> : null}
@@ -122,12 +124,12 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       {activeTab === "mine" ? <MineTab sect={sect} characterId={character.id} /> : null}
       {activeTab === "farm" ? <FarmTab sect={sect} /> : null}
       {activeTab === "admin" && canAdmin ? <AdminTab sect={sect} /> : null}
-      {activeTab === "overview" ? <OverviewTab sect={sect} selfRole={selfMember?.role} selfContribution={selfMember?.contribution ?? 0} /> : null}
+      {activeTab === "overview" ? <OverviewTab sect={sect} selfRole={selfMember?.role} selfContribution={selfMember?.contribution ?? 0} thanhVanProgression={thanhVanProgression} thanhVanMentorship={thanhVanMentorship} /> : null}
     </div>
   );
 }
 
-function OverviewTab({ sect, selfRole, selfContribution }: { sect: any; selfRole?: SectRoleName | undefined; selfContribution: number }) {
+function OverviewTab({ sect, selfRole, selfContribution, thanhVanProgression, thanhVanMentorship }: { sect: any; selfRole?: SectRoleName | undefined; selfContribution: number; thanhVanProgression?: any; thanhVanMentorship?: any }) {
   const next = getNextSectRank(sect.rank);
   return (
     <div className="sect-dashboard-grid">
@@ -158,12 +160,162 @@ function OverviewTab({ sect, selfRole, selfContribution }: { sect: any; selfRole
           <span>Cống hiến tuần <b>0</b></span>
         </div>
       </section>
+      {thanhVanProgression ? <ThanhVanRuntimeCard sectId={sect.id} progression={thanhVanProgression} /> : null}
+      {thanhVanMentorship ? <TrueDisciplePathCard sectId={sect.id} progression={thanhVanMentorship} /> : null}
       <section className="panel sect-board large">
         <h2>Nhật ký tông môn</h2>
         <LogList logs={sect.logs} />
       </section>
     </div>
   );
+}
+
+function ThanhVanRuntimeCard({ sectId, progression }: { sectId: string; progression: any }) {
+  const requirement = progression.innerRequirement;
+  const canRequestInner = progression.state === "OUTER_DISCIPLE" && requirement.realmOk && requirement.contributionOk;
+  const canSubmitInner = canRequestInner && progression.innerExamRequested && requirement.missionOk;
+  return (
+    <section className="panel sect-board large">
+      <h2>Đạo tịch Thanh Vân</h2>
+      <div className="sect-runtime-grid">
+        <div>
+          <p className="eyebrow">THÂN PHẬN</p>
+          <b>{progression.stateLabel}</b>
+          <p className="muted">Cống hiến hiện có: {progression.contribution.toLocaleString("vi-VN")}</p>
+        </div>
+        <div>
+          <p className="eyebrow">LINH CĂN</p>
+          <b>{progression.spiritualRootRevealed ? "Đã giám định" : "Chưa giám định"}</b>
+          <p className="muted">{progression.highTalentNoticed ? "Tư chất đã được trưởng lão chú ý." : "Tư chất dùng để tính yêu cầu thăng tiến."}</p>
+        </div>
+        <div>
+          <p className="eyebrow">BỔNG LỘC</p>
+          <b>{progression.allowanceClaimedToday ? "Đã nhận hôm nay" : "Có thể nhận"}</b>
+          <form action={claimThanhVanAllowanceAction}>
+            <input type="hidden" name="sectId" value={sectId} />
+            <button className="btn btn-secondary" type="submit" disabled={progression.allowanceClaimedToday}>Nhận bổng lộc</button>
+          </form>
+        </div>
+        <div>
+          <p className="eyebrow">NỘI MÔN</p>
+          <b>{requirement.label}</b>
+          <p className="muted">
+            Cảnh giới {requirement.realmOk ? "đủ" : "chưa đủ"} · Cống hiến {requirement.contributionOk ? "đủ" : "chưa đủ"} · Khảo hạch {requirement.missionOk ? "đã có nhiệm vụ đạt" : "cần 1 nhiệm vụ chiến đấu/điều tra"}
+          </p>
+          <div className="inline-actions">
+            <form action={requestThanhVanInnerExamAction}>
+              <input type="hidden" name="sectId" value={sectId} />
+              <button className="btn btn-secondary" type="submit" disabled={!canRequestInner || progression.innerExamRequested}>Đăng ký khảo hạch</button>
+            </form>
+            <form action={completeThanhVanInnerExamAction}>
+              <input type="hidden" name="sectId" value={sectId} />
+              <button className="btn" type="submit" disabled={!canSubmitInner}>Nộp khảo hạch</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TrueDisciplePathCard({ sectId, progression }: { sectId: string; progression: any }) {
+  const requirement = progression.requirement;
+  const active = progression.activeMentor;
+  const canRequest = Boolean(active?.questCompleted && requirement.realmOk && requirement.contributionOk && !progression.exam.recommended);
+  const canReview = Boolean(progression.exam.recommended && !progression.exam.reviewed);
+  const canPromote = Boolean(progression.exam.recommended && progression.exam.reviewed && progression.exam.finalTrialOk && active?.questCompleted && requirement.realmOk && requirement.contributionOk && !progression.exam.promoted);
+  return (
+    <section className="panel sect-board large">
+      <div className="sect-feature-head">
+        <Crown />
+        <div>
+          <h2>Con đường Chân Truyền</h2>
+          <p className="muted">Bái sư, hoàn thành khảo hạch sư môn rồi qua Đại Điện xét duyệt. Cống hiến chỉ là điều kiện, không bị trừ khi thăng cấp.</p>
+        </div>
+      </div>
+
+      <div className="sect-runtime-grid true-disciple-grid">
+        <div>
+          <p className="eyebrow">ĐIỀU KIỆN GỐC</p>
+          <b>{requirement.label}</b>
+          <p className="muted">Cảnh giới {requirement.realmOk ? "đã đủ" : "chưa đủ"} · Cống hiến {requirement.contributionOk ? "đã đủ" : "chưa đủ"}</p>
+        </div>
+        <div>
+          <p className="eyebrow">SƯ PHỤ</p>
+          <b>{active ? active.name : "Chưa bái sư"}</b>
+          <p className="muted">{active?.quest ? `${active.quest.title}: ${active.questCompleted ? "đã hoàn thành" : "đang chờ"}` : "Cần nhận lời mời từ Tông Chủ hoặc Trưởng Lão."}</p>
+          {active && !active.questCompleted ? (
+            <form action={completeMentorQuestAction}>
+              <input type="hidden" name="sectId" value={sectId} />
+              <button className="btn btn-secondary" type="submit">Nộp khảo hạch sư môn</button>
+            </form>
+          ) : null}
+        </div>
+        <div>
+          <p className="eyebrow">ĐẠI ĐIỆN</p>
+          <b>{progression.exam.promoted ? "Đã là Chân Truyền" : "Chưa hoàn tất"}</b>
+          <p className="muted">Bảo chứng {progression.exam.recommended ? "xong" : "chưa"} · Xét duyệt {progression.exam.reviewed ? "xong" : "chưa"} · Chung khảo {progression.exam.finalTrialOk ? "đủ" : "cần nhiệm vụ"}</p>
+          <div className="inline-actions">
+            <form action={requestTrueDiscipleExamAction}>
+              <input type="hidden" name="sectId" value={sectId} />
+              <button className="btn btn-secondary" type="submit" disabled={!canRequest}>Xin bảo chứng</button>
+            </form>
+            <form action={reviewTrueDiscipleExamAction}>
+              <input type="hidden" name="sectId" value={sectId} />
+              <button className="btn btn-secondary" type="submit" disabled={!canReview}>Xin xét duyệt</button>
+            </form>
+            <form action={completeTrueDisciplePromotionAction}>
+              <input type="hidden" name="sectId" value={sectId} />
+              <button className="btn" type="submit" disabled={!canPromote}>Thăng Chân Truyền</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {progression.invites.length > 0 ? (
+        <div className="sect-invite-list">
+          <h3>Lời mời bái sư</h3>
+          {progression.invites.map((invite: any) => (
+            <article key={invite.id} className="sect-member-row mentor-invite-row">
+              <div>
+                <b>{invite.name}</b>
+                <span>{invite.type === "SECT_MASTER_DISCIPLE" ? "Tông Chủ thân truyền" : "Trưởng Lão đệ tử"}</span>
+                <small>{invite.reason || "Sư trưởng đã để ý tới căn cơ và công lao của bạn."}</small>
+              </div>
+              <form action={acceptMentorInvitationAction}>
+                <input type="hidden" name="sectId" value={sectId} />
+                <input type="hidden" name="invitationId" value={invite.id} />
+                <button className="btn" type="submit">Bái sư</button>
+              </form>
+              <form action={rejectMentorInvitationAction}>
+                <input type="hidden" name="sectId" value={sectId} />
+                <input type="hidden" name="invitationId" value={invite.id} />
+                <button className="btn btn-secondary" type="submit">Từ chối</button>
+              </form>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mentor-candidate-grid">
+        {progression.mentorCandidates.map((mentor: any) => (
+          <article key={mentor.key} className={`mentor-card ${mentor.level.toLowerCase().replace("_", "-")}`}>
+            <b>{mentor.name}</b>
+            <span>{mentor.title}</span>
+            <p>{mentor.quest.title}</p>
+            <small>{formatMentorInterest(mentor.level)} · {mentor.evidenceMet ? "Đã có dấu mốc phù hợp" : "Chưa đủ dấu mốc"}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function formatMentorInterest(level: string) {
+  if (level === "INVITE_READY") return "Sẵn sàng thu đồ";
+  if (level === "INTERESTED") return "Đang quan sát";
+  if (level === "NOTICED") return "Đã chú ý";
+  return "Chưa chú ý";
 }
 
 function MembersTab({ sect, canManage }: { sect: any; canManage: boolean }) {
@@ -188,7 +340,9 @@ function MembersTab({ sect, canManage }: { sect: any; canManage: boolean }) {
   );
 }
 
-function MissionsTab({ sect }: { sect: any }) {
+function MissionsTab({ sect, inventoryItems }: { sect: any; inventoryItems: Array<{ quantity: number; template: { key: string } }> }) {
+  const inventoryByKey = new Map<string, number>();
+  for (const item of inventoryItems) inventoryByKey.set(item.template.key, (inventoryByKey.get(item.template.key) ?? 0) + item.quantity);
   return (
     <section className="sect-two-col">
       {sect.missions.map((mission: any) => {
@@ -209,6 +363,7 @@ function MissionsTab({ sect }: { sect: any }) {
               <span>Địa điểm <b>{objective.locationName ?? "Theo địa đồ"}</b></span>
               <span>Mục tiêu <b>{formatMissionObjective(mission, objective)}</b></span>
               <span>Tiến độ <b>{active ? `${active.progress}/${active.targetCount}` : completed ? `${completed.targetCount}/${completed.targetCount}` : `0/${mission.targetCount}`}</b></span>
+              {objective.eventType === "CRAFT_COMPLETED" && typeof objective.itemKey === "string" ? <span>Thành phẩm hiện có <b>{inventoryByKey.get(objective.itemKey) ?? 0}/{mission.targetCount}</b></span> : null}
             </div>
             <p className="muted">Thưởng: +{reward.cultivation ?? 0} Tu Vi · <CurrencyAmount amount={reward.linhThach ?? 0} /> · +{reward.contribution ?? 0} Cống Hiến · +{reward.reputation ?? 0} Uy Danh</p>
             {active?.status === "READY_TO_TURN_IN" ? (
@@ -247,6 +402,8 @@ function formatMissionType(type: string) {
 }
 
 function formatMissionObjective(mission: any, objective: Record<string, unknown>) {
+  if (objective.eventType === "CRAFT_COMPLETED") return `Tự luyện ${objective.itemKey ?? "vật phẩm"} ${mission.targetCount}`;
+  if (objective.eventType === "INTERACT_WORLD_OBJECT") return "Tương tác đối tượng trong khu vực";
   if (mission.type === "HUNT") return `${objective.monsterKey ?? "Yêu thú"} ${mission.targetCount}`;
   if (mission.type === "COLLECT") return `${objective.itemKey ?? "Tài nguyên"} ${mission.targetCount}`;
   if (mission.type === "EXPLORE" || mission.type === "PATROL") return objective.locationName ? `Tới ${objective.locationName}` : "Khảo sát địa điểm";

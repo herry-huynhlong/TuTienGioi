@@ -26,7 +26,7 @@ export function formatService(value: string) {
   return ({
     market: "Vạn Bảo Lâu",
     auction: "Đấu giá",
-    npc_shop: "Cửa hàng NPC",
+    npc_shop: "Quầy giao dịch",
     inn: "Khách điếm",
     mail: "Thư tín",
     travel: "Di chuyển",

@@ -121,6 +121,7 @@ enum SectRoleName {
   VICE_LEADER
   ELDER
   OFFICER
+  TRUE_DISCIPLE
   INNER
   OUTER
 }
@@ -154,6 +155,11 @@ enum SectLogType {
   CAVE
   LIBRARY
   EXPANSION
+  MENTOR_INVITED
+  MENTOR_INVITE_ACCEPTED
+  MENTOR_INVITE_REJECTED
+  MENTOR_QUEST_COMPLETED
+  TRUE_DISCIPLE_PROMOTED
 }
 
 enum SectInventoryLogType {
@@ -175,6 +181,18 @@ enum SectMissionStatus {
   COMPLETED
   CANCELLED
   EXPIRED
+}
+
+enum SectMentorshipType {
+  ELDER_DISCIPLE
+  SECT_MASTER_DISCIPLE
+}
+
+enum SectMentorshipStatus {
+  INVITED
+  ACTIVE
+  ENDED
+  REJECTED
 }
 
 enum SectFacilityType {
@@ -394,6 +412,8 @@ model Character {
   sectTreasuryTransactions SectTreasuryTransaction[]
   sectContributionTransactions SectContributionTransaction[]
   sectMissionParticipants SectMissionParticipant[]
+  mentorshipsAsMaster SectMentorship[] @relation("MentorshipMaster")
+  mentorshipsAsDisciple SectMentorship[] @relation("MentorshipDisciple")
   sectFarmPlots SectFarmPlot[]
   sectMineWorks SectMineWork[]
   assignedSectCaves SectCave[]
@@ -982,6 +1002,7 @@ model Sect {
   mineWorks SectMineWork[]
   caves SectCave[]
   libraryTechniques SectLibraryTechnique[]
+  mentorships SectMentorship[]
   relationsA  SectRelation[] @relation("SectA")
   relationsB  SectRelation[] @relation("SectB")
   npcs         Npc[]
@@ -1001,6 +1022,28 @@ model SectMember {
   joinedAt    DateTime @default(now())
   @@index([sectId, role])
   @@index([sectId, contribution])
+}
+
+model SectMentorship {
+  id          String @id @default(cuid())
+  sectId      String
+  sect        Sect @relation(fields: [sectId], references: [id], onDelete: Cascade)
+  masterCharacterId String
+  masterCharacter Character @relation("MentorshipMaster", fields: [masterCharacterId], references: [id], onDelete: Cascade)
+  discipleCharacterId String
+  discipleCharacter Character @relation("MentorshipDisciple", fields: [discipleCharacterId], references: [id], onDelete: Cascade)
+  type        SectMentorshipType
+  status      SectMentorshipStatus @default(INVITED)
+  invitationReason String @default("")
+  acceptedAt   DateTime?
+  endedAt      DateTime?
+  rejectedAt   DateTime?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@index([sectId, status])
+  @@index([masterCharacterId, status])
+  @@index([discipleCharacterId, status])
 }
 
 model SectBuilding {

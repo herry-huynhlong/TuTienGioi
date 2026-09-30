@@ -1,8 +1,9 @@
 import { ActionAlert } from "@/components/ActionAlert";
+import { CharacterVisual } from "@/components/CharacterVisual";
 import { getUser } from "@/lib/auth";
-import { unblockPlayerAction, updatePlayerSettingsAction } from "@/lib/forms";
+import { unblockPlayerAction, updateCharacterAppearanceAction, updatePlayerSettingsAction } from "@/lib/forms";
 import { prisma } from "@ttg/db";
-import { ensurePlayerSettings } from "@ttg/game";
+import { characterAppearances, deterministicCharacterAppearanceKey, ensurePlayerSettings } from "@ttg/game";
 import { Bell, Eye, Lock, MonitorCog, ShieldOff } from "lucide-react";
 import { redirect } from "next/navigation";
 
@@ -11,8 +12,12 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
   const user = await getUser();
   if (!user?.character) redirect("/");
   const characterId = user.character.id;
-  const settings = await ensurePlayerSettings(prisma, characterId);
-  const blocked = await prisma.blockedPlayer.findMany({ where: { blockerId: characterId }, include: { blocked: true }, orderBy: { createdAt: "desc" } });
+  const [settings, character, blocked] = await Promise.all([
+    ensurePlayerSettings(prisma, characterId),
+    prisma.character.findUniqueOrThrow({ where: { id: characterId }, select: { id: true, name: true, appearanceKey: true, avatar: true } }),
+    prisma.blockedPlayer.findMany({ where: { blockerId: characterId }, include: { blocked: true }, orderBy: { createdAt: "desc" } })
+  ]);
+  const currentAppearanceKey = character.appearanceKey ?? deterministicCharacterAppearanceKey(character.id);
 
   return (
     <div className="settings-page p-5 lg:p-8">
@@ -23,6 +28,32 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
       </header>
       <ActionAlert message={params?.error} />
       {params?.ok ? <ActionAlert message={okMessage(params.ok)} /> : null}
+
+      <section className="panel rounded-lg p-5 mb-5">
+        <h2 className="social-panel-title"><Eye size={18} aria-hidden /> Ngoại hình nhân vật</h2>
+        <div className="mt-4 grid gap-5 xl:grid-cols-[18rem_1fr]">
+          <CharacterVisual character={character} mode="portrait" className="w-full" priority />
+          <form action={updateCharacterAppearanceAction}>
+            <div className="appearance-selector-grid">
+              {characterAppearances.map((appearance) => (
+                <article key={appearance.key} className={`appearance-card ${appearance.key === currentAppearanceKey ? "selected" : ""}`}>
+                  <label>
+                    <input type="radio" name="appearanceKey" value={appearance.key} defaultChecked={appearance.key === currentAppearanceKey} />
+                    <CharacterVisual character={{ ...character, appearanceKey: appearance.key, avatar: appearance.image }} mode="portrait" />
+                    <span>
+                      <b>{appearance.label}</b>
+                      <small>{appearance.description}</small>
+                    </span>
+                  </label>
+                </article>
+              ))}
+            </div>
+            <div className="settings-submit mt-4">
+              <button className="btn">Dùng ngoại hình này</button>
+            </div>
+          </form>
+        </div>
+      </section>
 
       <form action={updatePlayerSettingsAction} className="settings-grid">
         <Panel title="Hiển thị" icon={<MonitorCog size={18} aria-hidden />}>
@@ -62,7 +93,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
         <div className="social-list mt-4">
           {blocked.map((row) => (
             <article key={row.id} className="social-row">
-              <div className="social-avatar">{row.blocked.name.slice(0, 1)}</div>
+              <CharacterVisual character={row.blocked} mode="avatar" size={40} className="social-avatar" />
               <div>
                 <b>{row.blocked.name}</b>
                 <small>Bị chặn từ {row.createdAt.toLocaleDateString("vi-VN")}</small>
@@ -105,5 +136,5 @@ function Toggle({ name, label, description, checked }: { name: string; label: st
 }
 
 function okMessage(ok: string) {
-  return ({ saved: "Đã lưu cài đặt.", unblocked: "Đã bỏ chặn người chơi." } as Record<string, string>)[ok] ?? ok;
+  return ({ saved: "Đã lưu cài đặt.", appearance: "Đã cập nhật ngoại hình nhân vật.", unblocked: "Đã bỏ chặn người chơi." } as Record<string, string>)[ok] ?? ok;
 }

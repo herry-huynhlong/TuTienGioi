@@ -11,6 +11,8 @@ export * from "./inventory.js";
 export * from "./social.js";
 export * from "./location-visuals.js";
 export * from "./professions.js";
+export * from "./character-appearances.js";
+export * from "./character-appearance-service.js";
 export * from "./sect-access.js";
 export * from "./sect-contribution.js";
 export * from "./thanh-van-mon.js";

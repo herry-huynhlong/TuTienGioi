@@ -1,8 +1,9 @@
-import { prisma } from "@ttg/db";
+import { prisma, type SectRoleName } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { CharacterVisual } from "@/components/CharacterVisual";
 import { formatItemCategory, formatRarity } from "@/lib/format";
-import { recordOnboardingEvent } from "@ttg/game";
+import { recordOnboardingEvent, sectRoles } from "@ttg/game";
 
 const equipmentSlots = [
   ["WEAPON", "Vũ khí"],
@@ -26,6 +27,7 @@ export default async function CharacterPage() {
       techniques: { include: { technique: true } },
       items: { include: { template: true }, orderBy: { createdAt: "desc" } },
       sect: true,
+      sectMember: true,
       mentorshipsAsDisciple: { where: { status: "ACTIVE" }, include: { masterCharacter: true }, take: 1 },
       currentLocation: { include: { zone: { include: { region: true } } } }
     }
@@ -43,21 +45,21 @@ export default async function CharacterPage() {
         <p className="muted mt-2">Thông tin tu sĩ, căn cơ, chiến lực, công pháp, trang bị và túi đồ.</p>
       </header>
 
-      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+      <section className="character-hero-grid">
+        <CharacterVisual character={c} mode="fullBody" priority />
+
         <Panel title="Thông tin">
           <div className="info-table">
             <Info label="Tên" value={c.name} />
             <Info label="Danh hiệu" value={c.title} />
             <Info label="Cảnh giới" value={`${c.realmStage.realm.name} ${c.realmStage.name}`} accent />
             <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
+            <Info label="Thân phận" value={c.sectMember ? sectRoles[c.sectMember.role as SectRoleName].label : "Tán tu"} />
             <Info label="Sư phụ" value={c.mentorshipsAsDisciple[0]?.masterCharacter.name ?? "Chưa bái sư"} />
             <Info label="Địa điểm" value={c.currentLocation?.name ?? "Chưa rõ"} />
             <Info label="Địa vực" value={c.currentLocation?.zone.region?.name ?? "Chưa rõ"} />
           </div>
-        </Panel>
-
-        <Panel title="Chiến lực">
-          <div className="info-table">
+          <div className="info-table mt-4">
             <Info label="HP" value={`${c.hp}/${c.maxHp}`} />
             <Info label="Chân nguyên" value={`${c.qi}/${c.maxQi}`} />
             <Info label="Công kích" value={c.attack.toString()} />

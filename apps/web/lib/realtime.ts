@@ -10,6 +10,8 @@ export type RealtimeConversation = {
   id: string;
   peerId: string;
   peerName: string;
+  peerAvatar: string | null;
+  peerAppearanceKey: string | null;
   peerRealm: string;
   lastMessage: string;
   lastMessageAt: string;
@@ -67,6 +69,8 @@ export async function getRealtimeSnapshot(characterId: string, peerId?: string) 
       id: row.id,
       peerId: peer.id,
       peerName: peer.name,
+      peerAvatar: peer.avatar,
+      peerAppearanceKey: peer.appearanceKey,
       peerRealm: `${peer.realmStage.realm.name} ${peer.realmStage.name}`,
       lastMessage: row.lastMessage,
       lastMessageAt: row.lastMessageAt.toISOString(),
@@ -89,7 +93,7 @@ export async function getRealtimeSnapshot(characterId: string, peerId?: string) 
     serverTime: new Date().toISOString(),
     counts,
     conversations: serializedConversations,
-    selectedPeer: selectedPeer ? { id: selectedPeer.id, name: selectedPeer.name, realm: `${selectedPeer.realmStage.realm.name} ${selectedPeer.realmStage.name}` } : null,
+    selectedPeer: selectedPeer ? { id: selectedPeer.id, name: selectedPeer.name, avatar: selectedPeer.avatar, appearanceKey: selectedPeer.appearanceKey, realm: `${selectedPeer.realmStage.realm.name} ${selectedPeer.realmStage.name}` } : null,
     messages: selectedConversation
       ? selectedConversation.messages.map((message) => ({
           id: message.id,

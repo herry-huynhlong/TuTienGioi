@@ -6,6 +6,7 @@ import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
 import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
 import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
+import { CharacterAppearanceError, characterAppearanceImage, deterministicCharacterAppearanceKey, setCharacterAppearance } from "@ttg/game";
 
 const credentials = z.object({
   username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),
@@ -30,6 +31,8 @@ export async function registerAction(formData: FormData) {
         character: {
           create: {
             name: parsed.data.username,
+            appearanceKey: deterministicCharacterAppearanceKey(`${parsed.data.username}:${parsed.data.email}`),
+            avatar: characterAppearanceImage(deterministicCharacterAppearanceKey(`${parsed.data.username}:${parsed.data.email}`)),
             realmStageId: firstStage.id,
             spiritualRootId: root.id,
             locationId: zone.id,
@@ -70,7 +73,7 @@ async function characterId() {
 }
 
 function redirectGameError(error: unknown, path: string): never {
-  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError || error instanceof InventoryError || error instanceof SocialError || error instanceof ThanhVanError || error instanceof WorldInteractionError || error instanceof MentorshipError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
+  if (error instanceof GameError || error instanceof SectError || error instanceof QuestError || error instanceof InventoryError || error instanceof SocialError || error instanceof ThanhVanError || error instanceof WorldInteractionError || error instanceof MentorshipError || error instanceof CharacterAppearanceError) redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
   throw error;
 }
 
@@ -864,4 +867,13 @@ export async function updatePlayerSettingsAction(formData: FormData) {
     redirectGameError(error, "/game/settings");
   }
   redirect("/game/settings?ok=saved");
+}
+
+export async function updateCharacterAppearanceAction(formData: FormData) {
+  try {
+    await setCharacterAppearance(prisma, await characterId(), String(formData.get("appearanceKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, "/game/settings");
+  }
+  redirect("/game/settings?ok=appearance");
 }

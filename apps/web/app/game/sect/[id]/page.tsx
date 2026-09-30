@@ -3,6 +3,7 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, claimThanhVanAllowanceAction, completeMentorQuestAction, completeSectMissionAction, completeThanhVanInnerExamAction, completeTrueDisciplePromotionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectMentorInvitationAction, rejectSectApplicationAction, requestThanhVanInnerExamAction, requestTrueDiscipleExamAction, reviewTrueDiscipleExamAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
+import { CharacterVisual } from "@/components/CharacterVisual";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
@@ -325,9 +326,12 @@ function MembersTab({ sect, canManage }: { sect: any; canManage: boolean }) {
       <div className="sect-member-list">
         {sect.members.map((member: any) => (
           <article key={member.id} className="sect-member-row">
-            <div>
+            <div className="flex items-center gap-3">
+              <CharacterVisual character={member.character} mode="avatar" size={42} />
+              <div>
               <b>{member.character.name}</b>
               <span>{member.character.realmStage.realm.name} {member.character.realmStage.name}</span>
+              </div>
             </div>
             <span>{sectRoles[member.role as keyof typeof sectRoles].label}</span>
             <span>{member.contribution.toLocaleString("vi-VN")} cống hiến</span>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CharacterVisual } from "@/components/CharacterVisual";
 import { logoutAction } from "@/lib/forms";
 import { currentEnergy } from "@ttg/game";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -82,8 +83,11 @@ const navGroups: NavGroup[] = [
 ] satisfies NavGroup[];
 
 type ShellCharacter = {
+  id: string;
   name: string;
   title: string;
+  avatar: string | null;
+  appearanceKey: string | null;
   hp: number;
   maxHp: number;
   qi: number;
@@ -132,9 +136,12 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
           </div>
           {character ? (
             <div className="mt-3 space-y-2">
-              <div>
-                <p className="font-bold text-gold">{character.name}</p>
-                <p className="text-xs text-paper/60">{character.title} · {character.realmStage.realm.name} {character.realmStage.name}</p>
+              <div className="flex items-center gap-3">
+                <CharacterVisual character={character} mode="avatar" size={54} />
+                <div>
+                  <p className="font-bold text-gold">{character.name}</p>
+                  <p className="text-xs text-paper/60">{character.title} · {character.realmStage.realm.name} {character.realmStage.name}</p>
+                </div>
               </div>
               <ResourceBar label="HP" value={character.hp} max={character.maxHp} tone="life" />
               <ResourceBar label="Chân nguyên" value={character.qi} max={character.maxQi} tone="qi" />

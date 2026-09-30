@@ -357,6 +357,7 @@ model Character {
   name            String
   title           String   @default("Tán Tu")
   avatar          String?
+  appearanceKey   String?
   gender          String   @default("Ẩn")
   age             Int      @default(16)
   lifespan        Int      @default(100)

@@ -5,10 +5,11 @@ import type { RealtimeConversation, RealtimeMessage } from "@/lib/realtime";
 import Link from "next/link";
 import { Ban, Gem, MessageSquare, Send, Users } from "lucide-react";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { CharacterVisual } from "@/components/CharacterVisual";
 
 type ChatSnapshot = {
   conversations: RealtimeConversation[];
-  selectedPeer: { id: string; name: string; realm: string } | null;
+  selectedPeer: { id: string; name: string; avatar: string | null; appearanceKey: string | null; realm: string } | null;
   messages: RealtimeMessage[];
 };
 
@@ -92,7 +93,7 @@ export function RealtimeChat({
         <div className="chat-panel-title"><MessageSquare size={17} aria-hidden /> Hội thoại</div>
         {snapshot.conversations.length > 0 ? snapshot.conversations.map((row) => (
           <Link key={row.id} href={`/game/chat?with=${row.peerId}`} className={`conversation-row ${selectedPeerId === row.peerId ? "active" : ""}`}>
-            <div className="social-avatar">{row.peerName.slice(0, 1)}</div>
+            <CharacterVisual character={{ id: row.peerId, name: row.peerName, avatar: row.peerAvatar, appearanceKey: row.peerAppearanceKey }} mode="avatar" size={40} className="social-avatar" />
             <div>
               <b>{row.peerName}</b>
               <small>{row.lastMessage || "Chưa có tin nhắn"}</small>
@@ -112,6 +113,7 @@ export function RealtimeChat({
         {snapshot.selectedPeer ? (
           <>
             <div className="chat-thread-head">
+              <CharacterVisual character={snapshot.selectedPeer} mode="avatar" size={54} className="social-avatar" />
               <div>
                 <p className="text-xs font-bold uppercase text-jade">Đang trò chuyện</p>
                 <h2>{snapshot.selectedPeer.name}</h2>

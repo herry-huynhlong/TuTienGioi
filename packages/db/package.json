@@ -21,7 +21,8 @@
     "validate:profession-recipes": "tsx prisma/validateProfessionRecipes.ts",
     "validate:thanh-van-mon": "tsx prisma/validateThanhVanMon.ts",
     "report:item-visuals": "tsx prisma/reportItemVisualCoverage.ts",
-    "report:npc-visuals": "tsx prisma/reportNpcVisualCoverage.ts"
+    "report:npc-visuals": "tsx prisma/reportNpcVisualCoverage.ts",
+    "report:character-visuals": "tsx prisma/reportCharacterVisualCoverage.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

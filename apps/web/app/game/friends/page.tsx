@@ -1,4 +1,5 @@
 import { ActionAlert } from "@/components/ActionAlert";
+import { CharacterVisual } from "@/components/CharacterVisual";
 import { getUser } from "@/lib/auth";
 import { acceptFriendRequestAction, blockPlayerAction, cancelFriendRequestAction, rejectFriendRequestAction, removeFriendAction, sendFriendRequestAction } from "@/lib/forms";
 import { prisma } from "@ttg/db";
@@ -97,7 +98,7 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
 function PlayerRow({ player, relation, actions }: { player: any; relation: string; actions: React.ReactNode }) {
   return (
     <article className="social-row">
-      <div className="social-avatar">{player.avatar ? <img src={player.avatar} alt="" /> : player.name.slice(0, 1)}</div>
+      <CharacterVisual character={player} mode="avatar" size={44} className="social-avatar" />
       <div>
         <b>{player.name}</b>
         <small>{player.realmStage ? `${player.realmStage.realm.name} ${player.realmStage.name}` : "Tu sĩ"} · {relation}</small>

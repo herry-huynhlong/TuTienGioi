@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { logoutAction } from "@/lib/forms";
-import { currentEnergy } from "@ttg/game";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { RealtimeBadge } from "@/components/RealtimeProvider";
+import { WorldClock } from "@/components/WorldClock";
 import {
   Backpack,
   BriefcaseBusiness,
@@ -107,7 +107,7 @@ type ShellCharacter = {
 } | null;
 
 export function Shell({ children, user, character, featureUnlocks }: { children: React.ReactNode; user: { username: string; role: string }; character: ShellCharacter; featureUnlocks: FeatureUnlocks | null }) {
-  const energy = character ? currentEnergy(character) : 0;
+  const energy = character ? character.energyStored : 0;
   const cultivationProgress = character ? Number(character.cultivation % 1000n) / 10 : 0;
   const isClickable = (link: NavLink) => (link.status === "implemented" || link.status === "partial") && (!link.adminOnly || user.role === "ADMIN") && (!link.featureKey || featureUnlocks?.[link.featureKey]?.unlocked !== false);
   const statusText = (link: NavLink) => {
@@ -122,30 +122,37 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
     <div className="game-frame min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
       <aside className="game-sidebar hidden lg:block">
         <div className="brand-block">
-          <Link href="/game" className="brand-title">TU TIÊN GIỚI</Link>
-          <p className="brand-subtitle">Persistent tu tiên world</p>
+          <Link href="/game" className="brand-seal" aria-label="Về trang chính">
+            <img src="/brand/tu-tien-gioi-seal.svg" alt="" />
+            <span>TU TIÊN GIỚI</span>
+          </Link>
+          <details className="brand-menu">
+            <summary>Menu</summary>
+            <div>
+              <Link href="/game">Trang Chính</Link>
+              <Link href="/game/character">Nhân Vật</Link>
+              <Link href="/game/world">Thế Giới</Link>
+              <Link href="/game/settings">Cài Đặt</Link>
+              {user.role === "ADMIN" ? <Link href="/admin">Quản Trị</Link> : null}
+              <form action={logoutAction}><button>Đăng xuất</button></form>
+            </div>
+          </details>
         </div>
+        <WorldClock serverNow={new Date().toISOString()} />
 
         <section className="sidebar-card">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase text-paper/45">Tài khoản</p>
-              <p className="font-bold text-paper">{character?.name ?? "Chưa lập nhân vật"}</p>
-            </div>
-            <span className="status-pill">{user.role === "ADMIN" ? "Quản trị" : "Người chơi"}</span>
-          </div>
           {character ? (
-            <div className="mt-3 space-y-2">
+            <div className="space-y-2">
               <div className="flex items-center gap-3">
                 <CharacterVisual character={character} mode="avatar" size={54} />
                 <div>
                   <p className="font-bold text-gold">{character.name}</p>
-                  <p className="text-xs text-paper/60">{character.title} · {character.realmStage.realm.name} {character.realmStage.name}</p>
+                  <p className="text-xs text-paper/60">{character.realmStage.realm.name} {character.realmStage.name}</p>
                 </div>
               </div>
-              <ResourceBar label="HP" value={character.hp} max={character.maxHp} tone="life" />
-              <ResourceBar label="Chân nguyên" value={character.qi} max={character.maxQi} tone="qi" />
-              <ResourceBar label="Thể lực" value={energy} max={character.energyMax} tone="energy" />
+              <ResourceBar label="HP" value={character.hp} max={character.maxHp} tone="life" title={`Hồi phục tự nhiên: ${Math.floor(character.maxHp * 0.15)} HP / ngày game`} />
+              <ResourceBar label="Chân nguyên" value={character.qi} max={character.maxQi} tone="qi" title={`Hồi phục tự nhiên: ${Math.floor(character.maxQi * 0.2)} Chân nguyên / ngày game`} />
+              <ResourceBar label="Thể lực" value={energy} max={character.energyMax} tone="energy" title={`Hồi phục tự nhiên: ${Math.floor(character.energyMax * 0.25)} Thể lực / ngày game`} />
               <ResourceBar label="Tu vi" value={Math.floor(cultivationProgress)} max={100} tone="cultivation" compact />
               <div className="sidebar-ledger">
                 <div><span>Linh thạch</span><b><CurrencyAmount amount={character.linhThach} /></b></div>
@@ -216,10 +223,10 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
   );
 }
 
-function ResourceBar({ label, value, max, tone, compact = false }: { label: string; value: number; max: number; tone: "life" | "qi" | "energy" | "cultivation"; compact?: boolean }) {
+function ResourceBar({ label, value, max, tone, compact = false, title }: { label: string; value: number; max: number; tone: "life" | "qi" | "energy" | "cultivation"; compact?: boolean; title?: string }) {
   const percent = max > 0 ? Math.max(0, Math.min(100, Math.round((value / max) * 100))) : 0;
   return (
-    <div className="resource-line">
+    <div className="resource-line" title={title}>
       <div className="resource-meta">
         <span>{label}</span>
         <b>{compact ? `${percent}%` : `${value}/${max}`}</b>

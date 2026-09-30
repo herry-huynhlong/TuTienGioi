@@ -380,6 +380,8 @@ model Character {
   energyStored    Int      @default(30)
   energyMax       Int      @default(30)
   energyUpdatedAt DateTime @default(now())
+  resourceUpdatedAt DateTime @default(now())
+  resourceRegenRemainder Json @default("{}")
   realmStageId    String
   realmStage      RealmStage @relation(fields: [realmStageId], references: [id])
   spiritualRootId String
@@ -778,14 +780,17 @@ model CultivationActivity {
   characterId String
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   startedAt   DateTime @default(now())
+  lastProcessedAt DateTime @default(now())
   endsAt      DateTime
   status      ActivityStatus @default(ACTIVE)
   baseReward  BigInt
   multiplierBps Int
+  accumulatedReward BigInt @default(0)
   claimedAt   DateTime?
   metadata    Json?
   @@index([characterId, status])
   @@index([endsAt, status])
+  @@index([lastProcessedAt])
 }
 
 model TrainingActivity {

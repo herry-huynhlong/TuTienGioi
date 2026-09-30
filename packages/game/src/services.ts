@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory, RecipeUnlockType } from "@ttg/db";
-import { calculateCultivationReward, calculateTrainingGain, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, isCultivationDurationKey, isTrainingDurationKey, isTrainingType, locationActivityConfigs, parseEncounterTable, simulateCombat, trainingDurationConfigs, trainingStatCap, trainingTypeConfigs, travelDurationSeconds, type CultivationDurationKey, type LocationActivityMode, type TrainingDurationKey, type TrainingTypeKey } from "./rules.js";
+import { ENERGY_REGEN_BPS_PER_GAME_DAY, HP_REGEN_BPS_PER_GAME_DAY, MAX_OFFLINE_CULTIVATION_MINUTES, QI_REGEN_BPS_PER_GAME_DAY, REAL_MS_PER_GAME_DAY, calculateCultivationReward, calculateTrainingGain, continuousCultivationReward, cultivationBaseReward, currentEnergy, isTrainingDurationKey, isTrainingType, locationActivityConfigs, parseEncounterTable, passiveRegenAmount, simulateCombat, trainingDurationConfigs, trainingStatCap, trainingTypeConfigs, travelDurationSeconds, type LocationActivityMode, type TrainingDurationKey, type TrainingTypeKey } from "./rules.js";
 import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { getItemUsageDefinition, type ItemEffectSpec } from "./item-effects.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
@@ -59,6 +59,74 @@ function partialCultivationReward(job: { startedAt: Date; endsAt: Date; baseRewa
   const elapsedMs = Math.max(0, Math.min(now.getTime() - job.startedAt.getTime(), totalMs));
   const planned = calculateCultivationReward(job.baseReward, job.multiplierBps);
   return { reward: (planned * BigInt(elapsedMs)) / BigInt(totalMs), elapsedSeconds: Math.floor(elapsedMs / 1000), planned };
+}
+
+function regenRemainders(value: unknown) {
+  const data = parseJsonRecord(value);
+  return {
+    hp: Math.max(0, Math.floor(numberFromRecord(data, "hp"))),
+    qi: Math.max(0, Math.floor(numberFromRecord(data, "qi"))),
+    energy: Math.max(0, Math.floor(numberFromRecord(data, "energy")))
+  };
+}
+
+export async function settleCharacterResources(db: Db | Tx, characterId: string, now = new Date()) {
+  const character = await db.character.findUniqueOrThrow({ where: { id: characterId } });
+  const activeCombat = await db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.COMPLETED } });
+  const activeCultivation = await db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
+  const elapsedMs = Math.max(0, now.getTime() - character.resourceUpdatedAt.getTime());
+  if (elapsedMs <= 0) return { hp: 0, qi: 0, energy: 0, pausedByCombat: Boolean(activeCombat) };
+  if (activeCombat) {
+    await db.character.update({ where: { id: characterId }, data: { resourceUpdatedAt: now } });
+    return { hp: 0, qi: 0, energy: 0, pausedByCombat: true };
+  }
+  const remainders = regenRemainders(character.resourceRegenRemainder);
+  const hp = passiveRegenAmount(character.maxHp, HP_REGEN_BPS_PER_GAME_DAY, elapsedMs, remainders.hp);
+  const qi = passiveRegenAmount(character.maxQi, QI_REGEN_BPS_PER_GAME_DAY, elapsedMs, remainders.qi);
+  const energy = activeCultivation ? { amount: 0, remainder: remainders.energy } : passiveRegenAmount(character.energyMax, ENERGY_REGEN_BPS_PER_GAME_DAY, elapsedMs, remainders.energy);
+  const nextHp = Math.min(character.maxHp, character.hp + hp.amount);
+  const nextQi = Math.min(character.maxQi, character.qi + qi.amount);
+  const nextEnergy = Math.min(character.energyMax, character.energyStored + energy.amount);
+  await db.character.update({
+    where: { id: characterId },
+    data: {
+      hp: nextHp,
+      qi: nextQi,
+      energyStored: nextEnergy,
+      energyUpdatedAt: now,
+      resourceUpdatedAt: now,
+      resourceRegenRemainder: inputJson({
+        hp: nextHp >= character.maxHp ? 0 : hp.remainder,
+        qi: nextQi >= character.maxQi ? 0 : qi.remainder,
+        energy: nextEnergy >= character.energyMax ? 0 : energy.remainder
+      })
+    }
+  });
+  return { hp: nextHp - character.hp, qi: nextQi - character.qi, energy: nextEnergy - character.energyStored, pausedByCombat: false };
+}
+
+export async function settleActiveCultivation(db: Db | Tx, characterId: string, now = new Date()) {
+  const job = await db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE }, orderBy: { startedAt: "desc" } });
+  if (!job) return null;
+  const elapsedMs = Math.max(0, now.getTime() - job.lastProcessedAt.getTime());
+  const cappedMs = Math.min(elapsedMs, MAX_OFFLINE_CULTIVATION_MINUTES * 60_000);
+  if (cappedMs <= 0) return { applied: 0n, elapsedMs: 0, capped: false, reachedCap: false };
+  const reward = continuousCultivationReward(job.baseReward, job.multiplierBps, cappedMs);
+  const result = await addCultivationClamped(db as Tx, characterId, reward);
+  const capped = elapsedMs > cappedMs;
+  await db.cultivationActivity.update({
+    where: { id: job.id },
+    data: {
+      lastProcessedAt: now,
+      accumulatedReward: { increment: result.applied },
+      ...(result.reachedCap ? { status: ActivityStatus.CLAIMED, claimedAt: now, endsAt: now } : {}),
+      metadata: inputJson({ ...parseJsonRecord(job.metadata), lastSettlementAt: now.toISOString(), lastElapsedMs: cappedMs, offlineCapApplied: capped })
+    }
+  });
+  if (result.applied > 0n) {
+    await db.gameLog.create({ data: { characterId, type: "cultivation", message: result.reachedCap ? `Bế quan tích lũy ${result.applied.toString()} Tu Vi. Tu vi đã viên mãn.` : `Bế quan tích lũy ${result.applied.toString()} Tu Vi.`, metadata: inputJson({ activityId: job.id, elapsedMs: cappedMs, offlineCapApplied: capped }) } });
+  }
+  return { applied: result.applied, elapsedMs: cappedMs, capped, reachedCap: result.reachedCap };
 }
 
 async function createHuntSession(tx: Tx, zoneId: string, activityId: string, durationSeconds: number) {
@@ -550,62 +618,52 @@ export async function claimCraft(db: Db, characterId: string, craftJobId: string
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function startCultivation(db: Db, characterId: string, duration: CultivationDurationKey, now = new Date()) {
-  if (!isCultivationDurationKey(duration)) throw new GameError("BAD_DURATION", "Thời gian tu luyện không hợp lệ.");
-  const character = await db.character.findUniqueOrThrow({
-    where: { id: characterId },
-    include: {
-      spiritualRoot: true,
-      realmStage: { include: { realm: true } },
-      currentLocation: { include: { zone: true } }
-    }
-  });
-  const [activeCultivation, activeExploration, activeTravel, activeTraining] = await Promise.all([
-    db.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
-    db.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
-    db.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
-    db.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
-  ]);
-  if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang có hoạt động tu luyện.");
-  if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
-  if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
-  if (activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang rèn luyện.");
-  const energy = currentEnergy(character, now);
-  const cost = cultivationEnergyCost(duration);
-  if (energy < cost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực.");
-  const baseReward = cultivationBaseReward(duration);
+export async function startCultivation(db: Db, characterId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
+    await settleCharacterResources(tx, characterId, now);
+    const character = await tx.character.findUniqueOrThrow({
+      where: { id: characterId },
+      include: {
+        spiritualRoot: true,
+        realmStage: { include: { realm: true } },
+        currentLocation: { include: { zone: true } }
+      }
+    });
+    const [activeCultivation, activeExploration, activeTravel, activeTraining] = await Promise.all([
+      tx.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.explorationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.travel.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
+      tx.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
+    ]);
+    if (activeCultivation) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang nhập định.");
+    if (activeExploration) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang lịch luyện.");
+    if (activeTravel) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang di chuyển.");
+    if (activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Bạn đang rèn luyện.");
+    const entryCost = 1;
+    if (character.energyStored < entryCost) throw new GameError("NO_ENERGY", "Không đủ Thể Lực để nhập định.");
     const cap = await nextCultivationCap(tx, character);
-    if (character.cultivation >= cap) throw new GameError("CULTIVATION_CAP", "Bạn đã chạm bình cảnh. Hãy đột phá để tiếp tục tu luyện.");
+    if (character.cultivation >= cap) throw new GameError("CULTIVATION_CAP", "Tu vi đã viên mãn. Hãy đột phá để tiếp tục.");
     const locationBonusBps = character.currentLocation?.cultivationModifierBps ?? 0;
     const zoneBonusBps = character.currentLocation?.zone.dangerLevel ? Math.min(1200, character.currentLocation.zone.dangerLevel * 100) : 0;
     const multiplierBps = character.spiritualRoot.multiplierBps + locationBonusBps + zoneBonusBps;
-    const plannedReward = calculateCultivationReward(baseReward, multiplierBps);
-    const room = cap - character.cultivation;
-    const plannedMs = gameDurationToRealMs(duration);
-    const effectiveReward = plannedReward > room ? room : plannedReward;
-    const effectiveMs = plannedReward > 0n && plannedReward > room ? Math.max(1000, Number((BigInt(plannedMs) * room) / plannedReward)) : plannedMs;
-    const storedBaseReward = plannedReward > 0n && plannedReward > room ? ((baseReward * effectiveReward) + plannedReward - 1n) / plannedReward : baseReward;
-    await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
+    await tx.character.update({ where: { id: characterId }, data: { energyStored: character.energyStored - entryCost, energyUpdatedAt: now } });
     const activity = await tx.cultivationActivity.create({
       data: {
         characterId,
         startedAt: now,
-        endsAt: new Date(now.getTime() + effectiveMs),
-        baseReward: storedBaseReward,
+        lastProcessedAt: now,
+        endsAt: new Date(now.getTime() + 3650 * REAL_MS_PER_GAME_DAY),
+        baseReward: cultivationBaseReward("day"),
         multiplierBps,
         metadata: {
-          duration,
-          plannedGameDays: cultivationDurationConfigs[duration].gameDays,
-          plannedRealMs: plannedMs,
-          effectiveRealMs: effectiveMs,
-          plannedReward: plannedReward.toString(),
-          effectiveReward: effectiveReward.toString(),
+          mode: "continuous",
+          entryCost,
+          realMinutesPerGameDay: REAL_MS_PER_GAME_DAY / 60_000,
+          maxOfflineMinutes: MAX_OFFLINE_CULTIVATION_MINUTES,
           locationId: character.currentLocationId,
           locationName: character.currentLocation?.name ?? null,
           locationBonusBps,
-          zoneBonusBps,
-          cappedByBottleneck: plannedReward > room
+          zoneBonusBps
         }
       }
     });
@@ -637,17 +695,16 @@ export async function claimCultivation(db: Db, characterId: string, activityId: 
 
 export async function cancelCultivation(db: Db, characterId: string, activityId: string, now = new Date()) {
   return db.$transaction(async (tx) => {
+    await settleActiveCultivation(tx, characterId, now);
     const job = await tx.cultivationActivity.findUnique({ where: { id: activityId } });
     if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy hoạt động.");
-    const partial = partialCultivationReward(job, now);
     const updated = await tx.cultivationActivity.updateMany({
       where: { id: activityId, characterId, status: ActivityStatus.ACTIVE },
       data: { status: ActivityStatus.CANCELLED, claimedAt: now }
     });
     if (updated.count !== 1) throw new GameError("CANNOT_CANCEL", "Không thể hủy hoạt động này.");
-    const result = await addCultivationClamped(tx, characterId, partial.reward);
-    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: result.reachedCap ? `Bạn kết thúc bế quan sau ${partial.elapsedSeconds} giây và nhận ${result.applied.toString()} Tu vi. Tu vi đã đạt ${result.cap.toString()}/${result.cap.toString()}, bạn đã chạm bình cảnh.` : `Bạn kết thúc bế quan sau ${partial.elapsedSeconds} giây và nhận ${result.applied.toString()} Tu vi.` } });
-    return { cancelled: true, reward: result.applied };
+    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: `Bạn rời khỏi nhập định. Tổng tu vi tích lũy: ${job.accumulatedReward.toString()}.` } });
+    return { cancelled: true, reward: job.accumulatedReward };
   });
 }
 

@@ -1,4 +1,5 @@
 import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
+import { getGameTime } from "@ttg/game";
 
 const sectRoleLabels: Record<string, string> = {
   LEADER: "Tông Chủ",
@@ -81,7 +82,8 @@ export function formatCurrency(amount: bigint | number | string, unit = "Linh Th
 }
 
 export function formatGameDate(date: Date) {
-  return date.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const time = getGameTime(date);
+  return `${time.eraName} năm ${time.year} · Ngày ${time.day} tháng ${time.month} · ${time.hourName}`;
 }
 
 export function formatRelationshipForDialogue(timesMet: number, score = 0) {

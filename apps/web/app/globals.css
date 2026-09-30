@@ -93,21 +93,101 @@ button, input, select, textarea {
 
 .brand-block {
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, #30342f, #1f221f);
-  padding: 0.75rem;
+  background:
+    radial-gradient(circle at 50% 0, rgba(214, 178, 94, 0.16), transparent 70%),
+    linear-gradient(180deg, #30342f, #1f221f);
+  padding: 0.7rem;
 }
 
-.brand-title {
-  display: block;
+.brand-seal {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
   color: #d6b25e;
   font-weight: 900;
   letter-spacing: 0;
 }
 
-.brand-subtitle {
-  margin-top: 0.15rem;
-  color: rgba(244, 239, 227, 0.55);
+.brand-seal img {
+  width: 4.2rem;
+  height: 4.2rem;
+  filter: drop-shadow(0 0 12px rgba(45, 212, 191, 0.16));
+}
+
+.brand-seal span {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.brand-menu {
+  position: relative;
+  margin-top: 0.45rem;
+}
+
+.brand-menu summary {
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid rgba(214, 178, 94, 0.18);
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(244, 239, 227, 0.68);
   font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+}
+
+.brand-menu div {
+  position: absolute;
+  z-index: 10;
+  inset: calc(100% + 0.35rem) 0 auto;
+  display: grid;
+  border: 1px solid rgba(214, 178, 94, 0.22);
+  background: #1a1d1a;
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.38);
+  padding: 0.35rem;
+}
+
+.brand-menu a,
+.brand-menu button {
+  min-height: 2rem;
+  color: rgba(244, 239, 227, 0.82);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+}
+
+.brand-menu a:hover,
+.brand-menu button:hover {
+  background: rgba(45, 212, 191, 0.08);
+  color: #d8fff8;
+}
+
+.world-clock {
+  display: grid;
+  gap: 0.12rem;
+  margin-top: 0.55rem;
+  border: 1px solid rgba(214, 178, 94, 0.18);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0, rgba(255, 255, 255, 0.035) 1px, transparent 1px, transparent 4px),
+    rgba(0, 0, 0, 0.18);
+  padding: 0.55rem 0.65rem;
+}
+
+.world-clock p {
+  color: #8debe2;
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.world-clock b {
+  color: #d6b25e;
+  font-size: 0.82rem;
+}
+
+.world-clock span {
+  color: rgba(244, 239, 227, 0.66);
+  font-size: 0.74rem;
 }
 
 .sidebar-card {

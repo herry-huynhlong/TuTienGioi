@@ -3,12 +3,16 @@ import { getUser } from "@/lib/auth";
 import { Shell } from "@/components/Shell";
 import { RealtimeProvider } from "@/components/RealtimeProvider";
 import { prisma } from "@ttg/db";
-import { getFeatureUnlockState } from "@ttg/game";
+import { getFeatureUnlockState, settleActiveCultivation, settleCharacterResources } from "@ttg/game";
 import { getRealtimeCounts } from "@/lib/realtime";
 
 export default async function GameLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
   if (!user) redirect("/");
+  if (user.character?.id) {
+    await settleCharacterResources(prisma, user.character.id);
+    await settleActiveCultivation(prisma, user.character.id);
+  }
   const character = await prisma.character.findUnique({
     where: { userId: user.id },
     include: {

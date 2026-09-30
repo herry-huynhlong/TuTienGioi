@@ -1,19 +1,22 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { breakthroughAction, cancelCultivationAction, claimCultivationAction, cultivateAction } from "@/lib/forms";
-import { calculateCultivationReward, cultivationActivityOptions, cultivationBaseReward, cultivationDurationConfigs, cultivationEnergyCost, currentEnergy, gameDurationToRealMs, getGameTime, getItemUsageDefinition, getOnboardingState, realMsToGameMs, resolveLocationBackground, resolveLocationImagePosition } from "@ttg/game";
+import { breakthroughAction, cancelCultivationAction, cultivateAction } from "@/lib/forms";
+import { getGameTime, getItemUsageDefinition, getOnboardingState, resolveLocationBackground, resolveLocationImagePosition, settleActiveCultivation, settleCharacterResources } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
-import { ActivityCountdown } from "@/components/ActivityCountdown";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { dedupeHeavenBoard, formatAptitude, formatGameDate, formatRealm } from "@/lib/game-display";
 
-export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string; cultivate?: string; breakthrough?: string }> }) {
+export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string; breakthrough?: string }> }) {
   const params = await searchParams;
   const user = await getUser();
   if (!user) redirect("/");
+  if (user.character?.id) {
+    await settleCharacterResources(prisma, user.character.id);
+    await settleActiveCultivation(prisma, user.character.id);
+  }
   const c = await prisma.character.findUniqueOrThrow({
     where: { userId: user.id },
     include: {
@@ -48,21 +51,20 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   const progress = next ? Number((cappedCultivation * 100n) / next.requiredCultivation) : 100;
   const canBreakthrough = Boolean(next && c.cultivation >= next.requiredCultivation);
   const atCultivationCap = Boolean(next && c.cultivation >= next.requiredCultivation);
-  const energy = currentEnergy(c);
   const now = new Date();
   const gameTime = getGameTime(now);
   const locationName = c.currentLocation?.name ?? c.location?.name ?? "Chưa rõ";
   const regionName = c.currentLocation?.zone.region?.name ?? "Chưa rõ địa vực";
   const activeCount = c.cultivationJobs.length + c.explorations.length + c.travels.length;
+  const activeWorldCount = c.explorations.length + c.travels.length;
   const activeCultivation = c.cultivationJobs[0];
-  const activeCultivationReward = activeCultivation ? calculateCultivationReward(activeCultivation.baseReward, activeCultivation.multiplierBps) : 0n;
-  const projectedCultivation = activeCultivation ? (c.cultivation + activeCultivationReward > nextRequirement ? nextRequirement : c.cultivation + activeCultivationReward) : cappedCultivation;
+  const activeCultivationReward = activeCultivation?.accumulatedReward ?? 0n;
+  const projectedCultivation = cappedCultivation;
   const heroImage = resolveLocationBackground(c.currentLocation);
   const heroPosition = resolveLocationImagePosition(c.currentLocation);
   const locationCultivationBonus = c.currentLocation?.cultivationModifierBps ?? 0;
   const nextAction = getNextAction({ canBreakthrough, quests: c.quests, onboarding });
   const heavenBoard = dedupeHeavenBoard(news);
-  const openCultivationPanel = params?.cultivate === "1" && !activeCultivation;
   const openBreakthroughPanel = params?.breakthrough === "1";
 
   return (
@@ -98,10 +100,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
                   </div>
                   <span className="status-pill">Bình cảnh</span>
                 </div>
-                <form action={breakthroughAction} className="mt-4 grid gap-3">
-                  <BreakthroughSupportSelect items={breakthroughItems} />
-                  <button className="btn">Đột phá ngay</button>
-                </form>
+                <Link href="/game?breakthrough=1" className="btn mt-4 w-full sm:w-auto">Mở Đột Phá</Link>
               </>
             ) : c.quests.length > 0 ? (
               <>
@@ -151,7 +150,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             <Info label="Cảnh giới" value={formatRealm(c.realmStage.realm, c.realmStage)} />
             <Info label="Linh căn" value={formatAptitude(c.spiritualRoot)} />
             <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
-            <Info label="Hoạt động" value={activeCount > 0 ? `${activeCount} việc đang chạy` : "Đang rảnh"} accent={activeCount > 0} />
+            <Info label="Hoạt động" value={activeCultivation ? "Đang nhập định" : activeWorldCount > 0 ? `${activeWorldCount} việc đang diễn ra` : "Đang rảnh"} accent={activeCount > 0} />
             <Info label="Vị trí" value={locationName} />
             <Info label="Linh thạch" value={<CurrencyAmount amount={c.linhThach} />} accent />
           </div>
@@ -188,8 +187,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
           </div>
           {activeCultivation ? (
             <div className="bottleneck-box mt-4">
-              <b>Đang tu luyện</b>
-              <p>Tu vi nhận dự kiến: +{activeCultivationReward.toString()} · thời gian còn lại bên dưới.</p>
+              <b>Đang nhập định</b>
+              <p>Thời gian tu luyện: {formatRealDuration(now.getTime() - activeCultivation.startedAt.getTime())} · Tu vi đã tích lũy: +{activeCultivationReward.toString()}</p>
             </div>
           ) : !canBreakthrough ? (
             <p className="muted mt-4 text-sm">Tu vi chưa viên mãn.</p>
@@ -200,35 +199,14 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
                 <input type="hidden" name="id" value={activeCultivation.id} />
                 <button className="btn btn-secondary">Dừng Tu Luyện</button>
               </form>
+            ) : canBreakthrough ? (
+              <Link href="/game?breakthrough=1" className="btn">Đột Phá</Link>
             ) : (
-              <Link href="/game?cultivate=1" className={`btn ${atCultivationCap || activeCount > 0 ? "btn-disabled" : ""}`} aria-disabled={atCultivationCap || activeCount > 0}>Tu Luyện</Link>
+              <form action={cultivateAction}>
+                <button className="btn" disabled={activeWorldCount > 0}>Tu Luyện</button>
+              </form>
             )}
-            <Link href="/game?breakthrough=1" className={`btn btn-secondary ${!canBreakthrough ? "btn-disabled" : ""}`} aria-disabled={!canBreakthrough}>Đột Phá</Link>
           </div>
-          {openCultivationPanel ? (
-            <div className="cultivation-panel mt-4">
-              <b>Thời gian tu luyện</b>
-              <div className="mt-3 grid gap-2 md:grid-cols-4">
-                {cultivationActivityOptions.map((duration) => {
-                  const multiplierBps = c.spiritualRoot.multiplierBps + locationCultivationBonus + (c.currentLocation?.zone.dangerLevel ? Math.min(1200, c.currentLocation.zone.dangerLevel * 100) : 0);
-                  const reward = calculateCultivationReward(cultivationBaseReward(duration), multiplierBps);
-                  const effectiveReward = reward > nextRequirement - cappedCultivation ? nextRequirement - cappedCultivation : reward;
-                  const cost = cultivationEnergyCost(duration);
-                  const realMs = gameDurationToRealMs(duration);
-                  const disabled = atCultivationCap || activeCount > 0 || energy < cost;
-                  return (
-                    <form key={duration} action={cultivateAction} className="cultivation-choice">
-                      <input type="hidden" name="duration" value={duration} />
-                      <button className="btn btn-secondary w-full" disabled={disabled}>
-                        <span>{cultivationDurationConfigs[duration].label}</span>
-                      </button>
-                      <small>Thời gian thực: {formatRealDuration(realMs)} · Tu vi dự kiến: +{effectiveReward.toString()} · tốn {cost} thể lực</small>
-                    </form>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
           {openBreakthroughPanel ? (
             <div className="cultivation-panel mt-4">
               <b>Đột Phá</b>
@@ -246,9 +224,6 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
 
         <Panel title="Hoạt động đang chạy" className="lg:col-span-2">
           <div className="activity-list">
-            {c.cultivationJobs.map((job) => (
-              <CultivationActivityRow key={job.id} job={job} multiplierBps={job.multiplierBps} />
-            ))}
             {c.explorations.map((job) => (
               <div key={job.id} className="activity-row">
                 <span><b>Lịch luyện</b><small>Kết thúc {job.endsAt.toLocaleString("vi-VN")}</small></span>
@@ -261,7 +236,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
                 <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
               </div>
             ))}
-            {activeCount === 0 ? <p className="muted">Không có hoạt động nào đang chạy.</p> : null}
+            {activeWorldCount === 0 ? <p className="muted">Không có hoạt động nào đang diễn ra.</p> : null}
           </div>
         </Panel>
 
@@ -295,35 +270,6 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
           </div>
         </Panel>
       </section>
-    </div>
-  );
-}
-
-function CultivationActivityRow({ job, multiplierBps }: { job: { id: string; startedAt: Date; endsAt: Date; baseReward: bigint; multiplierBps: number }; multiplierBps: number }) {
-  const done = job.endsAt.getTime() <= Date.now();
-  const reward = calculateCultivationReward(job.baseReward, multiplierBps);
-  const elapsedRealMs = Math.max(0, Math.min(Date.now() - job.startedAt.getTime(), job.endsAt.getTime() - job.startedAt.getTime()));
-  const remainingRealMs = Math.max(0, job.endsAt.getTime() - Date.now());
-  return (
-    <div className="activity-row activity-row-stacked">
-      <span>
-        <b>{done ? "Bế quan hoàn thành" : "Bế quan"}</b>
-        <small>{done ? `Hoàn thành lúc ${job.endsAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}` : `Đã tu luyện ${formatGameDurationFromRealMs(elapsedRealMs)} · còn ${formatGameDurationFromRealMs(remainingRealMs)}`}</small>
-      </span>
-      {!done ? <ActivityCountdown startedAt={job.startedAt.toISOString()} endsAt={job.endsAt.toISOString()} /> : <span className="text-gold text-sm font-bold">+{reward.toString()} tu vi</span>}
-      <div className="flex flex-wrap gap-2">
-        {done ? (
-          <form action={claimCultivationAction}>
-            <input type="hidden" name="id" value={job.id} />
-            <button className="btn min-h-0 px-3 py-1 text-xs">Kết thúc bế quan</button>
-          </form>
-        ) : (
-          <form action={cancelCultivationAction}>
-            <input type="hidden" name="id" value={job.id} />
-            <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Hủy bế quan</button>
-          </form>
-        )}
-      </div>
     </div>
   );
 }
@@ -386,10 +332,3 @@ function formatRealDuration(ms: number) {
   return `${days} ngày`;
 }
 
-function formatGameDurationFromRealMs(ms: number) {
-  const gameHours = Math.floor(realMsToGameMs(ms) / 3_600_000);
-  const days = Math.floor(gameHours / 24);
-  const hours = gameHours % 24;
-  if (days > 0) return `${days} ngày ${hours} giờ`;
-  return `${hours} giờ`;
-}

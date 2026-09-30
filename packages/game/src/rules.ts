@@ -19,12 +19,19 @@ export function calculateCultivationReward(baseReward: bigint, multiplierBps: nu
   return (baseReward * BigInt(multiplierBps)) / 10000n;
 }
 
-export const REAL_TIME_TO_GAME_TIME_MULTIPLIER = 24;
+export const REAL_MINUTES_PER_GAME_DAY = 15;
+export const REAL_TIME_TO_GAME_TIME_MULTIPLIER = Math.floor(1440 / REAL_MINUTES_PER_GAME_DAY);
 export const GAME_TIME_EPOCH = new Date("2026-01-01T00:00:00.000Z");
-export const GAME_CALENDAR_START_YEAR = 312;
+export const GAME_CALENDAR_NAME = "Vạn Giới Lịch";
+export const GAME_ERA_NAME = "Thiên Hoang";
+export const GAME_CALENDAR_START_YEAR = 13;
 export const GAME_DAYS_PER_MONTH = 30;
 export const GAME_MONTHS_PER_YEAR = 12;
-export const REAL_MS_PER_GAME_DAY = Math.floor(86_400_000 / REAL_TIME_TO_GAME_TIME_MULTIPLIER);
+export const REAL_MS_PER_GAME_DAY = REAL_MINUTES_PER_GAME_DAY * 60_000;
+export const MAX_OFFLINE_CULTIVATION_MINUTES = 480;
+export const HP_REGEN_BPS_PER_GAME_DAY = 1500;
+export const QI_REGEN_BPS_PER_GAME_DAY = 2000;
+export const ENERGY_REGEN_BPS_PER_GAME_DAY = 2500;
 
 export const cultivationActivityOptions = ["day", "week", "month", "year"] as const;
 export type CultivationDurationKey = typeof cultivationActivityOptions[number];
@@ -86,8 +93,25 @@ export function getGameTime(now = new Date()) {
     hourName: earthlyHourName(hour),
     phase: timePhase(hour),
     totalGameDays,
-    label: `Tiên Lịch ${year} · Ngày ${dayIndex + 1} tháng ${monthIndex + 1} · ${earthlyHourName(hour)}`
+    calendarName: GAME_CALENDAR_NAME,
+    eraName: GAME_ERA_NAME,
+    label: `${GAME_CALENDAR_NAME} · ${GAME_ERA_NAME} năm thứ ${year} · Ngày ${dayIndex + 1} tháng ${monthIndex + 1} · ${earthlyHourName(hour)}`
   };
+}
+
+export function gameDaysFromRealMs(realMs: number) {
+  return Math.max(0, realMs) / REAL_MS_PER_GAME_DAY;
+}
+
+export function passiveRegenAmount(max: number, bpsPerGameDay: number, realMs: number, remainder = 0) {
+  const scaled = Math.max(0, Math.floor((max * bpsPerGameDay * Math.max(0, realMs)) / REAL_MS_PER_GAME_DAY)) + Math.max(0, remainder);
+  return { amount: Math.floor(scaled / 10000), remainder: scaled % 10000 };
+}
+
+export function continuousCultivationReward(baseRewardPerGameDay: bigint, multiplierBps: number, realMs: number) {
+  if (realMs <= 0) return 0n;
+  const base = (baseRewardPerGameDay * BigInt(Math.floor(realMs))) / BigInt(REAL_MS_PER_GAME_DAY);
+  return calculateCultivationReward(base, multiplierBps);
 }
 
 export function addGameDays(now: Date, gameDays: number) {

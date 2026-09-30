@@ -83,7 +83,7 @@ function boolField(formData: FormData, name: string) {
 
 export async function cultivateAction(formData: FormData) {
   try {
-    await startCultivation(prisma, await characterId(), String(formData.get("duration")) as never);
+    await startCultivation(prisma, await characterId());
   } catch (error) {
     redirectGameError(error, "/game");
   }

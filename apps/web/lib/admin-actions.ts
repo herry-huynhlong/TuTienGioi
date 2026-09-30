@@ -195,6 +195,7 @@ function itemDataFromForm(formData: FormData, key: string, existing?: { bindRule
     marketEnabled: checkbox(formData, "marketEnabled"),
     systemMarketEnabled: checkbox(formData, "systemMarketEnabled"),
     auctionEligible: checkbox(formData, "auctionEligible"),
+    auctionClass: ["NONE", "STANDARD", "PREMIUM"].includes(String(formData.get("auctionClass"))) ? String(formData.get("auctionClass")) : "NONE",
     sectExchangeEnabled: checkbox(formData, "sectExchangeEnabled"),
     sectContributionPrice: positiveInt(formData, "sectContributionPrice"),
     donationContributionValue: positiveInt(formData, "donationContributionValue"),

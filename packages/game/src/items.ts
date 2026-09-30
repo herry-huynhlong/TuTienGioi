@@ -14,6 +14,7 @@ export type ItemEconomy = {
   sectContributionPrice: number;
   donationContributionValue: number;
   auctionEligible: boolean;
+  auctionClass: "NONE" | "STANDARD" | "PREMIUM";
   requiredRealmOrder: number | null;
   requiredSectRank: number | null;
   itemFamily: string | null;
@@ -228,10 +229,27 @@ export function getItemEconomy(template: TemplateLike): ItemEconomy {
     sectContributionPrice,
     donationContributionValue: numberFromMeta(meta.donationContributionValue) ?? Math.max(1, Math.floor(sectContributionPrice * 0.4)),
     auctionEligible: boolFromMeta(meta.auctionEligible, String(template.rarity) === "TIEN"),
+    auctionClass: auctionClassFromMeta(meta.auctionClass),
     requiredRealmOrder: numberFromMeta(meta.requiredRealmOrder),
     requiredSectRank: numberFromMeta(meta.requiredSectRank),
     itemFamily: stringFromMeta(meta.itemFamily) ?? template.itemFamily ?? null
   };
+}
+
+function auctionClassFromMeta(value: unknown): "NONE" | "STANDARD" | "PREMIUM" {
+  return value === "STANDARD" || value === "PREMIUM" ? value : "NONE";
+}
+
+export function canAuctionItem(template: TemplateLike) {
+  const economy = getItemEconomy(template);
+  if (!economy.auctionEligible || !template.tradeable) return false;
+  if (String(template.category) === "EQUIPMENT") return economy.auctionClass === "PREMIUM";
+  return true;
+}
+
+export function auctionClassLabel(template: TemplateLike) {
+  const economy = getItemEconomy(template);
+  return economy.auctionClass === "PREMIUM" ? "Trân Phẩm" : economy.auctionClass === "STANDARD" ? "Đấu Giá" : "";
 }
 
 function boolFromMeta(value: unknown, fallback: boolean) {

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
 import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
 import { CharacterAppearanceError, characterAppearanceImage, deterministicCharacterAppearanceKey, setCharacterAppearance } from "@ttg/game";
 
@@ -711,6 +711,55 @@ export async function cancelMarketListingAction(formData: FormData) {
     redirectGameError(error, "/game/market?tab=my");
   }
   redirect("/game/market?tab=my");
+}
+
+export async function createAuctionAction(formData: FormData) {
+  const rawPrice = String(formData.get("startingPrice") ?? "0").trim();
+  if (!/^\d+$/.test(rawPrice)) redirect("/game/auction?tab=sell&error=Giá khởi điểm không hợp lệ.");
+  try {
+    await createAuction(prisma, await characterId(), String(formData.get("itemId")), BigInt(rawPrice));
+  } catch (error) {
+    redirectGameError(error, "/game/auction?tab=sell");
+  }
+  redirect("/game/auction?tab=my&ok=auction-created");
+}
+
+export async function joinAuctionAction(formData: FormData) {
+  try {
+    await joinAuction(prisma, await characterId(), String(formData.get("auctionId")), String(formData.get("actionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, "/game/auction");
+  }
+  redirect(`/game/auction?detail=${encodeURIComponent(String(formData.get("auctionId") ?? ""))}&ok=joined`);
+}
+
+export async function raiseAuctionAction(formData: FormData) {
+  const auctionId = String(formData.get("auctionId") ?? "");
+  try {
+    await raiseAuction(prisma, await characterId(), auctionId, String(formData.get("actionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/auction?detail=${encodeURIComponent(auctionId)}`);
+  }
+  redirect(`/game/auction?detail=${encodeURIComponent(auctionId)}&ok=raised`);
+}
+
+export async function passAuctionAction(formData: FormData) {
+  const auctionId = String(formData.get("auctionId") ?? "");
+  try {
+    await passAuction(prisma, await characterId(), auctionId, String(formData.get("actionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/auction?detail=${encodeURIComponent(auctionId)}`);
+  }
+  redirect(`/game/auction?detail=${encodeURIComponent(auctionId)}&ok=passed`);
+}
+
+export async function cancelAuctionAction(formData: FormData) {
+  try {
+    await cancelAuction(prisma, await characterId(), String(formData.get("auctionId")));
+  } catch (error) {
+    redirectGameError(error, "/game/auction?tab=my");
+  }
+  redirect("/game/auction?tab=my&ok=cancelled");
 }
 
 export async function equipItemAction(formData: FormData) {

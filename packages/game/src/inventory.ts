@@ -1,4 +1,4 @@
-import { ListingStatus, Prisma } from "@ttg/db";
+import { AuctionStatus, ListingStatus, Prisma } from "@ttg/db";
 
 type Tx = Prisma.TransactionClient;
 
@@ -40,7 +40,8 @@ export async function addItemToInventory(tx: Tx, characterId: string, templateId
       bound,
       equippedSlot: null,
       durability: null,
-      listings: { none: { status: ListingStatus.ACTIVE } }
+      listings: { none: { status: ListingStatus.ACTIVE } },
+      auctions: { none: { status: AuctionStatus.ACTIVE } }
     },
     orderBy: { createdAt: "asc" }
   });
@@ -64,10 +65,11 @@ export async function addItemToInventory(tx: Tx, characterId: string, templateId
 
 export async function removeItemFromInventory(tx: Tx, characterId: string, itemId: string, quantity: number) {
   if (!Number.isInteger(quantity) || quantity <= 0) throw new InventoryError("INVALID_QUANTITY", "Số lượng vật phẩm không hợp lệ.");
-  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
   if (!item || item.ownerId !== characterId || item.quantity <= 0) throw new InventoryError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
   if (item.equippedSlot) throw new InventoryError("ITEM_EQUIPPED", "Vật phẩm đang trang bị.");
   if (item.listings.length > 0) throw new InventoryError("ITEM_LISTED", "Vật phẩm đang rao bán.");
+  if ((item.auctions?.length ?? 0) > 0) throw new InventoryError("ITEM_LISTED", "Vật phẩm đang đấu giá.");
   if (quantity > item.quantity) throw new InventoryError("INVALID_QUANTITY", "Không đủ số lượng vật phẩm.");
   if (quantity === item.quantity) {
     await tx.itemInstance.delete({ where: { id: item.id } });

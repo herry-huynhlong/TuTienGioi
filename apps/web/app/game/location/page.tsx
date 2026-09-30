@@ -241,7 +241,7 @@ function getLocationFacilities(services: string[], kind?: string) {
   if (services.includes("market")) facilities.push({ key: "market", label: "Vạn Bảo Lâu", description: "Mua bán vật phẩm, thu mua chiến lợi phẩm và bày hàng cho người chơi.", href: "/game/market", icon: <ShoppingBag size={18} aria-hidden /> });
   if (services.includes("mail")) facilities.push({ key: "mail", label: "Thư tín", description: "Đọc thư và thông báo cá nhân.", href: "/game/mail", icon: <Mail size={18} aria-hidden /> });
   if (services.includes("inn")) facilities.push({ key: "inn", label: "Khách điếm", description: "Nghỉ chân, hồi phục và nghe tin tức trong thành.", disabled: true, icon: <Home size={18} aria-hidden /> });
-  if (services.includes("auction")) facilities.push({ key: "auction", label: "Đấu giá", description: "Nơi các kỳ vật được đưa lên sàn tranh giá.", disabled: true, icon: <Landmark size={18} aria-hidden /> });
+  if (services.includes("auction")) facilities.push({ key: "auction", label: "Đấu giá", description: "Nơi các kỳ vật được đưa lên sàn tranh giá theo lượt.", href: "/game/auction", icon: <Landmark size={18} aria-hidden /> });
   if (services.includes("caravan")) facilities.push({ key: "caravan", label: "Tiêu cục", description: "Nhận hộ tống hàng hóa qua các tuyến nguy hiểm.", disabled: true, icon: <Route size={18} aria-hidden /> });
   if (services.includes("formation")) facilities.push({ key: "formation", label: "Trận pháp", description: "Bố trí trận bàn, phù văn và các phép bảo hộ.", disabled: true, icon: <Shield size={18} aria-hidden /> });
   if (kind === "sect_land") facilities.push({ key: "sect", label: "Tông môn", description: "Xem sơn môn, đệ tử và sự vụ trong tông.", href: "/game/sect", icon: <ScrollText size={18} aria-hidden /> });

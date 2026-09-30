@@ -1,5 +1,6 @@
 import { Redis } from "ioredis";
 import { prisma } from "@ttg/db";
+import { processAuctionHouse } from "@ttg/game";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { lazyConnect: true, maxRetriesPerRequest: 2 });
 
@@ -15,11 +16,7 @@ async function refreshLeaderboards() {
 async function expireMarketsAndAuctions() {
   const now = new Date();
   await prisma.marketListing.updateMany({ where: { status: "ACTIVE", expiresAt: { lt: now } }, data: { status: "EXPIRED" } });
-  const auctions = await prisma.auction.findMany({ where: { status: "ACTIVE", endsAt: { lt: now } }, take: 50 });
-  for (const auction of auctions) {
-    await prisma.auction.update({ where: { id: auction.id }, data: { status: "SETTLED" } });
-    await prisma.worldNews.create({ data: { title: "Một phiên đấu giá khép lại", body: `Đấu giá ${auction.id} đã kết thúc.`, category: "auction" } });
-  }
+  await processAuctionHouse(prisma, now);
 }
 
 async function spawnWorldEvent() {

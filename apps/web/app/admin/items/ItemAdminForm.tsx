@@ -33,7 +33,8 @@ export function ItemAdminForm({ item }: { item?: ItemLike }) {
               template={item}
               details={[
                 { label: "Giá", value: <CurrencyAmount amount={economy!.systemBasePrice} /> },
-                { label: "Market", value: economy!.systemMarketEnabled ? "Bán hệ thống" : "Không bán hệ thống" }
+                { label: "Market", value: economy!.systemMarketEnabled ? "Bán hệ thống" : "Không bán hệ thống" },
+                { label: "Đấu giá", value: economy!.auctionEligible ? (economy!.auctionClass === "PREMIUM" ? "Trân Phẩm" : "Thường") : "Không" }
               ]}
             />
           </div>
@@ -73,7 +74,14 @@ export function ItemAdminForm({ item }: { item?: ItemLike }) {
           <Check name="sellableToNpc" label="Vạn Bảo Lâu thu mua" checked={Boolean(meta.sellableToNpc ?? true)} />
           <Check name="marketEnabled" label="Cho giao dịch người chơi" checked={Boolean(meta.marketEnabled ?? true)} />
           <Check name="systemMarketEnabled" label="Bán tại Vạn Bảo Lâu" checked={Boolean(meta.systemMarketEnabled)} />
-          <Check name="auctionEligible" label="Auction eligible" checked={Boolean(meta.auctionEligible)} />
+          <Check name="auctionEligible" label="Có thể đấu giá" checked={Boolean(meta.auctionEligible)} />
+          <label>Hạng đấu giá
+            <select className="field" name="auctionClass" defaultValue={String(meta.auctionClass ?? "NONE")}>
+              <option value="NONE">Không</option>
+              <option value="STANDARD">Thường</option>
+              <option value="PREMIUM">Cao cấp</option>
+            </select>
+          </label>
         </AdminSection>
         <AdminSection title="Tông Môn / Điều Kiện">
           <Check name="sectExchangeEnabled" label="Sect exchange enabled" checked={Boolean(meta.sectExchangeEnabled ?? true)} />

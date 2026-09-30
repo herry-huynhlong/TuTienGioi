@@ -1,6 +1,6 @@
-import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory, RecipeUnlockType } from "@ttg/db";
+import { Prisma, type PrismaClient, ActivityStatus, Currency, WalletTxType, ListingStatus, ItemCategory, RecipeUnlockType, AuctionPhase, AuctionParticipantStatus, AuctionStatus } from "@ttg/db";
 import { ENERGY_REGEN_BPS_PER_GAME_DAY, HP_REGEN_BPS_PER_GAME_DAY, MAX_OFFLINE_CULTIVATION_MINUTES, QI_REGEN_BPS_PER_GAME_DAY, REAL_MS_PER_GAME_DAY, calculateCultivationReward, calculateTrainingGain, continuousCultivationReward, cultivationBaseReward, currentEnergy, isTrainingDurationKey, isTrainingType, locationActivityConfigs, parseEncounterTable, passiveRegenAmount, simulateCombat, trainingDurationConfigs, trainingStatCap, trainingTypeConfigs, travelDurationSeconds, type LocationActivityMode, type TrainingDurationKey, type TrainingTypeKey } from "./rules.js";
-import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
+import { canAuctionItem, currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { getItemUsageDefinition, type ItemEffectSpec } from "./item-effects.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { recordOnboardingEvent } from "./onboarding.js";
@@ -230,7 +230,8 @@ async function addItemToInventory(tx: Tx, characterId: string, templateId: strin
       bound,
       equippedSlot: null,
       durability: null,
-      listings: { none: { status: ListingStatus.ACTIVE } }
+      listings: { none: { status: ListingStatus.ACTIVE } },
+      auctions: { none: { status: AuctionStatus.ACTIVE } }
     },
     orderBy: { createdAt: "asc" }
   });
@@ -254,10 +255,11 @@ async function addItemToInventory(tx: Tx, characterId: string, templateId: strin
 
 async function removeItemFromInventory(tx: Tx, characterId: string, itemId: string, quantity: number) {
   if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng vật phẩm không hợp lệ.");
-  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
   if (!item || item.ownerId !== characterId || item.quantity <= 0) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
   if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Vật phẩm đang trang bị.");
   if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang rao bán.");
+  if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang trong phiên đấu giá.");
   if (quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Không đủ số lượng vật phẩm.");
   if (quantity === item.quantity) {
     await tx.itemInstance.delete({ where: { id: item.id } });
@@ -274,7 +276,8 @@ async function consumeTemplateQuantity(tx: Tx, characterId: string, templateId: 
       ownerId: characterId,
       templateId,
       equippedSlot: null,
-      listings: { none: { status: ListingStatus.ACTIVE } }
+      listings: { none: { status: ListingStatus.ACTIVE } },
+      auctions: { none: { status: AuctionStatus.ACTIVE } }
     },
     orderBy: { createdAt: "asc" }
   });
@@ -723,17 +726,18 @@ async function consumeBreakthroughSupport(tx: Tx, characterId: string, itemInsta
   if (!itemInstanceId) return null;
   const item = await tx.itemInstance.findUnique({
     where: { id: itemInstanceId },
-    include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 } }
+    include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 }, auctions: { where: { status: AuctionStatus.ACTIVE }, take: 1 } }
   });
   if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_OWNED", "Bạn không sở hữu vật phẩm hỗ trợ này.");
   if (item.quantity < 1) throw new GameError("ITEM_EMPTY", "Vật phẩm hỗ trợ đã hết.");
   if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể dùng trang bị đang mặc để hỗ trợ đột phá.");
   if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang bày bán không thể dùng để đột phá.");
+  if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang đấu giá không thể dùng để đột phá.");
   await assertItemRequirements(tx, characterId, item.template);
   const support = breakthroughSupportFromItem(item.template);
   if (!support) throw new GameError("ITEM_NOT_BREAKTHROUGH_SUPPORT", "Vật phẩm này không hỗ trợ đột phá.");
   const updated = await tx.itemInstance.updateMany({
-    where: { id: item.id, ownerId: characterId, quantity: { gte: 1 }, equippedSlot: null, listings: { none: { status: ListingStatus.ACTIVE } } },
+    where: { id: item.id, ownerId: characterId, quantity: { gte: 1 }, equippedSlot: null, listings: { none: { status: ListingStatus.ACTIVE } }, auctions: { none: { status: AuctionStatus.ACTIVE } } },
     data: { quantity: { decrement: 1 } }
   });
   if (updated.count !== 1) throw new GameError("ITEM_CONSUME_CONFLICT", "Vật phẩm đã thay đổi, vui lòng thử lại.");
@@ -971,7 +975,7 @@ function applyShieldToHp(virtualRemainingHp: number, maxHp: number) {
 
 async function consumeCombatItem(tx: Tx, characterId: string, itemId: string) {
   const updated = await tx.itemInstance.updateMany({
-    where: { id: itemId, ownerId: characterId, quantity: { gte: 1 }, equippedSlot: null, listings: { none: { status: ListingStatus.ACTIVE } } },
+    where: { id: itemId, ownerId: characterId, quantity: { gte: 1 }, equippedSlot: null, listings: { none: { status: ListingStatus.ACTIVE } }, auctions: { none: { status: AuctionStatus.ACTIVE } } },
     data: { quantity: { decrement: 1 } }
   });
   if (updated.count !== 1) throw new GameError("ITEM_CONSUME_CONFLICT", "Vật phẩm đã thay đổi, vui lòng thử lại.");
@@ -979,11 +983,12 @@ async function consumeCombatItem(tx: Tx, characterId: string, itemId: string) {
 }
 
 async function findOwnedUtilityItem(tx: Tx, characterId: string, itemId: string, effectType: ItemEffectSpec["type"]) {
-  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 } } });
+  const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE }, take: 1 }, auctions: { where: { status: AuctionStatus.ACTIVE }, take: 1 } } });
   if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_OWNED", "Bạn không sở hữu vật phẩm này.");
   if (item.quantity < 1) throw new GameError("ITEM_EMPTY", "Vật phẩm đã hết.");
   if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể dùng trang bị đang mặc.");
   if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang bày bán.");
+  if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang đấu giá.");
   const usage = getItemUsageDefinition(item.template);
   const effect = usage.effects.find((entry) => entry.type === effectType);
   if (!effect) throw new GameError("ITEM_EFFECT_UNSUPPORTED", "Vật phẩm này không phù hợp với hành động hiện tại.");
@@ -1333,6 +1338,246 @@ export async function fightMonster(db: Db, characterId: string, monsterKey: stri
   });
 }
 
+export const AUCTION_BID_STEP_BPS = 3000n;
+export const AUCTION_REGISTRATION_MS = 5 * 60_000;
+export const AUCTION_TURN_MS = 60_000;
+
+function auctionBidStep(startingPrice: bigint) {
+  const step = (startingPrice * AUCTION_BID_STEP_BPS) / 10000n;
+  return step > 0n ? step : 1n;
+}
+
+export function auctionPriceForRound(startingPrice: bigint, round: number) {
+  if (!Number.isInteger(round) || round < 0) throw new GameError("INVALID_AUCTION_ROUND", "Vòng đấu giá không hợp lệ.");
+  return startingPrice + auctionBidStep(startingPrice) * BigInt(round);
+}
+
+function formatAuctionAmount(amount: bigint) {
+  return `${amount.toLocaleString("vi-VN")} Linh Thạch`;
+}
+
+async function releaseAuctionEscrow(tx: Tx, participant: { id: string; auctionId: string; characterId: string; lastBidPrice: bigint }, reason: string) {
+  if (participant.lastBidPrice <= 0n) return;
+  await creditWallet(tx, participant.characterId, Currency.LINH_THACH, participant.lastBidPrice, WalletTxType.RELEASE, "Auction", participant.auctionId, `auction:release:${participant.id}:${reason}`);
+  await tx.auctionParticipant.update({ where: { id: participant.id }, data: { lastBidPrice: 0n, lastBidRound: null } });
+}
+
+async function holdAuctionEscrow(tx: Tx, participant: { id: string; auctionId: string; characterId: string; lastBidPrice: bigint }, nextPrice: bigint, round: number, actionKey: string) {
+  const additional = nextPrice - participant.lastBidPrice;
+  if (additional < 0n) throw new GameError("INVALID_AUCTION_ESCROW", "Trạng thái giữ tiền đấu giá không hợp lệ.");
+  if (additional > 0n) {
+    await debitWallet(tx, participant.characterId, Currency.LINH_THACH, additional, WalletTxType.ESCROW, "Auction", participant.auctionId, `auction:hold:${participant.id}:${round}:${actionKey}`);
+  }
+  await tx.auctionParticipant.update({ where: { id: participant.id }, data: { lastBidPrice: nextPrice, lastBidRound: round, lastActionAt: new Date() } });
+}
+
+async function nextTurnParticipant(tx: Tx, auctionId: string, highestBidderId: string | null) {
+  const active = await tx.auctionParticipant.findMany({ where: { auctionId, status: AuctionParticipantStatus.ACTIVE }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }] });
+  const eligible = active.filter((participant) => participant.characterId !== highestBidderId);
+  return eligible[0] ?? null;
+}
+
+async function settleAuctionTx(tx: Tx, auctionId: string, now = new Date()) {
+  const auction = await tx.auction.findUnique({
+    where: { id: auctionId },
+    include: { item: { include: { template: true } }, participants: true, seller: true }
+  });
+  if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase === AuctionPhase.SETTLED || auction.phase === AuctionPhase.CANCELLED) return null;
+  const winner = auction.highestBidderId ? auction.participants.find((participant) => participant.characterId === auction.highestBidderId) : null;
+  if (!winner || auction.currentPrice <= 0n) {
+    for (const participant of auction.participants) await releaseAuctionEscrow(tx, participant, "no-winner");
+    await tx.auctionParticipant.updateMany({ where: { auctionId }, data: { status: AuctionParticipantStatus.LOST, lastActionAt: now } });
+    await tx.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.CANCELLED, phase: AuctionPhase.CANCELLED, currentTurnParticipantId: null, turnEndsAt: null, settledAt: now } });
+    await tx.gameLog.create({ data: { characterId: auction.sellerId, type: "auction", message: `Phiên đấu giá ${auction.item.template.name} kết thúc vì không có người trả giá.` } });
+    return { status: "cancelled" as const };
+  }
+  const winnerHold = winner.lastBidPrice;
+  if (winnerHold < auction.currentPrice) throw new GameError("AUCTION_ESCROW_MISMATCH", "Tiền giữ của người thắng không khớp giá cuối.");
+  const refund = winnerHold - auction.currentPrice;
+  if (refund > 0n) await creditWallet(tx, winner.characterId, Currency.LINH_THACH, refund, WalletTxType.RELEASE, "Auction", auctionId, `auction:winner-refund:${auctionId}`);
+  for (const participant of auction.participants.filter((entry) => entry.id !== winner.id)) await releaseAuctionEscrow(tx, participant, "settled-loser");
+  await creditWallet(tx, auction.sellerId, Currency.LINH_THACH, auction.currentPrice, WalletTxType.AUCTION, "Auction", auctionId, `auction:settle:seller:${auctionId}`);
+  await tx.itemInstance.update({ where: { id: auction.itemId }, data: { ownerId: winner.characterId, equippedSlot: null } });
+  await tx.auctionParticipant.update({ where: { id: winner.id }, data: { status: AuctionParticipantStatus.WINNER, lastBidPrice: auction.currentPrice, lastActionAt: now } });
+  await tx.auctionParticipant.updateMany({ where: { auctionId, id: { not: winner.id } }, data: { status: AuctionParticipantStatus.LOST, lastActionAt: now, lastBidPrice: 0n, lastBidRound: null } });
+  await tx.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.SETTLED, phase: AuctionPhase.SETTLED, currentTurnParticipantId: null, turnEndsAt: null, settledAt: now } });
+  await tx.gameLog.create({ data: { characterId: winner.characterId, type: "auction", message: `Bạn thắng đấu giá ${auction.item.template.name} với giá ${formatAuctionAmount(auction.currentPrice)}.` } });
+  await tx.gameLog.create({ data: { characterId: auction.sellerId, type: "auction", message: `${auction.item.template.name} đã được đấu giá thành công với giá ${formatAuctionAmount(auction.currentPrice)}.` } });
+  await tx.worldNews.create({ data: { title: "Phiên đấu giá kết thúc", body: `${auction.item.template.name} được chốt ở mức ${formatAuctionAmount(auction.currentPrice)}.`, category: "auction" } });
+  return { status: "settled" as const, winnerId: winner.characterId, finalPrice: auction.currentPrice };
+}
+
+async function advanceAuctionAfterAction(tx: Tx, auctionId: string, now = new Date()) {
+  const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: true } });
+  if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) return null;
+  const active = auction.participants.filter((participant) => participant.status === AuctionParticipantStatus.ACTIVE);
+  if (active.length <= 1 && active.some((participant) => participant.characterId === auction.highestBidderId)) return settleAuctionTx(tx, auctionId, now);
+  const next = await nextTurnParticipant(tx, auctionId, auction.highestBidderId);
+  if (!next) return settleAuctionTx(tx, auctionId, now);
+  await tx.auction.update({ where: { id: auctionId }, data: { currentTurnParticipantId: next.id, turnEndsAt: new Date(now.getTime() + AUCTION_TURN_MS) } });
+  return { status: "live" as const, nextParticipantId: next.id };
+}
+
+async function startLiveAuctionTx(tx: Tx, auctionId: string, now = new Date()) {
+  const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: { orderBy: [{ joinedAt: "asc" }, { id: "asc" }] }, item: { include: { template: true } } } });
+  if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.OPEN_REGISTRATION) return null;
+  if (auction.participants.length === 0) {
+    await tx.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.CANCELLED, phase: AuctionPhase.CANCELLED, settledAt: now, currentTurnParticipantId: null, turnEndsAt: null } });
+    await tx.gameLog.create({ data: { characterId: auction.sellerId, type: "auction", message: `Không ai tham gia đấu giá ${auction.item.template.name}; vật phẩm được giữ lại.` } });
+    return { status: "cancelled" as const };
+  }
+  const first = auction.highestBidderId ? auction.participants.find((participant) => participant.characterId === auction.highestBidderId) : auction.participants[0];
+  if (!first) return null;
+  if (!auction.highestBidderId) {
+    await holdAuctionEscrow(tx, first, auction.startingPrice, 0, "registration-start");
+    await tx.auctionBid.create({ data: { auctionId, bidderId: first.characterId, round: 0, amount: auction.startingPrice } });
+    await tx.auction.update({ where: { id: auctionId }, data: { highestBidderId: first.characterId, currentPrice: auction.startingPrice, currentBid: auction.startingPrice, currentRound: 0 } });
+  }
+  if (auction.participants.length === 1) return settleAuctionTx(tx, auctionId, now);
+  const next = auction.participants.find((participant) => participant.characterId !== (auction.highestBidderId ?? first.characterId)) ?? null;
+  await tx.auction.update({
+    where: { id: auctionId },
+    data: { phase: AuctionPhase.LIVE, currentTurnParticipantId: next?.id ?? null, turnEndsAt: next ? new Date(now.getTime() + AUCTION_TURN_MS) : null }
+  });
+  if (!next) return settleAuctionTx(tx, auctionId, now);
+  await tx.worldNews.create({ data: { title: "Đấu Giá Trực Tiếp bắt đầu", body: `${auction.item.template.name} bắt đầu phiên trả giá theo lượt tại Vạn Bảo Lâu.`, category: "auction" } });
+  return { status: "live" as const, nextParticipantId: next.id };
+}
+
+export async function processAuctionHouse(db: Db, now = new Date(), limit = 50) {
+  const registrationEnded = await db.auction.findMany({ where: { status: AuctionStatus.ACTIVE, phase: AuctionPhase.OPEN_REGISTRATION, registrationEndsAt: { lte: now } }, take: limit, orderBy: { registrationEndsAt: "asc" } });
+  for (const auction of registrationEnded) await db.$transaction((tx) => startLiveAuctionTx(tx, auction.id, now), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  const timedOut = await db.auction.findMany({ where: { status: AuctionStatus.ACTIVE, phase: AuctionPhase.LIVE, turnEndsAt: { lte: now } }, take: limit, orderBy: { turnEndsAt: "asc" } });
+  for (const auction of timedOut) {
+    await db.$transaction(async (tx) => {
+      const current = await tx.auction.findUnique({ where: { id: auction.id }, include: { currentTurnParticipant: true } });
+      if (!current?.currentTurnParticipant || current.phase !== AuctionPhase.LIVE || current.status !== AuctionStatus.ACTIVE || !current.turnEndsAt || current.turnEndsAt > now) return null;
+      await releaseAuctionEscrow(tx, current.currentTurnParticipant, "auto-pass");
+      await tx.auctionParticipant.update({ where: { id: current.currentTurnParticipant.id }, data: { status: AuctionParticipantStatus.PASSED, lastActionAt: now } });
+      await tx.gameLog.create({ data: { characterId: current.currentTurnParticipant.characterId, type: "auction", message: "Bạn đã quá thời gian lượt và tự rút khỏi phiên đấu giá." } });
+      return advanceAuctionAfterAction(tx, auction.id, now);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+  return { registrationStarted: registrationEnded.length, autoPassed: timedOut.length };
+}
+
+export async function createAuction(db: Db, sellerId: string, itemId: string, startingPrice: bigint, now = new Date()) {
+  if (startingPrice <= 0n) throw new GameError("INVALID_PRICE", "Giá khởi điểm không hợp lệ.");
+  if (startingPrice > 999_999_999_999n) throw new GameError("INVALID_PRICE", "Giá khởi điểm quá lớn.");
+  return db.$transaction(async (tx) => {
+    await assertAtMarket(tx, sellerId);
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
+    if (!item || item.ownerId !== sellerId || item.quantity <= 0) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
+    if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể đấu giá vật phẩm đang trang bị.");
+    if (item.bound || !item.template.tradeable) throw new GameError("ITEM_BOUND", "Vật phẩm này không thể giao dịch.");
+    if (item.listings.length > 0 || (item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang được giao dịch.");
+    if (!canAuctionItem(item.template)) throw new GameError("AUCTION_NOT_ELIGIBLE", item.template.category === ItemCategory.EQUIPMENT ? "Trang bị này không đạt phẩm cấp Trân Phẩm để đưa lên Đấu Giá." : "Vật phẩm này không được đưa lên Đấu Giá.");
+    const bidStep = auctionBidStep(startingPrice);
+    const auction = await tx.auction.create({
+      data: {
+        sellerId,
+        itemId,
+        startingPrice,
+        bidStep,
+        currentPrice: 0n,
+        currentBid: 0n,
+        currentRound: -1,
+        registrationEndsAt: new Date(now.getTime() + AUCTION_REGISTRATION_MS),
+        endsAt: new Date(now.getTime() + 24 * 60 * 60_000)
+      }
+    });
+    await tx.gameLog.create({ data: { characterId: sellerId, type: "auction", message: `Đưa ${item.template.name} lên Đấu Giá với giá khởi điểm ${formatAuctionAmount(startingPrice)}.` } });
+    const meta = parseJsonRecord(item.template.bindRules);
+    if (item.template.category === ItemCategory.EQUIPMENT && meta.auctionClass === "PREMIUM") {
+      await tx.worldNews.create({ data: { title: "Vạn Bảo Lâu sắp mở đấu giá Trân Phẩm", body: `${item.template.name} xuất hiện trong phiên đấu giá sắp mở.`, category: "auction" } });
+    }
+    return auction;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function joinAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
+  if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
+  return db.$transaction(async (tx) => {
+    await assertAtMarket(tx, characterId);
+    const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: { orderBy: [{ joinedAt: "asc" }, { id: "asc" }] }, item: { include: { template: true } } } });
+    if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.OPEN_REGISTRATION) throw new GameError("AUCTION_CLOSED", "Phiên đấu giá không còn nhận người tham gia.");
+    if (auction.registrationEndsAt <= now) throw new GameError("AUCTION_REGISTRATION_CLOSED", "Phiên đấu giá đã bắt đầu trả giá.");
+    if (auction.sellerId === characterId) throw new GameError("SELF_AUCTION_JOIN", "Người bán không thể tham gia phiên đấu giá của mình.");
+    const existing = auction.participants.find((participant) => participant.characterId === characterId);
+    if (existing) {
+      if (existing.status === AuctionParticipantStatus.PASSED) throw new GameError("AUCTION_ALREADY_PASSED", "Bạn đã rút khỏi phiên đấu giá này.");
+      return existing;
+    }
+    await debitWallet(tx, characterId, Currency.LINH_THACH, auction.startingPrice, WalletTxType.ESCROW, "Auction", auctionId, `auction:join:${auctionId}:${characterId}:${actionKey}`);
+    const participant = await tx.auctionParticipant.create({ data: { auctionId, characterId, status: AuctionParticipantStatus.ACTIVE, joinedAt: now, lastActionAt: now, lastBidRound: 0, lastBidPrice: auction.startingPrice } });
+    if (!auction.highestBidderId) {
+      await tx.auction.update({ where: { id: auctionId }, data: { highestBidderId: characterId, currentPrice: auction.startingPrice, currentBid: auction.startingPrice, currentRound: 0 } });
+      await tx.auctionBid.create({ data: { auctionId, bidderId: characterId, round: 0, amount: auction.startingPrice } });
+    }
+    await tx.gameLog.create({ data: { characterId, type: "auction", message: `Bạn tham gia đấu giá ${auction.item.template.name} ở mức ${formatAuctionAmount(auction.startingPrice)}.` } });
+    return participant;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function raiseAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
+  if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
+  return db.$transaction(async (tx) => {
+    await assertAtMarket(tx, characterId);
+    const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { currentTurnParticipant: true, participants: true, item: { include: { template: true } } } });
+    if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) throw new GameError("AUCTION_NOT_LIVE", "Phiên đấu giá chưa tới lượt trả giá.");
+    const participant = auction.participants.find((entry) => entry.characterId === characterId);
+    if (!participant) throw new GameError("AUCTION_NOT_JOINED", "Bạn chưa tham gia phiên đấu giá này.");
+    if (participant.status === AuctionParticipantStatus.PASSED) throw new GameError("AUCTION_ALREADY_PASSED", "Bạn đã rút khỏi phiên đấu giá này.");
+    if (participant.status !== AuctionParticipantStatus.ACTIVE) throw new GameError("AUCTION_NOT_ACTIVE", "Bạn không còn trong phiên đấu giá.");
+    if (auction.sellerId === characterId) throw new GameError("SELF_AUCTION_JOIN", "Người bán không thể tham gia phiên đấu giá của mình.");
+    if (auction.currentTurnParticipantId !== participant.id) throw new GameError("AUCTION_NOT_YOUR_TURN", "Chưa tới lượt bạn.");
+    if (auction.highestBidderId === characterId) throw new GameError("AUCTION_ALREADY_LEADING", "Bạn đang giữ giá cao nhất.");
+    if (auction.turnEndsAt && auction.turnEndsAt <= now) {
+      throw new GameError("AUCTION_TURN_EXPIRED", "Lượt của bạn đã hết hạn.");
+    }
+    const nextRound = auction.currentRound < 0 ? 0 : auction.currentRound + 1;
+    const nextPrice = auctionPriceForRound(auction.startingPrice, nextRound);
+    const previousLeader = auction.highestBidderId ? auction.participants.find((entry) => entry.characterId === auction.highestBidderId) : null;
+    await holdAuctionEscrow(tx, participant, nextPrice, nextRound, actionKey);
+    if (previousLeader && previousLeader.id !== participant.id) await releaseAuctionEscrow(tx, previousLeader, `outbid-round-${nextRound}`);
+    await tx.auction.update({ where: { id: auctionId }, data: { highestBidderId: characterId, currentPrice: nextPrice, currentBid: nextPrice, currentRound: nextRound } });
+    await tx.auctionBid.create({ data: { auctionId, bidderId: characterId, round: nextRound, amount: nextPrice } });
+    await tx.gameLog.create({ data: { characterId, type: "auction", message: `${participant.characterId === characterId ? "Bạn" : "Người chơi"} nâng giá lên ${formatAuctionAmount(nextPrice)}.` } });
+    await advanceAuctionAfterAction(tx, auctionId, now);
+    return { nextRound, nextPrice };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function passAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
+  if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
+  return db.$transaction(async (tx) => {
+    await assertAtMarket(tx, characterId);
+    const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { currentTurnParticipant: true, participants: true } });
+    if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) throw new GameError("AUCTION_NOT_LIVE", "Phiên đấu giá chưa tới lượt trả giá.");
+    const participant = auction.participants.find((entry) => entry.characterId === characterId);
+    if (!participant) throw new GameError("AUCTION_NOT_JOINED", "Bạn chưa tham gia phiên đấu giá này.");
+    if (participant.status === AuctionParticipantStatus.PASSED) throw new GameError("AUCTION_ALREADY_PASSED", "Bạn đã rút khỏi phiên đấu giá này.");
+    if (participant.status !== AuctionParticipantStatus.ACTIVE) throw new GameError("AUCTION_NOT_ACTIVE", "Bạn không còn trong phiên đấu giá.");
+    if (auction.currentTurnParticipantId !== participant.id) throw new GameError("AUCTION_NOT_YOUR_TURN", "Chưa tới lượt bạn.");
+    await releaseAuctionEscrow(tx, participant, `pass:${actionKey}`);
+    await tx.auctionParticipant.update({ where: { id: participant.id }, data: { status: AuctionParticipantStatus.PASSED, lastActionAt: now } });
+    await tx.gameLog.create({ data: { characterId, type: "auction", message: "Bạn rút khỏi phiên đấu giá." } });
+    await advanceAuctionAfterAction(tx, auctionId, now);
+    return { passed: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function cancelAuction(db: Db, sellerId: string, auctionId: string, now = new Date()) {
+  return db.$transaction(async (tx) => {
+    const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: true } });
+    if (!auction || auction.sellerId !== sellerId || auction.status !== AuctionStatus.ACTIVE) throw new GameError("AUCTION_CLOSED", "Phiên đấu giá không còn khả dụng.");
+    if (auction.participants.length > 0 || auction.phase !== AuctionPhase.OPEN_REGISTRATION) throw new GameError("AUCTION_HAS_PARTICIPANTS", "Đã có người tham gia, không thể hủy phiên đấu giá.");
+    await tx.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.CANCELLED, phase: AuctionPhase.CANCELLED, currentTurnParticipantId: null, turnEndsAt: null, settledAt: now } });
+    await tx.gameLog.create({ data: { characterId: sellerId, type: "auction", message: "Bạn hủy một phiên đấu giá chưa có người tham gia." } });
+    return { cancelled: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 export async function purchaseMarketListing(db: Db, buyerId: string, listingId: string, quantity = 1, idempotencyKey?: string, now = new Date()) {
   if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng không hợp lệ.");
   if (quantity > 99) throw new GameError("INVALID_QUANTITY", "Mỗi lần chỉ mua tối đa 99 vật phẩm.");
@@ -1426,13 +1671,14 @@ export async function createMarketListing(db: Db, sellerId: string, itemId: stri
   if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng không hợp lệ.");
   return db.$transaction(async (tx) => {
     await assertAtMarket(tx, sellerId);
-    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
     if (!item || item.ownerId !== sellerId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
     if (quantity > marketListingMaxQuantity(item.quantity)) throw new GameError("INVALID_QUANTITY", "Mỗi lần chỉ được rao tối đa 10 đơn vị.");
     if (quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Không đủ số lượng vật phẩm.");
     if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể rao bán vật phẩm đang trang bị.");
     if (!item.template.tradeable || item.bound) throw new GameError("ITEM_BOUND", "Vật phẩm này không thể giao dịch.");
     if (item.listings.length > 0) throw new GameError("ALREADY_LISTED", "Vật phẩm này đang được rao bán.");
+    if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang trong phiên đấu giá.");
     let listedItemId = item.id;
     if (quantity < item.quantity) {
       await tx.itemInstance.update({ where: { id: item.id }, data: { quantity: { decrement: quantity } } });
@@ -1473,10 +1719,11 @@ export async function sellItemToNpc(db: Db, sellerId: string, itemId: string, qu
       const existing = await tx.walletTransaction.findUnique({ where: { characterId_currency_idempotencyKey: { characterId: sellerId, currency: Currency.LINH_THACH, idempotencyKey: saleKey } } });
       if (existing) return { total: existing.amount, quantity, itemName: "Vật phẩm", repeated: true };
     }
-    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
     if (!item || item.ownerId !== sellerId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
     if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể bán vật phẩm đang trang bị.");
     if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Không thể bán vật phẩm đang rao.");
+    if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Không thể bán vật phẩm đang đấu giá.");
     if (quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Không đủ số lượng vật phẩm.");
     if (item.bound) throw new GameError("ITEM_BOUND", "Vật phẩm này đã khóa.");
     const economy = getItemEconomy(item.template);
@@ -1503,10 +1750,11 @@ export async function cancelMarketListing(db: Db, sellerId: string, listingId: s
 
 export async function equipItem(db: Db, characterId: string, itemId: string) {
   return db.$transaction(async (tx) => {
-    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
     if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
     if (item.template.category !== ItemCategory.EQUIPMENT || !item.template.equipSlot) throw new GameError("NOT_EQUIPMENT", "Vật phẩm này không thể trang bị.");
     if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Không thể trang bị vật phẩm đang rao bán.");
+    if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Không thể trang bị vật phẩm đang đấu giá.");
     if (item.equippedSlot === item.template.equipSlot) return item;
     const current = await tx.itemInstance.findFirst({
       where: { ownerId: characterId, equippedSlot: item.template.equipSlot },
@@ -1539,10 +1787,11 @@ export async function consumeItem(db: Db, characterId: string, itemId: string, q
   if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng không hợp lệ.");
   if (quantity > 99) throw new GameError("INVALID_QUANTITY", "Mỗi lần chỉ sử dụng tối đa 99 vật phẩm.");
   return db.$transaction(async (tx) => {
-    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } } } });
+    const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
     if (!item || item.ownerId !== characterId) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
     if (item.template.category !== ItemCategory.CONSUMABLE) throw new GameError("NOT_CONSUMABLE", "Vật phẩm này không thể sử dụng.");
     if (item.listings.length > 0) throw new GameError("ITEM_LISTED", "Không thể dùng vật phẩm đang rao bán.");
+    if ((item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Không thể dùng vật phẩm đang đấu giá.");
     if (item.quantity <= 0 || quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Số lượng vật phẩm không hợp lệ.");
     const usage = getItemUsageDefinition(item.template);
     if (!usage.usable || usage.action !== "USE") throw new GameError("ITEM_CONTEXT_REQUIRED", usage.reason ?? "Vật phẩm này cần ngữ cảnh sử dụng khác.");

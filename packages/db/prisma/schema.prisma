@@ -116,6 +116,20 @@ enum AuctionStatus {
   CANCELLED
 }
 
+enum AuctionPhase {
+  OPEN_REGISTRATION
+  LIVE
+  SETTLED
+  CANCELLED
+}
+
+enum AuctionParticipantStatus {
+  ACTIVE
+  PASSED
+  WINNER
+  LOST
+}
+
 enum SectRoleName {
   LEADER
   VICE_LEADER
@@ -401,6 +415,9 @@ model Character {
   techniques      CharacterTechnique[]
   professions     CharacterProfession[]
   items           ItemInstance[]
+  auctionsSelling Auction[] @relation("AuctionSeller")
+  auctionsWon     Auction[] @relation("AuctionWinner")
+  auctionParticipants AuctionParticipant[]
   sectInventoryLogs SectInventoryLog[]
   cultivationJobs CultivationActivity[]
   trainingJobs    TrainingActivity[]
@@ -593,6 +610,7 @@ model ItemInstance {
   equippedSlot   EquipmentSlot?
   createdAt      DateTime @default(now())
   listings       MarketListing[]
+  auctions       Auction[]
   @@index([ownerId])
   @@index([templateId])
 }
@@ -966,15 +984,50 @@ model SystemMarketStock {
 model Auction {
   id          String @id @default(cuid())
   sellerId    String
+  seller      Character @relation("AuctionSeller", fields: [sellerId], references: [id])
   itemId      String
+  item        ItemInstance @relation(fields: [itemId], references: [id])
   startingPrice BigInt
+  bidStep     BigInt @default(1)
+  currentPrice BigInt @default(0)
+  currentRound Int @default(-1)
   currentBid  BigInt @default(0)
   highestBidderId String?
+  highestBidder Character? @relation("AuctionWinner", fields: [highestBidderId], references: [id])
+  currentTurnParticipantId String?
+  currentTurnParticipant AuctionParticipant? @relation("CurrentTurnAuction", fields: [currentTurnParticipantId], references: [id])
+  phase       AuctionPhase @default(OPEN_REGISTRATION)
   status      AuctionStatus @default(ACTIVE)
   startsAt    DateTime @default(now())
+  registrationEndsAt DateTime
+  turnEndsAt  DateTime?
   endsAt      DateTime
+  settledAt   DateTime?
+  participants AuctionParticipant[]
   bids        AuctionBid[]
+  @@index([phase, registrationEndsAt])
+  @@index([phase, turnEndsAt])
   @@index([status, endsAt])
+  @@index([sellerId, status])
+  @@index([itemId, status])
+}
+
+model AuctionParticipant {
+  id          String @id @default(cuid())
+  auctionId   String
+  auction     Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  status      AuctionParticipantStatus @default(ACTIVE)
+  joinedAt    DateTime @default(now())
+  lastActionAt DateTime?
+  lastBidRound Int?
+  lastBidPrice BigInt @default(0)
+  createdAt   DateTime @default(now())
+  currentTurnFor Auction[] @relation("CurrentTurnAuction")
+  @@unique([auctionId, characterId])
+  @@index([auctionId, status, joinedAt])
+  @@index([characterId, status])
 }
 
 model AuctionBid {
@@ -983,8 +1036,10 @@ model AuctionBid {
   auction     Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   bidderId    String
   bidder      Character @relation(fields: [bidderId], references: [id])
+  round       Int @default(0)
   amount      BigInt
   createdAt   DateTime @default(now())
+  @@unique([auctionId, round])
   @@index([auctionId, amount])
 }
 

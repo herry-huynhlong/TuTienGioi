@@ -4,7 +4,8 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml ./
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/game/package.json packages/game/package.json
 RUN pnpm install --frozen-lockfile=false
 COPY . .
-RUN pnpm db:generate && pnpm --filter @ttg/db build
+RUN pnpm db:generate && pnpm --filter @ttg/db build && pnpm --filter @ttg/game build
 CMD ["pnpm", "--filter", "@ttg/worker", "start"]

@@ -1,8 +1,8 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { claimTravelAction, startTravelAction } from "@/lib/forms";
-import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
-import { getFeatureUnlockState, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
+import { formatLocationKind, formatSecurity, formatService } from "@/lib/game-display";
+import { defaultKnownLocationKeys, getFeatureUnlockState, recordOnboardingEvent, revealAdjacentLocations, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
@@ -35,15 +35,7 @@ type DiscoveryState = "current" | "reachable" | "known_unreachable" | "locked" |
 type QuickFeatureKey = "character" | "market" | "bestiary" | "sect";
 type QuickLink = { label: string; href: string; featureKey?: QuickFeatureKey };
 
-const publicKnownLocationKeys = new Set([
-  "thanh-van-dong-thanh",
-  "cho-linh-bao",
-  "bac-mon",
-  "thanh-truc-lam",
-  "linh-khe",
-  "thanh-van-son",
-  "thanh-linh-son-mon"
-]);
+const publicKnownLocationKeys = new Set<string>(defaultKnownLocationKeys);
 
 const areaOrder: Record<string, number> = {
   "thanh-van-thanh": 10,
@@ -124,6 +116,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
       realmStage: { include: { realm: true } }
     }
   });
+  const discovery = await revealAdjacentLocations(prisma, c.id, c.currentLocationId);
   const [worlds, featureUnlocks, itemTemplates, monsters, activeSectMissions] = await Promise.all([
     prisma.world.findMany({
       orderBy: { createdAt: "asc" },
@@ -138,7 +131,8 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
                   where: { active: true },
                   orderBy: { name: "asc" },
                   include: {
-                    routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } }
+                    routesFrom: { where: { active: true }, include: { destination: true }, orderBy: { dangerLevel: "asc" } },
+                    routesTo: { where: { active: true }, include: { origin: true }, orderBy: { dangerLevel: "asc" } }
                   }
                 }
               }
@@ -174,9 +168,14 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
   const routeByDestinationId = new Map(currentRoutes.map((route) => [route.destinationId, route]));
   const currentRealmOrder = c.realmStage.realm.order;
   const knownLocationIds = new Set<string>([
+    ...discovery.discoveredIds,
     ...(currentLocationId ? [currentLocationId] : []),
-    ...currentRoutes.map((route) => route.destinationId),
     ...zones.flatMap((zone) => zone.locations.filter((location) => publicKnownLocationKeys.has(location.key)).map((location) => location.id))
+  ]);
+  const relevantUnknownIds = new Set<string>([
+    ...currentRoutes.map((route) => route.destinationId),
+    ...(currentLocation?.routesTo?.map((route) => route.originId) ?? []),
+    ...zones.flatMap((zone) => zone.locations.filter((location) => knownLocationIds.has(location.id)).flatMap((location) => location.routesFrom.map((route) => route.destinationId)))
   ]);
   const allLocations = zones.flatMap((zone) => zone.locations.map((location) => ({ ...location, zone })));
   const selectedLocation =
@@ -205,7 +204,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
         </div>
         <Link href="/game/location" className="btn btn-secondary">Địa điểm hiện tại</Link>
       </header>
-      <ActionAlert message={params?.error} />
+      <ActionAlert message={params?.error ?? discoveryMessage(discovery.newlyDiscovered, currentLocationId)} />
 
       <div className="region-tabs mt-5">
         {regions.map((region) => knownRegionKeys.has(region.key) ? (
@@ -238,6 +237,8 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
                             location={location}
                             selected={selectedLocation?.id === location.id}
                             state={state}
+                            knownLocationIds={knownLocationIds}
+                            relevantUnknownIds={relevantUnknownIds}
                             missionCount={sectMissionByLocation.get(location.id)?.length ?? 0}
                           />
                         );
@@ -280,6 +281,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
                   activityLocked={travelBlockedByActivity}
                   itemNames={itemNames}
                   monsterNames={monsterNames}
+                  knownLocationIds={knownLocationIds}
                 />
               ) : (
                 <div className="empty-state"><b>Chưa chọn địa điểm.</b><p>Chọn một địa điểm đã biết trong danh sách để xem chi tiết.</p></div>
@@ -313,24 +315,30 @@ function LocationRow({
   location,
   selected,
   state,
+  knownLocationIds,
+  relevantUnknownIds,
   missionCount
 }: {
   activeRegionKey: string;
-  location: { key: string; name: string; kind: string; services: string[] };
+  location: { id: string; key: string; name: string; kind: string; services: string[]; routesFrom: Array<{ destinationId: string; destination: { name: string } }> };
   selected: boolean;
   state: DiscoveryState;
+  knownLocationIds: Set<string>;
+  relevantUnknownIds: Set<string>;
   missionCount: number;
 }) {
   if (state === "unknown") {
+    if (!relevantUnknownIds.has(location.id)) return null;
     return (
       <div className="directory-location-row directory-location-unknown" title="Bạn chưa biết nơi này.">
         <span className="directory-location-icon"><HelpCircle size={15} aria-hidden /></span>
-        <span className="directory-location-name">???</span>
+        <span className="directory-location-name">???<small>Phía xa dường như còn một con đường chưa rõ.</small></span>
       </div>
     );
   }
 
   const Icon = state === "locked" ? Lock : state === "current" ? MapPin : locationIcons[location.kind] ?? MapPin;
+  const outgoing = location.routesFrom.map((route) => knownLocationIds.has(route.destinationId) ? route.destination.name : "???").slice(0, 3);
   return (
     <Link
       href={`/game/world?region=${activeRegionKey}&location=${location.key}`}
@@ -340,6 +348,7 @@ function LocationRow({
       <span className="directory-location-name">
         {location.name}
         <small>{formatLocationKind(location.kind)}{location.services.length ? ` · ${location.services.slice(0, 2).map(formatService).join(", ")}` : ""}</small>
+        {outgoing.length > 0 ? <small>Có thể đi tới: {outgoing.join(" · ")}</small> : null}
       </span>
       {state === "current" ? <small className="directory-location-status">Hiện tại</small> : null}
       {state === "locked" ? <small className="directory-location-status">Khóa</small> : null}
@@ -400,7 +409,8 @@ function LocationDetail({
   isLocked,
   activityLocked,
   itemNames,
-  monsterNames
+  monsterNames,
+  knownLocationIds
 }: {
   currentLocationId: string | null;
   location: {
@@ -412,7 +422,7 @@ function LocationDetail({
     services: string[];
     encounterTable: unknown;
     zone: { name: string; dangerLevel: number; description: string; resourceTable: unknown; monsterTable: unknown };
-    routesFrom: Array<{ id: string; name: string; travelMinutes: number; travelCost: bigint; dangerLevel: number; destination: { name: string } }>;
+    routesFrom: Array<{ id: string; name: string; destinationId: string; travelMinutes: number; travelCost: bigint; dangerLevel: number; destination: { name: string } }>;
   };
   route?: { id: string; travelMinutes: number; travelCost: bigint; dangerLevel: number; ambushAllowed: boolean; minimumRealmOrder: number } | null;
   realmName: string;
@@ -420,11 +430,12 @@ function LocationDetail({
   activityLocked: boolean;
   itemNames: Map<string, string>;
   monsterNames: Map<string, string>;
+  knownLocationIds: Set<string>;
 }) {
   const isCurrent = location.id === currentLocationId;
   const LocationIcon = locationIcons[location.kind] ?? MapPin;
-  const resources = parseWeightedTable(location.zone.resourceTable).map((entry) => ({ ...entry, label: itemNames.get(entry.key) ?? entry.key }));
-  const monsters = parseWeightedTable(location.zone.monsterTable).map((entry) => ({ ...entry, label: monsterNames.get(entry.key) ?? entry.key }));
+  const resources = parseWeightedTable(location.zone.resourceTable).map((entry) => ({ ...entry, label: itemNames.get(entry.key) ?? "Tài nguyên chưa định danh" }));
+  const monsters = parseWeightedTable(location.zone.monsterTable).map((entry) => ({ ...entry, label: monsterNames.get(entry.key) ?? "Dấu yêu khí lạ" }));
   const encounters = parseWeightedTable(location.encounterTable);
   const opportunities = describeOpportunities(location.services, Boolean(route?.ambushAllowed));
   return (
@@ -484,7 +495,7 @@ function LocationDetail({
           <div className="world-route-list">
             {location.routesFrom.slice(0, 5).map((outgoing) => (
               <div key={outgoing.id}>
-                <b>{outgoing.destination.name}</b>
+                <b>{knownLocationIds.has(outgoing.destinationId) ? outgoing.destination.name : "???"}</b>
                 <small>{formatTravelDuration(outgoing.travelMinutes)} · {outgoing.travelCost.toString()} linh thạch · nguy hiểm {outgoing.dangerLevel}</small>
               </div>
             ))}
@@ -559,5 +570,11 @@ function formatEncounter(key: string) {
     "wandering-monster": "Yêu thú lang thang",
     traveler: "Tu sĩ lữ hành",
     "rare-omen": "Điềm lạ"
-  } as Record<string, string>)[key] ?? key;
+  } as Record<string, string>)[key] ?? "Điềm lạ";
+}
+
+function discoveryMessage(newlyDiscovered: Array<{ id: string; name: string }>, currentLocationId: string | null) {
+  const names = newlyDiscovered.filter((location) => location.id !== currentLocationId).map((location) => location.name);
+  if (names.length === 0) return undefined;
+  return `Bạn đã phát hiện ${names.length === 1 ? "một địa điểm mới" : "những địa điểm mới"}: ${names.join(", ")}.`;
 }

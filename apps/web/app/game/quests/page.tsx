@@ -1,4 +1,5 @@
 import { getUser } from "@/lib/auth";
+import { formatQuestType } from "@/lib/game-display";
 import { prisma } from "@ttg/db";
 import { CheckCircle2, CircleDot, Gift, ScrollText } from "lucide-react";
 import Link from "next/link";
@@ -60,7 +61,3 @@ function QuestIcon({ status }: { status: string }) {
   return <CircleDot size={22} aria-hidden />;
 }
 
-function formatQuestType(type: string) {
-  const labels: Record<string, string> = { MAIN: "Chính tuyến", SIDE: "Phụ tuyến", NPC: "Nhân vật", SECT: "Tông môn", WORLD: "Thế giới", EVENT: "Sự kiện" };
-  return labels[type] ?? type;
-}

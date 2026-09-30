@@ -9,6 +9,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @ttg/db build && pnpm --filter @ttg/game test",
+    "audit:player-facing-language": "node scripts/audit-player-facing-language.mjs",
     "db:generate": "pnpm --filter @ttg/db db:generate",
     "db:migrate": "pnpm --filter @ttg/db db:migrate",
     "db:seed": "pnpm --filter @ttg/db db:seed",

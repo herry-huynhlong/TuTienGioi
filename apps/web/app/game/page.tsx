@@ -8,8 +8,9 @@ import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { dedupeHeavenBoard, formatAptitude, formatGameDate, formatRealm } from "@/lib/game-display";
 
-export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
+export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string; cultivate?: string; breakthrough?: string }> }) {
   const params = await searchParams;
   const user = await getUser();
   if (!user) redirect("/");
@@ -29,7 +30,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
     }
   });
   const [news, logs, next, onboarding] = await Promise.all([
-    prisma.worldNews.findMany({ take: 7, orderBy: { createdAt: "desc" } }),
+    prisma.worldNews.findMany({ take: 30, orderBy: { createdAt: "desc" } }),
     prisma.gameLog.findMany({ where: { characterId: c.id }, take: 6, orderBy: { createdAt: "desc" } }),
     prisma.realmStage.findFirst({
       where: { requiredCultivation: { gt: c.realmStage.requiredCultivation } },
@@ -60,6 +61,9 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   const heroPosition = resolveLocationImagePosition(c.currentLocation);
   const locationCultivationBonus = c.currentLocation?.cultivationModifierBps ?? 0;
   const nextAction = getNextAction({ canBreakthrough, quests: c.quests, onboarding });
+  const heavenBoard = dedupeHeavenBoard(news);
+  const openCultivationPanel = params?.cultivate === "1" && !activeCultivation;
+  const openBreakthroughPanel = params?.breakthrough === "1";
 
   return (
     <div className="dashboard-page p-4 lg:p-6">
@@ -71,7 +75,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
           <div>
             <p className="text-xs uppercase text-jade">Tu Tiên Giới</p>
             <h1 className="mt-1 text-3xl font-black text-paper">{c.name}</h1>
-            <p className="mt-1 text-sm text-paper/75">/@{user!.username} · {c.title}</p>
+            <p className="mt-1 text-sm text-paper/75">{formatRealm(c.realmStage.realm, c.realmStage)} · {c.sect?.name ?? c.title}</p>
           </div>
           <div className="dashboard-hero-location">
             <b>{locationName}</b>
@@ -144,8 +148,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
 
         <Panel title="Hiện Trạng" className="lg:col-span-2">
           <div className="info-table">
-            <Info label="Cảnh giới" value={`${c.realmStage.realm.name} ${c.realmStage.name}`} />
-            <Info label="Linh căn" value={`${c.spiritualRoot.name} · ${Math.round(c.spiritualRoot.multiplierBps / 100)}%`} />
+            <Info label="Cảnh giới" value={formatRealm(c.realmStage.realm, c.realmStage)} />
+            <Info label="Linh căn" value={formatAptitude(c.spiritualRoot)} />
             <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
             <Info label="Hoạt động" value={activeCount > 0 ? `${activeCount} việc đang chạy` : "Đang rảnh"} accent={activeCount > 0} />
             <Info label="Vị trí" value={locationName} />
@@ -182,44 +186,62 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             <span>{atCultivationCap ? "Cần Đột phá để tiếp tục." : `Còn ${(nextRequirement - cappedCultivation).toString()} Tu vi tới bình cảnh`}</span>
             <span>{locationCultivationBonus ? `Linh khí địa điểm ${locationCultivationBonus > 0 ? "+" : ""}${Math.round(locationCultivationBonus / 100)}%` : "Linh khí địa điểm bình thường"}</span>
           </div>
-          {atCultivationCap ? (
+          {activeCultivation ? (
             <div className="bottleneck-box mt-4">
-              <b>Đã đạt bình cảnh.</b>
-              <p>Cần đột phá để tiếp tục tu luyện. Tu vi sẽ không tự động vượt tầng.</p>
+              <b>Đang tu luyện</b>
+              <p>Tu vi nhận dự kiến: +{activeCultivationReward.toString()} · thời gian còn lại bên dưới.</p>
             </div>
-          ) : activeCultivation ? (
-            <div className="bottleneck-box mt-4">
-              <b>Đang bế quan</b>
-              <p>Dự kiến nhận +{activeCultivationReward.toString()} Tu vi. Nếu session chạm 100% trước hạn, backend đã rút ngắn thời gian kết thúc.</p>
+          ) : !canBreakthrough ? (
+            <p className="muted mt-4 text-sm">Tu vi chưa viên mãn.</p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap gap-3">
+            {activeCultivation ? (
+              <form action={cancelCultivationAction}>
+                <input type="hidden" name="id" value={activeCultivation.id} />
+                <button className="btn btn-secondary">Dừng Tu Luyện</button>
+              </form>
+            ) : (
+              <Link href="/game?cultivate=1" className={`btn ${atCultivationCap || activeCount > 0 ? "btn-disabled" : ""}`} aria-disabled={atCultivationCap || activeCount > 0}>Tu Luyện</Link>
+            )}
+            <Link href="/game?breakthrough=1" className={`btn btn-secondary ${!canBreakthrough ? "btn-disabled" : ""}`} aria-disabled={!canBreakthrough}>Đột Phá</Link>
+          </div>
+          {openCultivationPanel ? (
+            <div className="cultivation-panel mt-4">
+              <b>Thời gian tu luyện</b>
+              <div className="mt-3 grid gap-2 md:grid-cols-4">
+                {cultivationActivityOptions.map((duration) => {
+                  const multiplierBps = c.spiritualRoot.multiplierBps + locationCultivationBonus + (c.currentLocation?.zone.dangerLevel ? Math.min(1200, c.currentLocation.zone.dangerLevel * 100) : 0);
+                  const reward = calculateCultivationReward(cultivationBaseReward(duration), multiplierBps);
+                  const effectiveReward = reward > nextRequirement - cappedCultivation ? nextRequirement - cappedCultivation : reward;
+                  const cost = cultivationEnergyCost(duration);
+                  const realMs = gameDurationToRealMs(duration);
+                  const disabled = atCultivationCap || activeCount > 0 || energy < cost;
+                  return (
+                    <form key={duration} action={cultivateAction} className="cultivation-choice">
+                      <input type="hidden" name="duration" value={duration} />
+                      <button className="btn btn-secondary w-full" disabled={disabled}>
+                        <span>{cultivationDurationConfigs[duration].label}</span>
+                      </button>
+                      <small>Thời gian thực: {formatRealDuration(realMs)} · Tu vi dự kiến: +{effectiveReward.toString()} · tốn {cost} thể lực</small>
+                    </form>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
-          <div className="mt-4 grid gap-2 md:grid-cols-4">
-            {cultivationActivityOptions.map((duration) => {
-              const multiplierBps = c.spiritualRoot.multiplierBps + locationCultivationBonus + (c.currentLocation?.zone.dangerLevel ? Math.min(1200, c.currentLocation.zone.dangerLevel * 100) : 0);
-              const reward = calculateCultivationReward(cultivationBaseReward(duration), multiplierBps);
-              const effectiveReward = reward > nextRequirement - cappedCultivation ? nextRequirement - cappedCultivation : reward;
-              const cost = cultivationEnergyCost(duration);
-              const realMs = gameDurationToRealMs(duration);
-              const reachesCap = reward >= nextRequirement - cappedCultivation;
-              const disabled = atCultivationCap || activeCount > 0 || energy < cost;
-              return (
-                <form key={duration} action={cultivateAction} className="cultivation-choice">
-                  <input type="hidden" name="duration" value={duration} />
-                  <button className="btn btn-secondary w-full" disabled={disabled} title={`Dự kiến +${effectiveReward.toString()} tu vi · tốn ${cost} thể lực`}>
-                    <span>{cultivationDurationConfigs[duration].label}</span>
-                    <small>+{effectiveReward.toString()} Tu vi · {formatRealDuration(realMs)} thật{reachesCap ? " · tới bình cảnh" : ""}</small>
-                  </button>
+          {openBreakthroughPanel ? (
+            <div className="cultivation-panel mt-4">
+              <b>Đột Phá</b>
+              {canBreakthrough ? (
+                <form action={breakthroughAction} className="mt-3 grid gap-3 sm:max-w-md">
+                  <BreakthroughSupportSelect items={breakthroughItems} compact />
+                  <button className="btn">Đột Phá</button>
                 </form>
-              );
-            })}
-          </div>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <form action={breakthroughAction} className="grid gap-3 sm:min-w-80">
-              <BreakthroughSupportSelect items={breakthroughItems} compact />
-              <button className="btn" disabled={!canBreakthrough}>{canBreakthrough ? "Đột phá" : "Chưa đủ tu vi"}</button>
-            </form>
-            <Link href="/game/character" className="btn btn-secondary">Nhân vật</Link>
-          </div>
+              ) : (
+                <p className="muted mt-2 text-sm">Tu vi chưa viên mãn.</p>
+              )}
+            </div>
+          ) : null}
         </Panel>
 
         <Panel title="Hoạt động đang chạy" className="lg:col-span-2">
@@ -245,8 +267,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
 
         <Panel title="Thiên Đạo Bảng" className="lg:col-span-2">
           <div className="event-list">
-            {news.map((n) => <p key={n.id}>{n.title}</p>)}
-            {news.length === 0 ? <p className="muted">Chưa có tin tức mới.</p> : null}
+            {heavenBoard.map((n) => <p key={n.id}><b>{formatGameDate(n.createdAt)}</b><br />{n.title}</p>)}
+            {heavenBoard.length === 0 ? <p className="muted">Thiên hạ tạm thời yên ổn.</p> : null}
           </div>
         </Panel>
 

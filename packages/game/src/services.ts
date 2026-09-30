@@ -7,6 +7,7 @@ import { recordOnboardingEvent } from "./onboarding.js";
 import { progressQuestEvent } from "./quests.js";
 import { professionExpGain, professionRankOrder, professionStationServices, promoteProfessionRank } from "./professions.js";
 import { canAccessSectLocation } from "./sect-access.js";
+import { revealAdjacentLocations } from "./world-discovery.js";
 
 type Tx = Prisma.TransactionClient;
 type Db = PrismaClient;
@@ -939,17 +940,17 @@ function effectGrade(effect: ItemEffectSpec) {
 export async function escapeExplorationEncounterWithItem(db: Db, characterId: string, activityId: string, itemId: string, actionKey?: string | null, now = new Date()) {
   return db.$transaction(async (tx) => {
     const activity = await tx.explorationActivity.findUnique({ where: { id: activityId } });
-    if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy encounter cần thoát.");
+    if (!activity || activity.characterId !== characterId || activity.status !== ActivityStatus.COMPLETED) throw new GameError("NOT_FOUND", "Không tìm thấy biến cố cần rút lui.");
     const reward = parseJsonRecord(activity.reward);
-    if (reward.mode !== "hunt" || typeof reward.monster !== "string" || reward.pending !== true) throw new GameError("BAD_ENCOUNTER", "Không có encounter thường để thoát.");
+    if (reward.mode !== "hunt" || typeof reward.monster !== "string" || reward.pending !== true) throw new GameError("BAD_ENCOUNTER", "Không có biến cố thường để rút lui.");
     if (reward.bossLocked === true || reward.questLocked === true || reward.escapeBlocked === true) throw new GameError("ESCAPE_BLOCKED", "Không thể bỏ chạy khỏi trận chiến này.");
     const state = combatStateFromReward(reward, 1);
     if (actionKey && state.usedActionKeys.includes(actionKey)) return { duplicate: true, escaped: true };
     const { item, effect } = await findOwnedUtilityItem(tx, characterId, itemId, "ESCAPE");
-    if (effectGrade(effect) < 1) throw new GameError("ITEM_GRADE_TOO_LOW", "Phù này không đủ cấp để thoát encounter.");
+    if (effectGrade(effect) < 1) throw new GameError("ITEM_GRADE_TOO_LOW", "Phù này không đủ cấp để rút khỏi biến cố.");
     const session = parseJsonRecord(reward.session);
     await consumeCombatItem(tx, characterId, item.id);
-    const nextReward = { ...reward, pending: false, monster: null, decision: "escaped", combatState: { ...state, usedActionKeys: actionKey ? [...state.usedActionKeys, actionKey] : state.usedActionKeys, log: [...state.log, `Bạn dùng ${item.template.name} thoát khỏi encounter.`] } };
+    const nextReward = { ...reward, pending: false, monster: null, decision: "escaped", combatState: { ...state, usedActionKeys: actionKey ? [...state.usedActionKeys, actionKey] : state.usedActionKeys, log: [...state.log, `Bạn dùng ${item.template.name} rút khỏi biến cố.`] } };
     if (Object.keys(session).length > 0) {
       const checkpoints = Array.isArray(session.checkpoints) ? session.checkpoints.map(parseJsonRecord) : [];
       const nextCheckpoints = checkpoints.map((checkpoint) => checkpoint.id === session.pendingCheckpointId ? { ...checkpoint, resolved: true, outcome: "escaped" } : checkpoint);
@@ -959,7 +960,7 @@ export async function escapeExplorationEncounterWithItem(db: Db, characterId: st
     } else {
       await tx.explorationActivity.update({ where: { id: activityId }, data: { status: ActivityStatus.CLAIMED, claimedAt: now, reward: inputJson(nextReward) } });
     }
-    await tx.gameLog.create({ data: { characterId, type: "WORLD_ITEM_USED", message: `Dùng ${item.template.name} thoát khỏi encounter.`, metadata: inputJson({ itemId: item.id, effectType: "ESCAPE", locationId: typeof reward.locationId === "string" ? reward.locationId : null, targetId: activityId, result: "ESCAPED", timestamp: now.toISOString() }) } });
+    await tx.gameLog.create({ data: { characterId, type: "WORLD_ITEM_USED", message: `Dùng ${item.template.name} rút khỏi biến cố.`, metadata: inputJson({ itemId: item.id, effectType: "ESCAPE", locationId: typeof reward.locationId === "string" ? reward.locationId : null, targetId: activityId, result: "ESCAPED", timestamp: now.toISOString() }) } });
     return { escaped: true, itemName: item.template.name };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -978,7 +979,7 @@ export async function teleportWithItem(db: Db, characterId: string, itemId: stri
       tx.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } }),
       tx.trainingActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } })
     ]);
-    if (activeExploration) throw new GameError("COMBAT_OR_ACTIVITY_ACTIVE", "Không thể dịch chuyển khi đang lịch luyện hoặc gặp encounter.");
+    if (activeExploration) throw new GameError("COMBAT_OR_ACTIVITY_ACTIVE", "Không thể dịch chuyển khi đang lịch luyện hoặc gặp biến cố.");
     if (activeTravel || activeCultivation || activeTraining) throw new GameError("ACTIVE_ACTIVITY", "Hoàn tất hoạt động hiện tại trước khi dịch chuyển.");
     const route = character.currentLocation.routesFrom.find((entry) => entry.destinationId === destinationLocationId);
     if (!route) throw new GameError("DESTINATION_NOT_DISCOVERED", "Chỉ có thể dịch chuyển tới địa điểm đã biết.");
@@ -1192,8 +1193,12 @@ export async function claimTravel(db: Db, characterId: string, travelId: string,
       where: { id: characterId },
       data: { currentLocationId: travel.destinationId, locationId: travel.route.destination.zoneId }
     });
+    const discovery = await revealAdjacentLocations(tx, characterId, travel.destinationId);
     await progressSectMissionEvent(tx, { characterId, eventType: "LOCATION_VISITED", locationId: travel.destinationId, amount: 1 });
     await progressQuestEvent(tx, { characterId, eventType: "ENTER_LOCATION", locationId: travel.destinationId, amount: 1 });
+    for (const location of discovery.newlyDiscovered.filter((location) => location.id !== travel.destinationId)) {
+      await tx.gameLog.create({ data: { characterId, type: "discovery", message: `Bạn đã phát hiện một địa điểm mới: ${location.name}.`, metadata: { locationId: location.id } } });
+    }
     await tx.gameLog.create({ data: { characterId, type: "travel", message: `Đã tới ${travel.route.destination.name}. ${encounterResult.message}`, metadata: { encounter: encounter.key, result: encounterResult } } });
     await recordOnboardingEvent(tx, characterId, "TRAVEL_COMPLETED");
     return { destinationName: travel.route.destination.name, encounter: encounter.key, result: encounterResult };
@@ -1311,7 +1316,7 @@ export async function purchaseMarketListing(db: Db, buyerId: string, listingId: 
 
 export async function refreshSystemMarketStock(db: Db, now = new Date()) {
   const periodKey = currentSystemMarketPeriod(now);
-  const templates = await db.itemTemplate.findMany({ where: { tradeable: true } });
+  const templates = await db.itemTemplate.findMany();
   const rows = [];
   for (const template of templates) {
     const economy = getItemEconomy(template);

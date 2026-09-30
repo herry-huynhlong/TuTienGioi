@@ -1,10 +1,11 @@
 import { ActionAlert } from "@/components/ActionAlert";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { getUser } from "@/lib/auth";
-import { unblockPlayerAction, updateCharacterAppearanceAction, updatePlayerSettingsAction } from "@/lib/forms";
+import { exchangeAppearanceTalismanAction, unblockPlayerAction, updateCharacterAppearanceAction, updatePlayerSettingsAction } from "@/lib/forms";
 import { prisma } from "@ttg/db";
-import { characterAppearances, deterministicCharacterAppearanceKey, ensurePlayerSettings } from "@ttg/game";
+import { characterAppearances, deterministicCharacterAppearanceKey, ensurePlayerSettings, getSectItemContributionPrice } from "@ttg/game";
 import { Bell, Eye, Lock, MonitorCog, ShieldOff } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Promise<{ error?: string; ok?: string }> }) {
@@ -12,12 +13,20 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
   const user = await getUser();
   if (!user?.character) redirect("/");
   const characterId = user.character.id;
-  const [settings, character, blocked] = await Promise.all([
+  const [settings, character, blocked, talismanStacks, appearanceTalisman] = await Promise.all([
     ensurePlayerSettings(prisma, characterId),
-    prisma.character.findUniqueOrThrow({ where: { id: characterId }, select: { id: true, name: true, appearanceKey: true, avatar: true } }),
-    prisma.blockedPlayer.findMany({ where: { blockerId: characterId }, include: { blocked: true }, orderBy: { createdAt: "desc" } })
+    prisma.character.findUniqueOrThrow({ where: { id: characterId }, select: { id: true, name: true, appearanceKey: true, appearanceChosenAt: true, appearanceChangeCount: true, avatar: true, sectMember: { include: { sect: true } } } }),
+    prisma.blockedPlayer.findMany({ where: { blockerId: characterId }, include: { blocked: true }, orderBy: { createdAt: "desc" } }),
+    prisma.itemInstance.findMany({ where: { ownerId: characterId, quantity: { gt: 0 }, equippedSlot: null, template: { key: "dich-dung-phu" }, listings: { none: { status: "ACTIVE" } } }, select: { quantity: true } }),
+    prisma.itemTemplate.findUnique({ where: { key: "dich-dung-phu" } })
   ]);
   const currentAppearanceKey = character.appearanceKey ?? deterministicCharacterAppearanceKey(character.id);
+  const talismanCount = talismanStacks.reduce((sum, item) => sum + item.quantity, 0);
+  const firstAppearanceSelection = character.appearanceChosenAt === null;
+  const canChangeAppearance = firstAppearanceSelection || talismanCount > 0;
+  const sectTalismanPrice = appearanceTalisman ? getSectItemContributionPrice(appearanceTalisman) : 400;
+  const canSectExchange = character.sectMember?.sect.tag === "TVM" && character.sectMember.contribution >= sectTalismanPrice;
+  const appearanceActionKey = `appearance:${character.id}:${currentAppearanceKey}:${Date.now()}`;
 
   return (
     <div className="settings-page p-5 lg:p-8">
@@ -29,11 +38,27 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
       <ActionAlert message={params?.error} />
       {params?.ok ? <ActionAlert message={okMessage(params.ok)} /> : null}
 
-      <section className="panel rounded-lg p-5 mb-5">
+      <section id="appearance" className="panel rounded-lg p-5 mb-5">
         <h2 className="social-panel-title"><Eye size={18} aria-hidden /> Ngoại hình nhân vật</h2>
         <div className="mt-4 grid gap-5 xl:grid-cols-[18rem_1fr]">
           <CharacterVisual character={character} mode="portrait" className="w-full" priority />
           <form action={updateCharacterAppearanceAction}>
+            <input type="hidden" name="actionKey" value={appearanceActionKey} />
+            <div className="appearance-requirement mb-4">
+              {firstAppearanceSelection ? (
+                <p><b>Miễn phí lần đầu.</b> Bạn được chọn ngoại hình miễn phí một lần.</p>
+              ) : (
+                <>
+                  <p><b>Yêu cầu:</b> Dịch Dung Phù x1</p>
+                  <p><b>Đang có:</b> x{talismanCount} / x1</p>
+                  <div className="appearance-source-links">
+                    <Link href="/game/market?tab=buy&q=Dịch%20Dung%20Phù" className="btn btn-secondary">Mua tại Vạn Bảo Lâu</Link>
+                    <button className="btn btn-secondary" type="submit" name="sectActionKey" value={`sect:dich-dung-phu:${character.id}:${Date.now()}`} formAction={exchangeAppearanceTalismanAction} disabled={!canSectExchange}>Đổi Thanh Vân Môn · {sectTalismanPrice.toLocaleString("vi-VN")} Cống Hiến</button>
+                  </div>
+                  <small className="muted">Vạn Bảo Lâu bán bằng Linh Thạch; Thanh Vân Môn đổi bằng cống hiến cho Ngoại Môn trở lên.</small>
+                </>
+              )}
+            </div>
             <div className="appearance-selector-grid">
               {characterAppearances.map((appearance) => (
                 <article key={appearance.key} className={`appearance-card ${appearance.key === currentAppearanceKey ? "selected" : ""}`}>
@@ -49,7 +74,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
               ))}
             </div>
             <div className="settings-submit mt-4">
-              <button className="btn">Dùng ngoại hình này</button>
+              <button className="btn" disabled={!canChangeAppearance}>{firstAppearanceSelection ? "Xác nhận ngoại hình" : "Đổi ngoại hình"}</button>
             </div>
           </form>
         </div>
@@ -136,5 +161,5 @@ function Toggle({ name, label, description, checked }: { name: string; label: st
 }
 
 function okMessage(ok: string) {
-  return ({ saved: "Đã lưu cài đặt.", appearance: "Đã cập nhật ngoại hình nhân vật.", unblocked: "Đã bỏ chặn người chơi." } as Record<string, string>)[ok] ?? ok;
+  return ({ saved: "Đã lưu cài đặt.", appearance: "Đã cập nhật ngoại hình nhân vật.", "dich-dung-phu": "Đã đổi Dịch Dung Phù.", unblocked: "Đã bỏ chặn người chơi." } as Record<string, string>)[ok] ?? ok;
 }

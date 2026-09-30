@@ -669,6 +669,43 @@ export async function withdrawSectItem(db: Db, actorId: string, storageId: strin
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+export async function exchangeSectAppearanceTalisman(db: Db, characterId: string, actionKey: string) {
+  const normalizedActionKey = actionKey.trim();
+  if (!normalizedActionKey) throw new SectError("MISSING_ACTION_KEY", "Thiếu mã giao dịch.");
+  return db.$transaction(async (tx) => {
+    const member = await assertSectMember(tx, characterId);
+    if (member.sect.tag !== "TVM" && member.sect.name !== "Thanh Vân Môn") throw new SectError("WRONG_SECT", "Chỉ đệ tử Thanh Vân Môn có thể đổi Dịch Dung Phù.");
+    if (sectRoles[member.role].order > sectRoles.OUTER.order) throw new SectError("SECT_ROLE_REQUIRED", "Cần thân phận Ngoại Môn Đệ Tử trở lên.");
+    const template = await tx.itemTemplate.findUnique({ where: { key: "dich-dung-phu" } });
+    if (!template) throw new SectError("ITEM_NOT_FOUND", "Chưa có Dịch Dung Phù trong hệ thống.");
+    const price = getSectItemContributionPrice(template);
+    if (member.contribution < price) throw new SectError("INSUFFICIENT_CONTRIBUTION", "Không đủ điểm cống hiến.");
+    const idempotencyKey = `sect:dich-dung-phu:${characterId}:${normalizedActionKey}`;
+    const existingTx = await tx.sectContributionTransaction.findUnique({ where: { characterId_idempotencyKey: { characterId, idempotencyKey } } });
+    if (existingTx) return { itemName: template.name, quantity: 1, contributionCost: price, repeated: true };
+    await mutateContribution(tx, member.sectId, characterId, -price, "SECT_CONTRIBUTION_EXCHANGE", "Đổi Dịch Dung Phù", "ItemTemplate", template.id, idempotencyKey);
+    const existing = await tx.itemInstance.findFirst({
+      where: {
+        ownerId: characterId,
+        templateId: template.id,
+        quantity: { lt: template.maxStack },
+        quality: 1,
+        enhancement: 0,
+        bound: false,
+        equippedSlot: null,
+        durability: null,
+        listings: { none: { status: "ACTIVE" } }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+    if (existing) await tx.itemInstance.update({ where: { id: existing.id }, data: { quantity: { increment: 1 } } });
+    else await tx.itemInstance.create({ data: { ownerId: characterId, templateId: template.id, quantity: 1, quality: 1, enhancement: 0, bound: false } });
+    await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.INVENTORY, message: "Đổi Dịch Dung Phù bằng cống hiến tông môn." } });
+    await tx.gameLog.create({ data: { characterId, type: "SECT_CONTRIBUTION_EXCHANGE", message: `Đổi Dịch Dung Phù, tiêu hao ${price} Cống Hiến.`, metadata: { itemKey: "dich-dung-phu", contributionCost: price } as Prisma.InputJsonValue } });
+    return { itemName: template.name, quantity: 1, contributionCost: price };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 export async function refreshSectMissionPool(db: Db | Tx, sectId: string, now = new Date()) {
   const periodKey = currentMissionPeriodKey(now);
   const run = async (tx: Tx) => {

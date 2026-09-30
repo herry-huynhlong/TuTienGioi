@@ -480,10 +480,20 @@ button, input, select, textarea {
   font-size: 0.84rem;
 }
 
+.cultivation-panel {
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  background: rgba(45, 212, 191, 0.06);
+  padding: 0.9rem;
+}
+
+.cultivation-panel > b {
+  color: var(--gold);
+}
+
 .cultivation-choice button {
   display: grid;
   gap: 0.25rem;
-  min-height: 4.2rem;
+  min-height: 2.8rem;
   align-content: center;
 }
 
@@ -492,9 +502,16 @@ button, input, select, textarea {
 }
 
 .cultivation-choice small {
+  display: block;
+  margin-top: 0.35rem;
   color: rgba(244, 239, 227, 0.58);
   font-size: 0.74rem;
   line-height: 1.35;
+}
+
+.btn-disabled {
+  opacity: 0.52;
+  pointer-events: none;
 }
 
 .message-row {
@@ -704,6 +721,23 @@ button, input, select, textarea {
 .appearance-card small {
   color: rgba(244, 239, 227, 0.64);
   font-size: 0.76rem;
+}
+
+.appearance-requirement {
+  background: rgba(214, 178, 94, 0.07);
+  border: 1px solid rgba(214, 178, 94, 0.24);
+  padding: 0.85rem;
+}
+
+.appearance-requirement p {
+  margin: 0 0 0.35rem;
+}
+
+.appearance-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.75rem 0;
 }
 
 .location-meta {

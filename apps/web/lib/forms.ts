@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, leaveExplorationEncounter, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
 import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
 import { CharacterAppearanceError, characterAppearanceImage, deterministicCharacterAppearanceKey, setCharacterAppearance } from "@ttg/game";
 
@@ -871,9 +871,18 @@ export async function updatePlayerSettingsAction(formData: FormData) {
 
 export async function updateCharacterAppearanceAction(formData: FormData) {
   try {
-    await setCharacterAppearance(prisma, await characterId(), String(formData.get("appearanceKey") ?? ""));
+    await setCharacterAppearance(prisma, await characterId(), String(formData.get("appearanceKey") ?? ""), String(formData.get("actionKey") ?? ""));
   } catch (error) {
     redirectGameError(error, "/game/settings");
   }
   redirect("/game/settings?ok=appearance");
+}
+
+export async function exchangeAppearanceTalismanAction(formData: FormData) {
+  try {
+    await exchangeSectAppearanceTalisman(prisma, await characterId(), String(formData.get("sectActionKey") ?? formData.get("actionKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, "/game/settings");
+  }
+  redirect("/game/settings?ok=dich-dung-phu");
 }

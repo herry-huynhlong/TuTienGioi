@@ -3,6 +3,7 @@ import { getUser } from "@/lib/auth";
 import { acceptQuestAction, completeQuestAction } from "@/lib/forms";
 import { prisma, QuestStatus } from "@ttg/db";
 import { getAvailableQuestTemplates, QuestError, talkToNpc } from "@ttg/game";
+import { formatQuestObjective } from "@/lib/game-display";
 import { ArrowLeft, CheckCircle2, CircleDot, Gift, MapPin, ScrollText, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -42,8 +43,6 @@ export default async function NpcPage({ params, searchParams }: { params: Promis
           <p className="muted mt-3">{data.npc.description}</p>
           <div className="npc-profile-meta">
             <span><MapPin size={14} aria-hidden />{data.currentLocation.name}</span>
-            <span>Quan hệ: {data.playerNpcState.relationshipState}</span>
-            <span>Đã gặp {data.playerNpcState.timesMet} lần</span>
           </div>
         </aside>
 
@@ -163,8 +162,7 @@ function CharacterQuestCard({ npcKey, quest }: { npcKey: string; quest: { id: st
 }
 
 function formatObjective(type: string, count: number) {
-  const labels: Record<string, string> = { TALK_TO_NPC: "Trò chuyện", VISIT_LOCATION: "Tới địa điểm", KILL_MONSTER: "Săn yêu", COLLECT_ITEM: "Thu thập", VISIT_SECT_PAGE: "Tìm hiểu tông môn" };
-  return `${labels[type] ?? type} ${count > 1 ? count : ""}`.trim();
+  return `${formatQuestObjective(type)} ${count > 1 ? count : ""}`.trim();
 }
 
 function formatReward(reward: unknown) {

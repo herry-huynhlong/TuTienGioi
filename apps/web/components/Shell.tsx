@@ -130,9 +130,9 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] uppercase text-paper/45">Tài khoản</p>
-              <p className="font-bold text-paper">/@{user.username}</p>
+              <p className="font-bold text-paper">{character?.name ?? "Chưa lập nhân vật"}</p>
             </div>
-            <span className="status-pill">{user.role}</span>
+            <span className="status-pill">{user.role === "ADMIN" ? "Quản trị" : "Người chơi"}</span>
           </div>
           {character ? (
             <div className="mt-3 space-y-2">
@@ -200,7 +200,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
       <main className="game-main pb-20 lg:pb-0">
         <div className="top-strip lg:hidden">
           <Link href="/game" className="font-black text-gold">TU TIÊN GIỚI</Link>
-          <span>{character?.name ?? user.username}</span>
+          <span>{character?.name ?? "Chưa lập nhân vật"}</span>
         </div>
         {children}
       </main>

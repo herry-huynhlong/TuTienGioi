@@ -9,7 +9,7 @@ const itemSpecificVisualKeys = new Set([
   "yeu-thu-nha", "linh-moc", "tu-diep-linh-thao", "huyen-thiet", "tinh-dong", "bich-ngoc-tuy", "tu-khi-dan", "duong-hon-dan",
   "truc-co-dan-trung", "yeu-dan-nhat-giai", "huyen-thu-cot", "tu-linh-thach", "thien-linh-thao", "huyen-tinh", "xich-viem-tinh-kim", "ngoc-tuy-tinh-hoa",
   "truc-co-dan-thuong", "tay-tuy-dan", "yeu-dan-nhi-giai", "thien-tam-ti", "dia-mach-linh-tinh", "tu-linh-ngoc", "huyen-thiet-kiem", "thanh-van-dao-bao",
-  "thiet-moc-ho-phu", "nhan-tu-linh", "giay-than-hanh", "hoi-xuan-dan", "tu-linh-dan", "pha-canh-dan", "giai-doc-dan", "linh-thach"
+  "thiet-moc-ho-phu", "nhan-tu-linh", "giay-than-hanh", "hoi-xuan-dan", "tu-linh-dan", "pha-canh-dan", "giai-doc-dan", "linh-thach", "dich-dung-phu"
 ]);
 
 function itemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
@@ -1031,6 +1031,65 @@ async function main() {
       create: { key, itemFamily, name, category: category as ItemCategory, rarity: rarity as Rarity, description, stackable: true, maxStack: 999, tradeable: true, baseModifiers, bindRules }
     });
   }
+
+  await prisma.itemTemplate.upsert({
+    where: { key: "dich-dung-phu" },
+    update: {
+      itemFamily: null,
+      name: "Dịch Dung Phù",
+      category: ItemCategory.CONSUMABLE,
+      rarity: Rarity.TRUNG,
+      description: "Một đạo linh phù có thể thay đổi dung mạo và khí chất bên ngoài của tu sĩ.",
+      stackable: true,
+      maxStack: 99,
+      tradeable: false,
+      equipSlot: null,
+      baseModifiers: { appearanceChange: true },
+      bindRules: {
+        subType: "Phù Lục",
+        icon: "talisman",
+        visualKey: "talisman/dich-dung-phu",
+        usage: "Tiêu hao 1 Dịch Dung Phù để lựa chọn lại ngoại hình.",
+        systemBasePrice: 50000,
+        npcBuyPrice: 0,
+        sellableToNpc: false,
+        marketEnabled: false,
+        systemMarketEnabled: true,
+        sectExchangeEnabled: true,
+        sectContributionPrice: 400,
+        donationContributionValue: 0,
+        auctionEligible: false,
+        requiredSectRole: "OUTER"
+      }
+    },
+    create: {
+      key: "dich-dung-phu",
+      name: "Dịch Dung Phù",
+      category: ItemCategory.CONSUMABLE,
+      rarity: Rarity.TRUNG,
+      description: "Một đạo linh phù có thể thay đổi dung mạo và khí chất bên ngoài của tu sĩ.",
+      stackable: true,
+      maxStack: 99,
+      tradeable: false,
+      baseModifiers: { appearanceChange: true },
+      bindRules: {
+        subType: "Phù Lục",
+        icon: "talisman",
+        visualKey: "talisman/dich-dung-phu",
+        usage: "Tiêu hao 1 Dịch Dung Phù để lựa chọn lại ngoại hình.",
+        systemBasePrice: 50000,
+        npcBuyPrice: 0,
+        sellableToNpc: false,
+        marketEnabled: false,
+        systemMarketEnabled: true,
+        sectExchangeEnabled: true,
+        sectContributionPrice: 400,
+        donationContributionValue: 0,
+        auctionEligible: false,
+        requiredSectRole: "OUTER"
+      }
+    }
+  });
 
   await prisma.itemTemplate.upsert({
     where: { key: "linh-thach" },

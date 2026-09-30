@@ -18,3 +18,4 @@ export * from "./sect-contribution.js";
 export * from "./thanh-van-mon.js";
 export * from "./mentorship.js";
 export * from "./world-interactions.js";
+export * from "./world-discovery.js";

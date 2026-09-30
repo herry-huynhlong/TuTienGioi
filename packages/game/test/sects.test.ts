@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { Currency, SectRoleName, WalletTxType } from "@ttg/db";
-import { calculateSectMissionReward, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, previewSectFarmReward, previewSectMineReward, sectFacilityConfig, depositSectCurrency, withdrawSectCurrency } from "../src/sects.js";
+import { calculateSectMissionReward, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, previewSectFarmReward, previewSectMineReward, sectFacilityConfig, depositSectCurrency, exchangeSectAppearanceTalisman, withdrawSectCurrency } from "../src/sects.js";
 
-function fakeSectDb(role: SectRoleName, characterBalance = 10_000n, treasury = 1_000n) {
+function fakeSectDb(role: SectRoleName, characterBalance = 10_000n, treasury = 1_000n, contribution = 0) {
   const state = {
     character: { id: "char_1", linhThach: characterBalance, tienNgoc: 0n },
-    sect: { id: "sect_1", treasury, reputation: 0 },
-    member: { id: "member_1", sectId: "sect_1", characterId: "char_1", role, contribution: 0, weeklyContribution: 0 }
+    sect: { id: "sect_1", tag: "TVM", name: "Thanh Vân Môn", treasury, reputation: 0 },
+    member: { id: "member_1", sectId: "sect_1", characterId: "char_1", role, contribution, weeklyContribution: 0 },
+    item: null as null | { id: string; quantity: number }
   };
   const rows = {
     wallet: [] as unknown[],
@@ -64,6 +65,21 @@ function fakeSectDb(role: SectRoleName, characterBalance = 10_000n, treasury = 1
         return data;
       }
     },
+    itemTemplate: {
+      findUnique: async () => ({ id: "template_1", key: "dich-dung-phu", name: "Dịch Dung Phù", category: "CONSUMABLE", rarity: "TRUNG", tradeable: false, baseModifiers: { appearanceChange: true }, bindRules: { sectContributionPrice: 400 } })
+    },
+    itemInstance: {
+      findFirst: async () => state.item,
+      update: async ({ data }: { data: { quantity: { increment: number } } }) => {
+        if (state.item) state.item.quantity += data.quantity.increment;
+        return state.item;
+      },
+      create: async ({ data }: { data: { quantity: number } }) => {
+        state.item = { id: "item_1", quantity: data.quantity };
+        return state.item;
+      }
+    },
+    gameLog: { create: async ({ data }: { data: unknown }) => data },
     sectLog: {
       create: async ({ data }: { data: unknown }) => {
         rows.logs.push(data);
@@ -160,5 +176,24 @@ describe("sect economy services", () => {
 
     expect(materialPrice).toBeGreaterThan(0);
     expect(equipmentPrice).toBeGreaterThan(materialPrice);
+  });
+
+  it("exchanges Dịch Dung Phù for Thanh Vân contribution", async () => {
+    const fake = fakeSectDb(SectRoleName.OUTER, 0n, 0n, 500);
+
+    const result = await exchangeSectAppearanceTalisman(fake.db as never, "char_1", "once");
+
+    expect(result.contributionCost).toBe(400);
+    expect(fake.state.member.contribution).toBe(100);
+    expect(fake.state.item?.quantity).toBe(1);
+    expect(fake.rows.contribution).toHaveLength(1);
+  });
+
+  it("rejects Dịch Dung Phù exchange when contribution is insufficient", async () => {
+    const fake = fakeSectDb(SectRoleName.OUTER, 0n, 0n, 399);
+
+    await expect(exchangeSectAppearanceTalisman(fake.db as never, "char_1", "short")).rejects.toMatchObject({ code: "INSUFFICIENT_CONTRIBUTION" });
+    expect(fake.state.member.contribution).toBe(399);
+    expect(fake.state.item).toBeNull();
   });
 });

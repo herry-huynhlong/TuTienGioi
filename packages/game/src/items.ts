@@ -43,6 +43,9 @@ export type ProgressionItemDefinition = {
   sectContributionPrice: number;
   systemMarketEnabled: boolean;
   auctionEligible?: boolean;
+  tradeable?: boolean;
+  sellableToNpc?: boolean;
+  marketEnabled?: boolean;
   baseModifiers?: Record<string, number | boolean>;
   requiredRealmOrder?: number;
   requiredSectRank?: number;

@@ -358,6 +358,8 @@ model Character {
   title           String   @default("Tán Tu")
   avatar          String?
   appearanceKey   String?
+  appearanceChosenAt DateTime?
+  appearanceChangeCount Int @default(0)
   gender          String   @default("Ẩn")
   age             Int      @default(16)
   lifespan        Int      @default(100)
@@ -434,6 +436,7 @@ model Character {
   assetTransfersSent AssetTransfer[] @relation("TransferSender")
   assetTransfersRecv AssetTransfer[] @relation("TransferReceiver")
   settings        PlayerSettings?
+  appearanceChanges CharacterAppearanceChange[]
   chatMessages    ChatMessage[]
   logs            GameLog[]
   buffs           CharacterBuff[]
@@ -441,11 +444,28 @@ model Character {
   quests          CharacterQuest[]
   questFlags      CharacterQuestFlag[]
   npcStates       PlayerNpcState[]
+  locationDiscoveries PlayerLocationDiscovery[]
   @@index([realmStageId])
   @@index([sectId])
   @@index([locationId])
   @@index([currentLocationId])
   @@index([cultivation])
+  @@index([appearanceKey])
+}
+
+model CharacterAppearanceChange {
+  id               String   @id @default(cuid())
+  characterId      String
+  character        Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  oldAppearanceKey String?
+  newAppearanceKey String
+  consumedItemId   String?
+  source           String
+  actionKey        String
+  createdAt        DateTime @default(now())
+  @@unique([characterId, actionKey])
+  @@index([characterId, createdAt])
+  @@index([newAppearanceKey])
 }
 
 model Realm {
@@ -662,8 +682,23 @@ model Location {
   npcHomes     Npc[] @relation("NpcHomeLocation")
   npcWorldStates NpcWorldState[]
   worldSeals   WorldSeal[]
+  discoveredBy PlayerLocationDiscovery[]
   @@index([zoneId])
   @@index([securityLevel])
+}
+
+model PlayerLocationDiscovery {
+  id           String    @id @default(cuid())
+  characterId  String
+  character    Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  locationId   String
+  location     Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  discoveredAt DateTime  @default(now())
+  source       String    @default("adjacent")
+
+  @@unique([characterId, locationId])
+  @@index([characterId, discoveredAt])
+  @@index([locationId])
 }
 
 model WorldSeal {

@@ -160,6 +160,7 @@ function ItemDetail({ item, atMarket, teleportDestinations }: { item: InventoryI
   const canSell = item.template.tradeable && !item.bound && !activeListing;
   const economy = getItemEconomy(item.template);
   const canTeleport = usage.effects.some((effect) => effect.type === "TELEPORT") && !activeListing;
+  const canChangeAppearance = usage.effects.some((effect) => effect.type === "CHANGE_APPEARANCE") && !activeListing;
   return (
     <ItemDetailPanel
       template={item.template}
@@ -215,6 +216,9 @@ function ItemDetail({ item, atMarket, teleportDestinations }: { item: InventoryI
             )}
           </form>
         ) : null}
+        {canChangeAppearance ? (
+          <Link href="/game/settings#appearance" className="btn w-full">Đổi ngoại hình</Link>
+        ) : null}
         {canSell && atMarket && economy.sellableToNpc ? (
           <form action={sellItemToNpcAction} className="sell-mode-card">
             <input type="hidden" name="itemId" value={item.id} />
@@ -245,9 +249,10 @@ function describeEffect(effect: { type: string; payload: Record<string, unknown>
     if (effect.payload.effectType === "SPEED_BPS") return "Tăng Speed tạm thời";
   }
   if (effect.type === "BREAKTHROUGH_BONUS") return "Hỗ trợ đột phá";
-  if (effect.type === "ESCAPE") return "Thoát khỏi encounter thường";
+  if (effect.type === "ESCAPE") return "Rút khỏi biến cố thường";
   if (effect.type === "TELEPORT") return "Dịch chuyển tới địa điểm đã biết";
   if (effect.type === "BREAK_SEAL") return `Phá phong ấn cấp ${String(effect.payload.grade ?? 1)}`;
+  if (effect.type === "CHANGE_APPEARANCE") return "Thay đổi ngoại hình nhân vật";
   return effect.type;
 }
 

@@ -10,7 +10,8 @@ type FolderStats = {
 
 const repoRoot = resolve(process.cwd(), "../..");
 const coreUiAssets = {
-  "currency/linh-thach": "apps/web/public/items/currency/linh-thach.webp"
+  "linh-thach": "apps/web/public/items/linh-thach.webp",
+  "talisman/dich-dung-phu": "apps/web/public/items/talisman/dich-dung-phu.webp"
 } as const;
 const byFolder = new Map<string, FolderStats>();
 const missing: Array<{ itemCode: string; itemName: string; targetFile: string; fallbackKey: string }> = [];

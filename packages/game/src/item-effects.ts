@@ -12,6 +12,7 @@ export type ItemEffectType =
   | "ESCAPE"
   | "TELEPORT"
   | "BREAK_SEAL"
+  | "CHANGE_APPEARANCE"
   | "DEPLOY_FORMATION"
   | "EQUIP_ITEM";
 
@@ -175,6 +176,7 @@ function talismanDefinition(template: ItemUsageTemplate, modifiers: Record<strin
   if (numberValue(modifiers, "bindBps") > 0) return locked("Cần mục tiêu trong chiến đấu để phong cấm.", [{ type: "APPLY_DEBUFF", payload: { effectType: "SPEED_BPS", speedBps: -3000, durationTurns: 3 } }], "TARGETED", { combatUsable: true, targetType: "ENEMY", stackRule: "REFRESH_DURATION" });
   if (numberValue(modifiers, "breakSealGrade") > 0) return locked("Cần phong ấn/cấm chế hợp lệ tại location.", [{ type: "BREAK_SEAL", payload: { grade: numberValue(modifiers, "breakSealGrade") } }], "TARGETED", { targetType: "SEAL" });
   if (numberValue(modifiers, "teleportGrade") > 0) return locked("Cần chọn waypoint đã khám phá và hợp lệ.", [{ type: "TELEPORT", payload: { grade: numberValue(modifiers, "teleportGrade") } }], "TARGETED", { outOfCombatUsable: true, targetType: "DESTINATION" });
+  if (boolValue(modifiers, "appearanceChange")) return locked("Dùng tại Cài Đặt để lựa chọn lại ngoại hình nhân vật.", [{ type: "CHANGE_APPEARANCE", payload: { context: "CHARACTER_APPEARANCE" } }], "TARGETED", { outOfCombatUsable: true, targetType: "SELF" });
   return null;
 }
 

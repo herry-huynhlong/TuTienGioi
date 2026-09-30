@@ -1,7 +1,7 @@
 import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { attackEncounterAction, breakSealItemAction, cancelExploreAction, escapeEncounterItemAction, exploreAction, interactWorldObjectAction, leaveEncounterAction, startTravelAction, useCombatItemAction } from "@/lib/forms";
-import { formatLocationKind, formatSecurity, formatService } from "@/lib/format";
+import { formatLocationKind, formatSecurity, formatService } from "@/lib/game-display";
 import { advanceExplorationActivity, currentEnergy, getItemEconomy, getItemUsageDefinition, getNpcsAtLocation, getWorldInteractionsForLocation, locationActivityConfigs, recordOnboardingEvent, travelDurationSeconds } from "@ttg/game";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -91,7 +91,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
     <div className="p-5 lg:p-8">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-xs font-bold uppercase text-jade">Location</p>
+          <p className="text-xs font-bold uppercase text-jade">Địa điểm</p>
           <h1 className="mt-1 text-3xl font-black">{location?.name ?? c.location?.name ?? "Vô định"}</h1>
           <p className="muted mt-2">{location?.zone.region?.name ?? "Chưa rõ địa vực"} · {location?.zone.name ?? "Chưa rõ khu vực"}</p>
         </div>
@@ -203,7 +203,7 @@ function NpcCard({
   npc,
   quests
 }: {
-  npc: { key: string; name: string; title: string; description: string; portraitUrl: string | null; avatarUrl?: string | null; iconKey: string; questStarts: Array<{ id: string }>; questTurnIns: Array<{ id: string }>; playerState?: { timesMet: number; relationshipState: string } | null };
+  npc: { key: string; name: string; title: string; description: string; portraitUrl: string | null; avatarUrl?: string | null; iconKey: string; questStarts: Array<{ id: string }>; questTurnIns: Array<{ id: string }> };
   quests: Array<{ status: string; templateId: string; template: { startNpcId: string | null; turnInNpcId: string | null } }>;
 }) {
   const npcImage = npc.avatarUrl ?? npc.portraitUrl;
@@ -222,7 +222,6 @@ function NpcCard({
         <b>{npc.name}</b>
         <small>{npc.title}</small>
         <p>{npc.description}</p>
-        {npc.playerState && npc.playerState.timesMet > 0 ? <span className="npc-memory-chip">{npc.playerState.relationshipState} · đã gặp {npc.playerState.timesMet} lần</span> : null}
         <Link href={`/game/npc/${npc.key}`} className="btn btn-secondary mt-3 w-full"><MessageCircle size={16} aria-hidden /> Trò chuyện</Link>
       </div>
     </article>
@@ -245,7 +244,7 @@ function getLocationFacilities(services: string[], kind?: string) {
   if (services.includes("auction")) facilities.push({ key: "auction", label: "Đấu giá", description: "Nơi các kỳ vật được đưa lên sàn tranh giá.", disabled: true, icon: <Landmark size={18} aria-hidden /> });
   if (services.includes("caravan")) facilities.push({ key: "caravan", label: "Tiêu cục", description: "Nhận hộ tống hàng hóa qua các tuyến nguy hiểm.", disabled: true, icon: <Route size={18} aria-hidden /> });
   if (services.includes("formation")) facilities.push({ key: "formation", label: "Trận pháp", description: "Bố trí trận bàn, phù văn và các phép bảo hộ.", disabled: true, icon: <Shield size={18} aria-hidden /> });
-  if (kind === "sect_land") facilities.push({ key: "sect", label: "Tông môn", description: "Xem hoặc lập tông môn bằng hệ thống hiện có.", href: "/game/sect", icon: <ScrollText size={18} aria-hidden /> });
+  if (kind === "sect_land") facilities.push({ key: "sect", label: "Tông môn", description: "Xem sơn môn, đệ tử và sự vụ trong tông.", href: "/game/sect", icon: <ScrollText size={18} aria-hidden /> });
   return facilities;
 }
 
@@ -450,7 +449,7 @@ function combatEffectText(effect: { type: string; payload: Record<string, unknow
   if (effect.type === "APPLY_SHIELD") return "Tạo Hộ Thuẫn cho bản thân.";
   if (effect.type === "APPLY_DEBUFF") return "Giảm Thân Pháp mục tiêu.";
   if (effect.type === "BUFF_STAT") return "Tăng chỉ số trong trận.";
-  if (effect.type === "ESCAPE") return "Thoát khỏi encounter thường.";
+  if (effect.type === "ESCAPE") return "Rút khỏi biến cố thường.";
   return "Dùng trong chiến đấu.";
 }
 

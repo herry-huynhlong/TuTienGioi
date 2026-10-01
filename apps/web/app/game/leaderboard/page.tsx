@@ -1,6 +1,6 @@
 import { prisma } from "@ttg/db";
 import { CharacterVisual } from "@/components/CharacterVisual";
-import { getLeaderboardRankVisual } from "@ttg/game";
+import { LeaderboardRow, type LeaderboardTheme } from "@/components/LeaderboardRow";
 
 export default async function LeaderboardPage() {
   const rows = await prisma.character.findMany({
@@ -30,32 +30,24 @@ export default async function LeaderboardPage() {
         <div className="leaderboard-list">
           {rows.map((character, index) => {
             const rank = index + 1;
-            const visual = getLeaderboardRankVisual(rank);
-            const tier = typeof visual.tier === "number" ? visual.tier : "normal";
             const realmName = `${character.realmStage.realm.name} ${character.realmStage.name}`;
             const sectName = character.sect?.name ?? "Tán tu";
+            const theme = getLeaderboardTheme(rank);
+            const avatarSize = getLeaderboardAvatarSize(rank);
 
             return (
-              <article key={character.id} className={`leaderboard-entry ${visual.className}`} data-rank-tier={tier}>
-                <div className="leaderboard-dragon" aria-hidden />
-                <div className="leaderboard-sparks" aria-hidden />
-                <RankEmblem rank={rank} rankClass={visual.rankClass} />
-
-                <div className="leaderboard-person">
-                  <div className={`leaderboard-avatar-frame ${visual.avatarClass}`}>
-                    <CharacterVisual character={character} mode="avatar" size={visual.avatarSize} className="leaderboard-avatar" priority={rank <= 5} />
-                  </div>
-                  <div className="leaderboard-character-name">
-                    <b className={visual.nameClass}>{character.name}</b>
-                    <span>{character.title}</span>
-                  </div>
-                </div>
-
-                <RealmVisual realmName={realmName} />
-                <CultivationOrb value={character.cultivation} />
-                <SectVisual name={sectName} />
-                <ReputationBadge value={character.reputation} />
-              </article>
+              <LeaderboardRow
+                key={character.id}
+                rank={rank}
+                avatar={<CharacterVisual character={character} mode="avatar" size={avatarSize} className="leaderboard-avatar" priority={rank <= 3} />}
+                name={character.name}
+                title={character.title}
+                realm={realmName}
+                cultivation={character.cultivation.toLocaleString("vi-VN")}
+                sect={sectName}
+                fame={character.reputation.toLocaleString("vi-VN")}
+                theme={theme}
+              />
             );
           })}
         </div>
@@ -64,59 +56,19 @@ export default async function LeaderboardPage() {
   );
 }
 
-function RankEmblem({ rank, rankClass }: { rank: number; rankClass: string }) {
-  return (
-    <div className="leaderboard-rank-cell" aria-label={`Hạng ${rank}`}>
-      <div className={`leaderboard-rank-emblem ${rankClass}`}>
-        <span className="rank-wing rank-wing-left" aria-hidden />
-        <span className="rank-wing rank-wing-right" aria-hidden />
-        <span className="rank-ring" aria-hidden />
-        <b>{rank}</b>
-      </div>
-    </div>
-  );
+function getLeaderboardTheme(rank: number): LeaderboardTheme {
+  if (rank === 1) return "gold";
+  if (rank === 2) return "frost";
+  if (rank === 3) return "ember";
+  if (rank <= 5) return "jade";
+  if (rank <= 10) return "violet";
+  return "normal";
 }
 
-function RealmVisual({ realmName }: { realmName: string }) {
-  return (
-    <div className="leaderboard-realm-block">
-      <svg className="realm-dragon-mark" viewBox="0 0 120 46" aria-hidden>
-        <path d="M12 28c18-24 38 3 54-17 12-15 31-5 39 5-16-3-20 8-35 15-22 10-35-11-58-3Z" />
-        <path d="M83 14c9 1 17 5 23 12-11-4-21-2-30 5 4-7 6-12 7-17Z" />
-      </svg>
-      <span>{realmName}</span>
-    </div>
-  );
-}
-
-function CultivationOrb({ value }: { value: bigint }) {
-  return (
-    <div className="leaderboard-orb" aria-label={`Tu vi ${value.toLocaleString("vi-VN")}`}>
-      <span className="orb-ring" aria-hidden />
-      <strong>{value.toLocaleString("vi-VN")}</strong>
-    </div>
-  );
-}
-
-function SectVisual({ name }: { name: string }) {
-  return (
-    <div className="leaderboard-sect">
-      <svg viewBox="0 0 60 46" aria-hidden>
-        <path d="M8 37h44v5H8z" />
-        <path d="M14 24h32v13H14z" />
-        <path d="M30 6 6 23h48L30 6Z" />
-        <path d="M20 37V25m20 12V25" />
-      </svg>
-      <span>{name}</span>
-    </div>
-  );
-}
-
-function ReputationBadge({ value }: { value: number }) {
-  return (
-    <div className="leaderboard-reputation" aria-label={`Danh vọng ${value.toLocaleString("vi-VN")}`}>
-      <span aria-hidden />
-      <strong>{value.toLocaleString("vi-VN")}</strong>
-    </div>
-  );
+function getLeaderboardAvatarSize(rank: number) {
+  if (rank === 1) return 64;
+  if (rank === 2) return 58;
+  if (rank === 3) return 54;
+  if (rank <= 10) return 48;
+  return 38;
 }

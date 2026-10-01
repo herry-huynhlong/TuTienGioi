@@ -18,6 +18,12 @@ export function LeaderboardRow({ rank, avatar, name, realm, cultivation, sect, f
   return (
     <article className="leaderboard-row" data-theme={theme} data-top-rank={rank <= 10 ? "true" : "false"}>
       <div className="leaderboard-row-environment" aria-hidden>
+        <span className="leaderboard-vfx-frame" />
+        <span className="leaderboard-left-bloom" />
+        <span className="leaderboard-right-sanctum" />
+        <span className="leaderboard-aura-trail leaderboard-aura-trail-a" />
+        <span className="leaderboard-aura-trail leaderboard-aura-trail-b" />
+        <span className="leaderboard-aura-trail leaderboard-aura-trail-c" />
         <span className="leaderboard-cloud leaderboard-cloud-a" />
         <span className="leaderboard-cloud leaderboard-cloud-b" />
         <span className="leaderboard-light-sweep" />
@@ -42,7 +48,6 @@ export function LeaderboardRow({ rank, avatar, name, realm, cultivation, sect, f
       </div>
 
       <div className="leaderboard-row-realm">
-        <span className="leaderboard-field-label">Cảnh giới</span>
         <strong>{realm}</strong>
       </div>
 
@@ -71,15 +76,17 @@ function DecorativeCreature({ theme }: { theme: LeaderboardTheme }) {
     <svg className="leaderboard-creature" viewBox="0 0 420 150" aria-hidden>
       {isPhoenix ? (
         <>
-          <path d="M48 92c54-37 94-9 129-55 31 41 74 39 122 17-25 29-42 53-44 76-24-28-53-39-85-27-39 14-75 3-122-11Z" />
-          <path d="M166 40c-12-15-19-26-21-35 31 9 54 27 69 55" />
-          <path d="M213 62c32-13 61-16 87-9-27 9-49 24-66 45" />
+          <path d="M33 100c58-43 100-19 139-63 24 24 55 35 97 23-20 19-36 37-44 58-26-24-54-30-86-17-37 14-67 8-106-1Z" />
+          <path d="M128 77c-37-24-70-22-103-4 33-39 81-40 139-15" />
+          <path d="M204 62c55-30 100-28 146-3-45 1-77 18-101 55" />
+          <path d="M170 38c-15-20-23-34-25-47 34 12 62 34 84 71" />
         </>
       ) : (
         <>
-          <path d="M34 94c49-72 108 30 172-37 45-46 113-17 153 24-54-19-88 3-126 33-62 49-113-43-199-20Z" />
-          <path d="M281 51c28 5 55 19 75 43-34-14-61-8-91 17 12-22 16-42 16-60Z" />
-          <path d="M93 66c20-11 37-10 51 3M174 79c21 10 42 8 63-9M258 38l25-26 2 35" />
+          <path d="M28 96c47-66 101 22 162-38 48-47 121-21 164 23-54-18-90 3-129 35-62 51-112-41-197-20Z" />
+          <path d="M270 49c34 4 64 20 88 48-39-18-70-10-101 18 12-24 16-45 13-66Z" />
+          <path d="M84 68c23-14 43-13 60 2M169 82c25 10 48 6 70-13M251 40l29-31 4 40" />
+          <path d="M207 58c20-23 44-30 72-20" />
         </>
       )}
     </svg>

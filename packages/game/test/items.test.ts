@@ -35,12 +35,14 @@ describe("item progression economy", () => {
     }
   });
 
-  it("enables system market stock only for low and mid grade baseline items", () => {
+  it("keeps baseline rare materials out of direct sale but stocks shop-grade rarities", () => {
     expect(progressionItemCatalog.filter((item) => item.rarity === "HA").every((item) => item.systemMarketEnabled)).toBe(true);
     expect(progressionItemCatalog.filter((item) => item.rarity === "TRUNG").every((item) => item.systemMarketEnabled)).toBe(true);
     expect(progressionItemCatalog.filter((item) => item.rarity === "THUONG").every((item) => !item.systemMarketEnabled)).toBe(true);
     expect(stockForSystemMarketItem("thanh-linh-thao", "HA", new Date("2026-09-28T00:00:00Z"))).toBeGreaterThanOrEqual(20);
-    expect(stockForSystemMarketItem("huyen-tinh", "THUONG", new Date("2026-09-28T00:00:00Z"))).toBe(0);
+    expect(stockForSystemMarketItem("tu-dien-kiem", "THUONG", new Date("2026-09-28T00:00:00Z"))).toBeGreaterThanOrEqual(3);
+    expect(stockForSystemMarketItem("tu-dien-kiem", "THUONG", new Date("2026-09-28T00:00:00Z"))).toBeLessThanOrEqual(12);
+    expect(stockForSystemMarketItem("thien-cuong-kiem", "CUC", new Date("2026-09-28T00:00:00Z"))).toBe(0);
   });
 
   it("prices sect exchange above donation value to avoid obvious arbitrage", () => {

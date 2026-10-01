@@ -67,6 +67,43 @@ function professionMaterialSubType(key: string, icon: string) {
   return "Nguyên Liệu Nghề";
 }
 
+const equipmentPriceProfile: Record<string, { base: number; stat: number }> = {
+  PHAM: { base: 180, stat: 14 },
+  HA: { base: 620, stat: 24 },
+  TRUNG: { base: 1450, stat: 42 },
+  THUONG: { base: 4200, stat: 70 },
+  CUC: { base: 18000, stat: 180 },
+  HOANG: { base: 26000, stat: 220 },
+  HUYEN: { base: 36000, stat: 280 },
+  DIA: { base: 50000, stat: 340 },
+  THIEN: { base: 65000, stat: 420 },
+  TIEN: { base: 85000, stat: 500 }
+};
+
+function equipmentModifierScore(modifiers: Record<string, unknown>) {
+  return Object.entries(modifiers).reduce((score, [key, value]) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return score;
+    const amount = Math.abs(value);
+    if (key === "maxHp" || key === "maxQi" || key === "hp" || key === "qi") return score + amount / 5;
+    if (key.endsWith("Bps")) return score + amount / 100;
+    return score + amount;
+  }, 0);
+}
+
+function roundEquipmentPrice(value: number) {
+  if (value >= 10000) return Math.ceil(value / 100) * 100;
+  return Math.ceil(value / 10) * 10;
+}
+
+function equipmentSystemBasePrice(rarity: Rarity, modifiers: Record<string, unknown>) {
+  const profile = equipmentPriceProfile[rarity] ?? equipmentPriceProfile.TIEN;
+  return roundEquipmentPrice(profile.base + equipmentModifierScore(modifiers) * profile.stat);
+}
+
+function isVanBaoLauEquipmentRarity(rarity: Rarity) {
+  return rarity === Rarity.HA || rarity === Rarity.TRUNG || rarity === Rarity.THUONG;
+}
+
 const realms = [
   "Phàm Nhân",
   "Luyện Khí",
@@ -1152,13 +1189,27 @@ async function main() {
     ["giay-than-hanh", "Giày Thần Hành", "BOOTS", { speed: 8 }]
   ] as const;
   for (const [key, name, slot, mods] of equipment) {
-    const systemBasePrice = 180 + Object.values(mods).reduce((sum, value) => sum + value * 5, 0);
+    const rarity = Rarity.TRUNG;
+    const systemBasePrice = equipmentSystemBasePrice(rarity, mods);
     const icon = slot === "ARMOR" ? "armor" : slot === "BOOTS" ? "boots" : slot === "RING" ? "ring" : slot === "TALISMAN" ? "talisman" : "sword";
-    const bindRules = { subType: slot, icon, visualKey: itemVisualKey(key, "EQUIPMENT", icon, slot), systemBasePrice, npcBuyPrice: Math.floor(systemBasePrice * 0.7), sellableToNpc: true, usage: `${name} có thể trang bị để tăng chỉ số.` };
+    const bindRules = {
+      subType: slot,
+      icon,
+      visualKey: itemVisualKey(key, "EQUIPMENT", icon, slot),
+      systemBasePrice,
+      npcBuyPrice: Math.floor(systemBasePrice * 0.7),
+      sellableToNpc: true,
+      marketEnabled: true,
+      systemMarketEnabled: isVanBaoLauEquipmentRarity(rarity),
+      sectExchangeEnabled: true,
+      sectContributionPrice: Math.max(100, Math.floor(systemBasePrice * 0.45)),
+      donationContributionValue: Math.max(1, Math.floor(systemBasePrice * 0.15)),
+      usage: `${name} có thể trang bị để tăng chỉ số.`
+    };
     await prisma.itemTemplate.upsert({
       where: { key },
-      update: { bindRules },
-      create: { key, name, category: ItemCategory.EQUIPMENT, rarity: Rarity.TRUNG, description: `${name} có thể trang bị.`, equipSlot: slot as never, baseModifiers: mods, durability: undefined, bindRules } as never
+      update: { name, category: ItemCategory.EQUIPMENT, rarity, description: `${name} có thể trang bị.`, stackable: false, maxStack: 1, tradeable: true, equipSlot: slot as never, baseModifiers: mods, bindRules },
+      create: { key, name, category: ItemCategory.EQUIPMENT, rarity, description: `${name} có thể trang bị.`, stackable: false, maxStack: 1, tradeable: true, equipSlot: slot as never, baseModifiers: mods, durability: undefined, bindRules } as never
     });
   }
   for (const [key, name, mods] of [
@@ -1208,7 +1259,9 @@ async function main() {
       stackable: recipe.category !== "EQUIPMENT",
       equipSlot: recipe.equipSlot as EquipmentSlot | undefined,
       modifiers: recipe.modifiers ?? {},
-      price: Math.max(10, recipe.fee * 2)
+      price: recipe.category === "EQUIPMENT"
+        ? equipmentSystemBasePrice(rarity, recipe.modifiers ?? {})
+        : Math.max(10, recipe.fee * 2)
     });
     for (const ingredient of recipe.ingredients) {
       if (allRecipeItems.has(ingredient.key)) continue;
@@ -1230,6 +1283,9 @@ async function main() {
 
   for (const item of allRecipeItems.values()) {
     if (item.key === "linh-thach") continue;
+    const systemMarketEnabled = item.category === ItemCategory.MATERIAL
+      ? item.rarity !== Rarity.TIEN
+      : item.category === ItemCategory.EQUIPMENT && isVanBaoLauEquipmentRarity(item.rarity);
     const bindRules = {
       subType: item.subType,
       icon: item.icon,
@@ -1239,7 +1295,7 @@ async function main() {
       npcBuyPrice: Math.floor(item.price * 0.7),
       sellableToNpc: true,
       marketEnabled: true,
-      systemMarketEnabled: item.category === ItemCategory.MATERIAL && item.rarity !== Rarity.TIEN,
+      systemMarketEnabled,
       sectExchangeEnabled: true,
       sectContributionPrice: Math.max(1, Math.floor(item.price * 0.4)),
       donationContributionValue: Math.max(1, Math.floor(item.price * 0.15))

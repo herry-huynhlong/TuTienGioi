@@ -59,9 +59,15 @@ export const marketConfig = {
   buyMultiplierBps: 10000n,
   sellMultiplierBps: sellPriceBps,
   stockByRarity: {
-    HA: { min: 20, max: 100 },
-    TRUNG: { min: 5, max: 30 },
-    THUONG: { min: 0, max: 0 },
+    PHAM: { min: 30, max: 120 },
+    HA: { min: 18, max: 60 },
+    TRUNG: { min: 10, max: 34 },
+    THUONG: { min: 3, max: 12 },
+    CUC: { min: 0, max: 0 },
+    HOANG: { min: 0, max: 0 },
+    HUYEN: { min: 0, max: 0 },
+    DIA: { min: 0, max: 0 },
+    THIEN: { min: 0, max: 0 },
     TIEN: { min: 0, max: 0 }
   }
 } as const;
@@ -317,7 +323,7 @@ export function currentSystemMarketPeriod(now = new Date()) {
 }
 
 export function stockForSystemMarketItem(key: string, rarity: Rarity | string, now = new Date()) {
-  const config = marketConfig.stockByRarity[String(rarity) as keyof typeof marketConfig.stockByRarity] ?? marketConfig.stockByRarity.THUONG;
+  const config = marketConfig.stockByRarity[String(rarity) as keyof typeof marketConfig.stockByRarity] ?? { min: 0, max: 0 };
   if (config.max <= 0) return 0;
   const seed = [...`${currentSystemMarketPeriod(now)}:${key}`].reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return config.min + (seed % (config.max - config.min + 1));

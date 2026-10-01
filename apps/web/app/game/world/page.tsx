@@ -34,6 +34,33 @@ import {
 type DiscoveryState = "current" | "reachable" | "known_unreachable" | "locked" | "unknown";
 type QuickFeatureKey = "character" | "market" | "bestiary" | "sect";
 type QuickLink = { label: string; href: string; featureKey?: QuickFeatureKey };
+type WorldMapLocation = {
+  id: string;
+  key: string;
+  name: string;
+  kind: string;
+  services: string[];
+  minimumRealmOrder: number;
+  zone: { id: string; key: string; name: string };
+  routesFrom: Array<{
+    id: string;
+    destinationId: string;
+    travelMinutes: number;
+    travelCost: bigint;
+    dangerLevel: number;
+    minimumRealmOrder: number;
+    destination: { id: string; key: string; name: string };
+  }>;
+};
+type MapNode = WorldMapLocation & {
+  index: number;
+  state: DiscoveryState;
+  selected: boolean;
+  visible: boolean;
+  x: number;
+  y: number;
+  missionCount: number;
+};
 
 const publicKnownLocationKeys = new Set<string>(defaultKnownLocationKeys);
 
@@ -70,6 +97,39 @@ const locationIcons: Record<string, LucideIcon> = {
   outpost: Castle,
   ruin: Landmark,
   city_hub: Landmark
+};
+
+const locationIconGlyphs: Record<string, string> = {
+  district: "⌂",
+  market: "◇",
+  gate: "⌁",
+  road: "↝",
+  wilds: "✦",
+  forest: "♣",
+  mountain: "△",
+  river: "≈",
+  valley: "▽",
+  sect_land: "✧",
+  sect_gate: "門",
+  sect_outer: "外",
+  sect_inner: "内",
+  sect_hall: "殿",
+  library: "書",
+  alchemy_hall: "丹",
+  forging_hall: "器",
+  formation_hall: "陣",
+  mission_hall: "令",
+  spirit_testing: "靈",
+  spirit_farm: "田",
+  spirit_mine: "礦",
+  training_ground: "武",
+  cave_district: "洞",
+  back_mountain: "山",
+  harbor: "⚓",
+  resource: "◆",
+  outpost: "▣",
+  ruin: "✶",
+  city_hub: "◎"
 };
 
 const serviceIcons: Record<string, LucideIcon> = {
@@ -193,6 +253,17 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
     if (!locationId) continue;
     sectMissionByLocation.set(locationId, [...(sectMissionByLocation.get(locationId) ?? []), mission]);
   }
+  const mapNodes = buildMapNodes({
+    locations: allLocations,
+    zones,
+    currentLocationId,
+    knownLocationIds,
+    routeByDestinationId,
+    relevantUnknownIds,
+    currentRealmOrder,
+    selectedLocationId: selectedLocation?.id ?? null,
+    missionCounts: new Map([...sectMissionByLocation.entries()].map(([locationId, missions]) => [locationId, missions.length]))
+  });
 
   return (
     <div className="world-directory-page p-5 lg:p-8">
@@ -217,36 +288,14 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
       {activeRegion ? (
         <section className="world-directory-layout mt-5">
           <div className="world-directory-panel">
-            <div className="directory-title">
-              <span>Bản đồ / Địa điểm</span>
-              <small>{activeRegion.name}</small>
-            </div>
-            <div className="directory-areas">
-              {zones.map((zone) => (
-                <section key={zone.id} className="directory-area">
-                  <h2>{zone.name}</h2>
-                  <div className="directory-location-grid">
-                    {[...zone.locations]
-                      .sort((a, b) => (locationOrder[a.key] ?? 999) - (locationOrder[b.key] ?? 999) || a.name.localeCompare(b.name))
-                      .map((location) => {
-                        const state = getLocationState(location, currentLocationId, knownLocationIds, routeByDestinationId, currentRealmOrder);
-                        return (
-                          <LocationRow
-                            key={location.id}
-                            activeRegionKey={activeRegion.key}
-                            location={location}
-                            selected={selectedLocation?.id === location.id}
-                            state={state}
-                            knownLocationIds={knownLocationIds}
-                            relevantUnknownIds={relevantUnknownIds}
-                            missionCount={sectMissionByLocation.get(location.id)?.length ?? 0}
-                          />
-                        );
-                      })}
-                  </div>
-                </section>
-              ))}
-            </div>
+            <WorldMapCanvas
+              activeRegionKey={activeRegion.key}
+              activeRegionName={activeRegion.name}
+              nodes={mapNodes}
+              knownLocationIds={knownLocationIds}
+              currentRealmOrder={currentRealmOrder}
+              currentLocationId={currentLocationId}
+            />
           </div>
 
           <aside className="world-side-panel">
@@ -310,49 +359,171 @@ function getLocationState(
   return "unknown";
 }
 
-function LocationRow({
-  activeRegionKey,
-  location,
-  selected,
-  state,
+function buildMapNodes({
+  locations,
+  zones,
+  currentLocationId,
   knownLocationIds,
+  routeByDestinationId,
   relevantUnknownIds,
-  missionCount
+  currentRealmOrder,
+  selectedLocationId,
+  missionCounts
 }: {
-  activeRegionKey: string;
-  location: { id: string; key: string; name: string; kind: string; services: string[]; routesFrom: Array<{ destinationId: string; destination: { name: string } }> };
-  selected: boolean;
-  state: DiscoveryState;
+  locations: WorldMapLocation[];
+  zones: Array<{ id: string; key: string; name: string }>;
+  currentLocationId: string | null;
   knownLocationIds: Set<string>;
+  routeByDestinationId: Map<string, { minimumRealmOrder: number }>;
   relevantUnknownIds: Set<string>;
-  missionCount: number;
-}) {
-  if (state === "unknown") {
-    if (!relevantUnknownIds.has(location.id)) return null;
-    return (
-      <div className="directory-location-row directory-location-unknown" title="Bạn chưa biết nơi này.">
-        <span className="directory-location-icon"><HelpCircle size={15} aria-hidden /></span>
-        <span className="directory-location-name">???<small>Phía xa dường như còn một con đường chưa rõ.</small></span>
-      </div>
-    );
+  currentRealmOrder: number;
+  selectedLocationId: string | null;
+  missionCounts: Map<string, number>;
+}): MapNode[] {
+  const zoneIndex = new Map(zones.map((zone, index) => [zone.id, index]));
+  const locationsByZone = new Map<string, WorldMapLocation[]>();
+  for (const location of locations) {
+    const list = locationsByZone.get(location.zone.id) ?? [];
+    list.push(location);
+    locationsByZone.set(location.zone.id, list);
+  }
+  for (const list of locationsByZone.values()) {
+    list.sort((a, b) => (locationOrder[a.key] ?? 999) - (locationOrder[b.key] ?? 999) || a.name.localeCompare(b.name));
   }
 
-  const Icon = state === "locked" ? Lock : state === "current" ? MapPin : locationIcons[location.kind] ?? MapPin;
-  const outgoing = location.routesFrom.map((route) => knownLocationIds.has(route.destinationId) ? route.destination.name : "???").slice(0, 3);
+  return locations.map((location) => {
+    const state = getLocationState(location, currentLocationId, knownLocationIds, routeByDestinationId, currentRealmOrder);
+    const visible = state !== "unknown" || relevantUnknownIds.has(location.id);
+    const zoneOrder = zoneIndex.get(location.zone.id) ?? 0;
+    const zoneLocations = locationsByZone.get(location.zone.id) ?? [];
+    const localIndex = Math.max(0, zoneLocations.findIndex((entry) => entry.id === location.id));
+    const rowCount = Math.max(1, zones.length);
+    const rowHeight = 72 / rowCount;
+    const yBase = 16 + rowHeight * zoneOrder;
+    const localSpread = zoneLocations.length <= 1 ? 0.5 : localIndex / (zoneLocations.length - 1);
+    const wave = Math.sin((localIndex + zoneOrder) * 1.6) * 5;
+    const x = Math.max(6, Math.min(94, 10 + localSpread * 78 + (zoneOrder % 2) * 5));
+    const y = Math.max(8, Math.min(92, yBase + rowHeight * 0.42 + wave));
+    return {
+      ...location,
+      index: localIndex + 1,
+      state,
+      selected: selectedLocationId === location.id,
+      visible,
+      x,
+      y,
+      missionCount: missionCounts.get(location.id) ?? 0
+    };
+  });
+}
+
+function WorldMapCanvas({
+  activeRegionKey,
+  activeRegionName,
+  nodes,
+  knownLocationIds,
+  currentRealmOrder,
+  currentLocationId
+}: {
+  activeRegionKey: string;
+  activeRegionName: string;
+  nodes: MapNode[];
+  knownLocationIds: Set<string>;
+  currentRealmOrder: number;
+  currentLocationId: string | null;
+}) {
+  const visibleNodes = nodes.filter((node) => node.visible);
+  const nodeById = new Map(visibleNodes.map((node) => [node.id, node]));
+  const routes = visibleNodes.flatMap((origin) => origin.routesFrom.flatMap((route) => {
+    const destination = nodeById.get(route.destinationId);
+    if (!destination) return [];
+    const destinationKnown = knownLocationIds.has(destination.id);
+    const originKnown = knownLocationIds.has(origin.id);
+    if (!originKnown && !destinationKnown) return [];
+    return [{ route, origin, destination, destinationKnown }];
+  }));
   return (
-    <Link
-      href={`/game/world?region=${activeRegionKey}&location=${location.key}`}
-      className={`directory-location-row directory-location-${state} ${selected ? "selected" : ""}`}
-    >
-      <span className="directory-location-icon"><Icon size={15} aria-hidden /></span>
-      <span className="directory-location-name">
-        {location.name}
-        <small>{formatLocationKind(location.kind)}{location.services.length ? ` · ${location.services.slice(0, 2).map(formatService).join(", ")}` : ""}</small>
-        {outgoing.length > 0 ? <small>Có thể đi tới: {outgoing.join(" · ")}</small> : null}
+    <div className="world-map-shell">
+      <div className="world-map-title">
+        <div>
+          <span>Bản đồ địa vực</span>
+          <b>{activeRegionName}</b>
+        </div>
+        <small>{visibleNodes.length} điểm đã ghi nhận</small>
+      </div>
+      <div className="world-map-viewport">
+        <div className="world-map-canvas" role="img" aria-label={`Bản đồ ${activeRegionName}`}>
+          <div className="world-map-bg" />
+          <svg className="world-route-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+            <defs>
+              <linearGradient id="worldRouteKnown" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(40, 221, 202, 0.25)" />
+                <stop offset="50%" stopColor="rgba(104, 255, 236, 0.9)" />
+                <stop offset="100%" stopColor="rgba(220, 190, 91, 0.45)" />
+              </linearGradient>
+            </defs>
+            {routes.map(({ route, origin, destination, destinationKnown }) => {
+              const direct = origin.id === currentLocationId && destination.state !== "locked" && route.minimumRealmOrder <= currentRealmOrder;
+              const path = routePath(origin, destination);
+              return (
+                <path
+                  key={route.id}
+                  d={path}
+                  className={`world-route-path ${direct ? "direct" : ""} ${destinationKnown ? "known" : "mystery"}`}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+          </svg>
+          {visibleNodes.map((node) => (
+            <MapMarker key={node.id} node={node} activeRegionKey={activeRegionKey} />
+          ))}
+        </div>
+      </div>
+      <div className="world-map-legend">
+        <span><i className="legend-dot current" /> Hiện tại</span>
+        <span><i className="legend-dot reachable" /> Đi được</span>
+        <span><i className="legend-dot known" /> Đã biết</span>
+        <span><i className="legend-dot unknown" /> Chưa khám phá</span>
+      </div>
+    </div>
+  );
+}
+
+function routePath(origin: { x: number; y: number }, destination: { x: number; y: number }) {
+  const dx = destination.x - origin.x;
+  const dy = destination.y - origin.y;
+  const curve = Math.max(-10, Math.min(10, dx * 0.12 + dy * 0.18));
+  const cx = (origin.x + destination.x) / 2 + curve;
+  const cy = (origin.y + destination.y) / 2 - curve;
+  return `M ${origin.x.toFixed(2)} ${origin.y.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${destination.x.toFixed(2)} ${destination.y.toFixed(2)}`;
+}
+
+function MapMarker({ node, activeRegionKey }: { node: MapNode; activeRegionKey: string }) {
+  const known = node.state !== "unknown";
+  const glyph = known ? locationIconGlyphs[node.kind] ?? String(node.index) : "?";
+  const className = `world-map-marker ${node.state} ${node.selected ? "selected" : ""}`;
+  const style = { left: `${node.x}%`, top: `${node.y}%` };
+  const label = known ? node.name : "???";
+  const meta = known
+    ? `${formatLocationKind(node.kind)}${node.services.length ? ` · ${node.services.slice(0, 2).map(formatService).join(", ")}` : ""}`
+    : "Chưa khám phá";
+  const content = (
+    <>
+      <span className="marker-pin"><b>{glyph}</b></span>
+      <span className="marker-label">
+        <b>{label}</b>
+        <small>{node.state === "current" ? "Hiện tại" : node.state === "reachable" ? "Có thể đi tới" : meta}</small>
       </span>
-      {state === "current" ? <small className="directory-location-status">Hiện tại</small> : null}
-      {state === "locked" ? <small className="directory-location-status">Khóa</small> : null}
-      {missionCount > 0 ? <small className="directory-location-status">Nhiệm vụ</small> : null}
+      {node.missionCount > 0 && known ? <em>{node.missionCount}</em> : null}
+    </>
+  );
+  if (!known) {
+    return <div className={className} style={style} title="Bạn chưa biết nơi này.">{content}</div>;
+  }
+  return (
+    <Link href={`/game/world?region=${activeRegionKey}&location=${node.key}`} className={className} style={style}>
+      {content}
     </Link>
   );
 }

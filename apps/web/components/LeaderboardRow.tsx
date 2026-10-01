@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { getLeaderboardCinematic } from "@/lib/leaderboardCinematics";
+import { getLeaderboardWing } from "@/lib/leaderboardWings";
 import { CinematicBackground } from "./CinematicBackground";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
@@ -10,7 +11,7 @@ export type LeaderboardEntry = {
   name: string;
   realm: string;
   cultivation: string;
-  sect: string;
+  sect: { type: "sect"; name: string } | { type: "independent" };
   fame: string;
   title?: string | null;
   theme: LeaderboardTheme;
@@ -26,6 +27,7 @@ export function LeaderboardHeroCard(props: LeaderboardEntry) {
       <BorderFXLayer />
 
       <div className="lb-hero-character-layer">
+        <WingCinematicLayer rank={props.rank} theme={props.theme} />
         <RankMedallion rank={props.rank} hero />
         <CharacterPortrait avatar={props.avatar} hero />
         <div className="lb-hero-nameplate">
@@ -43,7 +45,7 @@ export function LeaderboardHeroCard(props: LeaderboardEntry) {
 
       <div className="lb-hero-stat-layer">
         <CultivationStat value={props.cultivation} hero />
-        <SectCrest name={props.sect} hero />
+        <SectCrest sect={props.sect} hero />
         <div className="lb-fame-seal">
           <span>Danh vọng</span>
           <strong>{props.fame}</strong>
@@ -80,8 +82,8 @@ export function LeaderboardCompactCard(props: LeaderboardEntry) {
           <strong>{props.cultivation}</strong>
         </div>
         <div>
-          <span>Tông môn</span>
-          <strong>{props.sect}</strong>
+          <span>{props.sect.type === "sect" ? "Tông môn" : ""}</span>
+          <strong>{props.sect.type === "sect" ? props.sect.name : "Tán tu"}</strong>
         </div>
         <div>
           <span>Danh vọng</span>
@@ -131,6 +133,24 @@ function CinematicSceneLayer({ theme, rank }: { theme: LeaderboardTheme; rank: n
       <span className="lb-cinematic-fallback" />
       <span className="lb-cinematic-depth lb-cinematic-depth-a" />
       <span className="lb-cinematic-depth lb-cinematic-depth-b" />
+    </div>
+  );
+}
+
+function WingCinematicLayer({ theme, rank }: { theme: LeaderboardTheme; rank: number }) {
+  const wing = getLeaderboardWing(rank, theme);
+  if (!wing) return null;
+
+  return (
+    <div className="lb-wing-layer" data-wing-theme={wing.theme} data-wing-rank={rank} aria-hidden>
+      <CinematicBackground
+        webm={wing.webm}
+        mp4={wing.mp4}
+        poster={wing.poster}
+        label={wing.label}
+        missingLabel={`MISSING: ${wing.webm}`}
+        preload={wing.preload}
+      />
     </div>
   );
 }
@@ -192,14 +212,25 @@ function CultivationStat({ value, hero = false }: { value: string; hero?: boolea
   );
 }
 
-function SectCrest({ name, hero = false }: { name: string; hero?: boolean }) {
+function SectCrest({ sect, hero = false }: { sect: LeaderboardEntry["sect"]; hero?: boolean }) {
+  const isSect = sect.type === "sect";
   return (
-    <div className={hero ? "lb-sect-crest lb-sect-crest-hero" : "lb-sect-crest"}>
+    <div className={hero ? "lb-sect-crest lb-sect-crest-hero" : "lb-sect-crest"} data-sect-type={sect.type}>
       <svg viewBox="0 0 72 72" aria-hidden>
-        <path d="M36 6 57 18v22c0 14-8 23-21 28C23 63 15 54 15 40V18L36 6Z" />
-        <path d="M25 31h22M29 24h14M24 45h24M30 31v14M42 31v14M36 18v31" />
+        {isSect ? (
+          <>
+            <path d="M36 6 57 18v22c0 14-8 23-21 28C23 63 15 54 15 40V18L36 6Z" />
+            <path d="M25 31h22M29 24h14M24 45h24M30 31v14M42 31v14M36 18v31" />
+          </>
+        ) : (
+          <>
+            <path d="M36 8c8 8 12 17 12 27 0 13-8 24-12 29-4-5-12-16-12-29 0-10 4-19 12-27Z" />
+            <path d="M22 46c7-3 12-3 14 3 2-6 7-6 14-3M28 25c4 4 12 4 16 0" />
+          </>
+        )}
       </svg>
-      <strong>{name}</strong>
+      <span>{isSect ? "Tông môn" : ""}</span>
+      <strong>{isSect ? sect.name : "Tán tu"}</strong>
     </div>
   );
 }

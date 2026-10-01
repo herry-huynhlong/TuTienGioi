@@ -5953,6 +5953,7 @@ select.field option {
 .lb-background-layer,
 .lb-environment-layer,
 .lb-cinematic-layer,
+.lb-wing-layer,
 .lb-particle-layer,
 .lb-border-fx-layer,
 .lb-foreground-layer,
@@ -6335,11 +6336,68 @@ select.field option {
 }
 
 .lb-hero-character-layer {
+  position: relative;
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
   gap: clamp(0.85rem, 1.5vw, 1.25rem);
   min-width: 0;
+}
+
+.lb-wing-layer {
+  left: clamp(5.1rem, 8.6vw, 7.6rem);
+  top: 50%;
+  z-index: 0;
+  width: min(24rem, 36vw);
+  height: 13.2rem;
+  overflow: visible;
+  transform: translate(-50%, -50%);
+}
+
+.lb-wing-layer[data-wing-rank="1"] {
+  width: min(28rem, 40vw);
+  height: 15.4rem;
+}
+
+.lb-wing-layer[data-wing-rank="2"] {
+  width: min(24.5rem, 36vw);
+  height: 13.4rem;
+  opacity: 0.92;
+}
+
+.lb-wing-layer[data-wing-rank="3"] {
+  width: min(22rem, 33vw);
+  height: 12.2rem;
+  opacity: 0.86;
+}
+
+.lb-wing-layer .lb-cinematic-video,
+.lb-wing-layer .lb-cinematic-poster {
+  object-fit: contain;
+  opacity: 1;
+  mix-blend-mode: screen;
+  filter: saturate(1.16) contrast(1.08) brightness(1.05);
+}
+
+.lb-wing-layer[data-wing-rank="1"] .lb-cinematic-video,
+.lb-wing-layer[data-wing-rank="1"] .lb-cinematic-poster {
+  filter: saturate(1.24) contrast(1.1) brightness(1.14) drop-shadow(0 0 18px rgba(255, 218, 94, 0.34));
+}
+
+.lb-wing-layer[data-wing-rank="2"] .lb-cinematic-video,
+.lb-wing-layer[data-wing-rank="2"] .lb-cinematic-poster {
+  filter: saturate(1.14) contrast(1.06) brightness(1.06) drop-shadow(0 0 14px rgba(114, 202, 255, 0.26));
+}
+
+.lb-wing-layer[data-wing-rank="3"] .lb-cinematic-video,
+.lb-wing-layer[data-wing-rank="3"] .lb-cinematic-poster {
+  filter: saturate(1.18) contrast(1.08) brightness(1.05) drop-shadow(0 0 14px rgba(242, 122, 48, 0.24));
+}
+
+.lb-rank-medallion,
+.lb-character-portrait,
+.lb-hero-nameplate {
+  z-index: 2;
 }
 
 .lb-rank-medallion {
@@ -6521,18 +6579,17 @@ select.field option {
 }
 
 .lb-cultivation-stat-hero {
-  width: 5.8rem;
-  height: 5.8rem;
-  border: 2px solid transparent;
-  border-top-color: color-mix(in srgb, var(--lb-accent) 84%, white 5%);
-  border-right-color: color-mix(in srgb, var(--lb-accent) 28%, transparent);
-  border-bottom-color: color-mix(in srgb, var(--lb-accent) 52%, transparent);
-  border-radius: 50%;
+  width: 6.5rem;
+  min-height: 4.45rem;
+  border: 1px solid color-mix(in srgb, var(--lb-accent) 48%, transparent);
+  border-radius: 0.45rem;
   background:
-    radial-gradient(circle, color-mix(in srgb, var(--lb-accent) 15%, transparent), transparent 64%),
+    linear-gradient(135deg, color-mix(in srgb, var(--lb-accent) 14%, transparent), transparent 58%),
+    radial-gradient(circle at 50% 78%, color-mix(in srgb, var(--lb-accent) 18%, transparent), transparent 62%),
     rgba(0, 0, 0, 0.28);
   box-shadow: inset 0 0 24px color-mix(in srgb, var(--lb-accent) 18%, transparent), 0 0 25px color-mix(in srgb, var(--lb-accent) 20%, transparent);
-  animation: lbHaloRotate 18s linear infinite;
+  padding: 0.58rem 0.65rem;
+  animation: lbAuraBreathe 8s ease-in-out infinite;
 }
 
 .lb-cultivation-stat strong,
@@ -6551,6 +6608,14 @@ select.field option {
   min-width: 0;
   color: rgba(244, 239, 227, 0.84);
   text-align: center;
+}
+
+.lb-sect-crest span {
+  color: color-mix(in srgb, var(--lb-accent) 70%, white 5%);
+  font-size: 0.62rem;
+  font-weight: 1000;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .lb-sect-crest svg {
@@ -6863,6 +6928,17 @@ select.field option {
   .lb-cultivation-stat-hero {
     width: 4.8rem;
     height: 4.8rem;
+  }
+
+  .lb-wing-layer {
+    left: 6.3rem;
+    width: min(18rem, 64vw);
+    height: 10rem;
+  }
+
+  .lb-wing-layer[data-wing-rank="1"] {
+    width: min(20rem, 70vw);
+    height: 11.2rem;
   }
 
   .lb-sect-crest-hero svg {

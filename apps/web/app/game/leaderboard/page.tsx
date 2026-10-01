@@ -11,7 +11,7 @@ export default async function LeaderboardPage() {
   const entries = rows.map((character, index): LeaderboardEntry => {
     const rank = index + 1;
     const realmName = `${character.realmStage.realm.name} ${character.realmStage.name}`;
-    const sectName = character.sect?.name ?? "Tán tu";
+    const sect = character.sect ? ({ type: "sect", name: character.sect.name } as const) : ({ type: "independent" } as const);
     const theme = getLeaderboardTheme(rank);
     const avatarSize = getLeaderboardAvatarSize(rank);
 
@@ -22,7 +22,7 @@ export default async function LeaderboardPage() {
       title: character.title,
       realm: realmName,
       cultivation: character.cultivation.toLocaleString("vi-VN"),
-      sect: sectName,
+      sect,
       fame: character.reputation.toLocaleString("vi-VN"),
       theme
     };

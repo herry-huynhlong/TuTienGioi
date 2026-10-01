@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { CinematicBackground, type CinematicSource } from "./CinematicBackground";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
 
@@ -19,7 +20,7 @@ export function LeaderboardHeroCard(props: LeaderboardEntry) {
     <article className="lb-hero-card" data-theme={props.theme} data-rank={props.rank}>
       <BackgroundLayer />
       <EnvironmentLayer />
-      <CreatureLayer theme={props.theme} />
+      <CinematicSceneLayer theme={props.theme} rank={props.rank} />
       <ParticleLayer theme={props.theme} count={props.rank === 1 ? 18 : 14} />
       <BorderFXLayer />
 
@@ -113,28 +114,56 @@ function EnvironmentLayer() {
   );
 }
 
-function CreatureLayer({ theme }: { theme: LeaderboardTheme }) {
+function CinematicSceneLayer({ theme, rank }: { theme: LeaderboardTheme; rank: number }) {
+  const cinematic = getCinematicAsset(theme, rank);
+
   return (
-    <svg className="lb-creature-layer" data-creature={theme === "ember" ? "phoenix" : theme === "frost" ? "ice-dragon" : "dragon"} viewBox="0 0 720 230" aria-hidden>
-      {theme === "ember" ? (
-        <>
-          <path d="M80 143c101-71 176-30 243-101 41 43 95 61 168 35-35 34-63 65-77 101-45-40-93-53-150-30-65 26-117 12-184-5Z" />
-          <path d="M233 105C165 62 109 67 48 98c62-69 146-70 251-25" />
-          <path d="M380 83c93-51 173-49 254-4-82 2-141 34-185 98" />
-          <path d="M306 51c-27-35-42-60-45-83 62 22 111 61 150 126" />
-          <path d="M214 156c66 47 146 45 243 2" />
-        </>
-      ) : (
-        <>
-          <path d="M54 145c84-116 182 43 292-66 83-82 212-36 288 43-96-32-160 7-230 64-111 90-202-75-350-41Z" />
-          <path d="M484 72c60 8 114 36 157 86-70-32-126-17-182 33 23-43 29-80 25-119Z" />
-          <path d="M147 100c41-25 78-24 109 3M306 127c45 18 87 10 128-24M452 61l53-56 8 74" />
-          <path d="M370 90c37-42 81-55 131-37" />
-          <path d="M248 74c-20-18-48-25-83-21" />
-        </>
-      )}
-    </svg>
+    <div className="lb-cinematic-layer" data-theme={theme} aria-hidden>
+      <CinematicBackground sources={cinematic.sources} poster={cinematic.poster} label={cinematic.label} />
+      <span className="lb-cinematic-fallback" />
+      <span className="lb-cinematic-depth lb-cinematic-depth-a" />
+      <span className="lb-cinematic-depth lb-cinematic-depth-b" />
+    </div>
   );
+}
+
+function getCinematicAsset(theme: LeaderboardTheme, rank: number): { sources: CinematicSource[]; poster: string; label: string } {
+  if (theme === "gold") {
+    return {
+      sources: [
+        { src: "/leaderboard/cinematics/rank1-golden-dragon.webm", type: "video/webm" },
+        { src: "/leaderboard/cinematics/rank1-golden-dragon.mp4", type: "video/mp4" }
+      ],
+      poster: "/leaderboard/posters/rank1-golden-dragon-poster.webp",
+      label: "Cinematic Kim Long hạng 1"
+    };
+  }
+  if (theme === "frost") {
+    return {
+      sources: [
+        { src: "/leaderboard/cinematics/rank2-ice-moon-dragon.webm", type: "video/webm" },
+        { src: "/leaderboard/cinematics/rank2-ice-moon-dragon.mp4", type: "video/mp4" }
+      ],
+      poster: "/leaderboard/posters/rank2-ice-moon-dragon-poster.webp",
+      label: "Cinematic Băng Long hạng 2"
+    };
+  }
+  if (theme === "ember") {
+    return {
+      sources: [
+        { src: "/leaderboard/cinematics/rank3-fire-phoenix.webm", type: "video/webm" },
+        { src: "/leaderboard/cinematics/rank3-fire-phoenix.mp4", type: "video/mp4" }
+      ],
+      poster: "/leaderboard/posters/rank3-fire-phoenix-poster.webp",
+      label: "Cinematic Hỏa Phượng hạng 3"
+    };
+  }
+
+  return {
+    sources: [{ src: `/leaderboard/cinematics/rank${rank}-ambient.webm`, type: "video/webm" }],
+    poster: `/leaderboard/posters/rank${rank}-ambient-poster.webp`,
+    label: `Cinematic hạng ${rank}`
+  };
 }
 
 function ParticleLayer({ theme, count, compact = false }: { theme: LeaderboardTheme; count: number; compact?: boolean }) {

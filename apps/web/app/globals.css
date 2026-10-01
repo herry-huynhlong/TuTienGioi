@@ -5952,7 +5952,7 @@ select.field option {
 
 .lb-background-layer,
 .lb-environment-layer,
-.lb-creature-layer,
+.lb-cinematic-layer,
 .lb-particle-layer,
 .lb-border-fx-layer,
 .lb-foreground-layer,
@@ -5972,6 +5972,76 @@ select.field option {
 .lb-border-fx-layer,
 .lb-foreground-layer {
   inset: 0;
+}
+
+.lb-cinematic-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lb-cinematic-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+  opacity: 0.62;
+  pointer-events: none;
+  filter: saturate(1.08) contrast(1.05);
+}
+
+.lb-cinematic-video[data-state="fallback"] {
+  opacity: 0;
+}
+
+.lb-cinematic-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.5;
+  background:
+    radial-gradient(ellipse at 32% 48%, color-mix(in srgb, var(--lb-accent) 26%, transparent), transparent 35%),
+    radial-gradient(ellipse at 72% 48%, color-mix(in srgb, var(--lb-accent) 18%, transparent), transparent 32%),
+    linear-gradient(100deg, color-mix(in srgb, var(--lb-deep) 72%, black), rgba(4, 8, 7, 0.46), color-mix(in srgb, var(--lb-deep) 82%, black));
+}
+
+.lb-cinematic-depth {
+  position: absolute;
+  z-index: 1;
+  border-radius: 999px;
+  filter: blur(18px);
+  opacity: 0.42;
+  background: color-mix(in srgb, var(--lb-accent) 24%, transparent);
+  animation: lbAuraBreathe 7.5s ease-in-out infinite;
+}
+
+.lb-cinematic-depth-a {
+  left: 14%;
+  top: 18%;
+  width: 32rem;
+  height: 7rem;
+}
+
+.lb-cinematic-depth-b {
+  right: 3%;
+  bottom: -2rem;
+  width: 24rem;
+  height: 8rem;
+  animation-delay: -3.6s;
+}
+
+.lb-cinematic-layer::after {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.34) 28%, rgba(0, 0, 0, 0.22) 58%, rgba(0, 0, 0, 0.5)),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.42), transparent 36%, rgba(0, 0, 0, 0.28));
+  content: "";
 }
 
 .lb-background-layer {
@@ -6094,40 +6164,6 @@ select.field option {
   clip-path: polygon(5% 72%, 23% 72%, 23% 50%, 14% 50%, 50% 16%, 86% 50%, 76% 50%, 76% 72%, 96% 72%, 96% 84%, 5% 84%);
   filter: drop-shadow(0 0 18px color-mix(in srgb, var(--lb-accent) 26%, transparent));
   animation: lbSanctumGlow 6.5s ease-in-out infinite;
-}
-
-.lb-creature-layer {
-  left: 28%;
-  top: 50%;
-  z-index: -2;
-  width: min(46rem, 56%);
-  height: 13rem;
-  fill: none;
-  stroke: color-mix(in srgb, var(--lb-accent) 64%, white 8%);
-  stroke-width: 7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.28;
-  filter: blur(0.15px) drop-shadow(0 0 24px color-mix(in srgb, var(--lb-accent) 36%, transparent));
-  transform: translate3d(0, -50%, 0);
-  animation: lbCreatureIdle 11s ease-in-out infinite;
-}
-
-.lb-creature-layer[data-creature="ice-dragon"] {
-  opacity: 0.25;
-  stroke-width: 6;
-  animation-duration: 13s;
-}
-
-.lb-creature-layer[data-creature="phoenix"] {
-  opacity: 0.3;
-  stroke-width: 6;
-  animation-name: lbPhoenixIdle;
-}
-
-.lb-hero-card:hover .lb-creature-layer {
-  opacity: 0.42;
-  animation-duration: 5.5s;
 }
 
 .lb-particle-layer {
@@ -6626,16 +6662,6 @@ select.field option {
   50% { opacity: 0.68; filter: drop-shadow(0 0 24px color-mix(in srgb, var(--lb-accent) 34%, transparent)); }
 }
 
-@keyframes lbCreatureIdle {
-  0%, 100% { transform: translate3d(-0.5rem, -50%, 0) scale(1); }
-  50% { transform: translate3d(0.72rem, -51%, 0) scale(1.018); }
-}
-
-@keyframes lbPhoenixIdle {
-  0%, 100% { transform: translate3d(-0.34rem, -50%, 0) scale(1); opacity: 0.24; }
-  50% { transform: translate3d(0.72rem, -52%, 0) scale(1.035); opacity: 0.39; }
-}
-
 @keyframes lbParticleFloat {
   0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.24; }
   50% { transform: translate3d(0.18rem, -0.62rem, 0); opacity: 0.72; }
@@ -6655,10 +6681,11 @@ select.field option {
   .lb-hero-card,
   .lb-compact-card,
   .lb-bg-depth,
+  .lb-cinematic-video,
+  .lb-cinematic-depth,
   .lb-cloud,
   .lb-aura-river,
   .lb-sanctum,
-  .lb-creature-layer,
   .lb-particle-layer span,
   .lb-rank-ring,
   .lb-portrait-halo,

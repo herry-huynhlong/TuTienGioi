@@ -61,6 +61,10 @@ type MapNode = WorldMapLocation & {
   y: number;
   missionCount: number;
 };
+type RegionMapLayout = {
+  backgroundImage?: string;
+  positions?: Record<string, { mapX: number; mapY: number }>;
+};
 
 const publicKnownLocationKeys = new Set<string>(defaultKnownLocationKeys);
 
@@ -130,6 +134,39 @@ const locationIconGlyphs: Record<string, string> = {
   outpost: "▣",
   ruin: "✶",
   city_hub: "◎"
+};
+
+const regionMapLayouts: Record<string, RegionMapLayout> = {
+  "thanh-van-vuc": {
+    backgroundImage: "/world-maps/xianxia-thanh-van-vuc.png",
+    positions: {
+      "thanh-van-dong-thanh": { mapX: 20, mapY: 34 },
+      "cho-linh-bao": { mapX: 31, mapY: 39 },
+      "bac-mon": { mapX: 41, mapY: 35 },
+      "linh-khe": { mapX: 47, mapY: 61 },
+      "thanh-truc-lam": { mapX: 34, mapY: 76 },
+      "thanh-van-son": { mapX: 63, mapY: 56 },
+      "thanh-linh-son-mon": { mapX: 78, mapY: 30 },
+      "hac-phong-coc": { mapX: 86, mapY: 68 },
+      "thanh-van-quan-dao": { mapX: 51, mapY: 43 },
+      "hac-son-chan-nui": { mapX: 70, mapY: 71 },
+      "thanh-van-son-mon": { mapX: 82, mapY: 24 },
+      "thanh-van-ngoai-mon": { mapX: 75, mapY: 22 },
+      "thanh-van-noi-mon": { mapX: 80, mapY: 17 },
+      "thanh-van-dai-dien": { mapX: 86, mapY: 15 },
+      "thanh-van-tang-kinh-cac": { mapX: 83, mapY: 20 },
+      "thanh-van-dan-duong": { mapX: 73, mapY: 28 },
+      "thanh-van-khi-duong": { mapX: 69, mapY: 31 },
+      "thanh-van-tran-duong": { mapX: 77, mapY: 25 },
+      "thanh-van-nhiem-vu-duong": { mapX: 71, mapY: 24 },
+      "thanh-van-giam-linh-dai": { mapX: 79, mapY: 20 },
+      "thanh-van-linh-dien": { mapX: 58, mapY: 46 },
+      "thanh-van-linh-khoang": { mapX: 66, mapY: 64 },
+      "thanh-van-dien-vo-truong": { mapX: 76, mapY: 33 },
+      "thanh-van-dong-phu-khu": { mapX: 84, mapY: 27 },
+      "thanh-van-hau-son": { mapX: 92, mapY: 52 }
+    }
+  }
 };
 
 const serviceIcons: Record<string, LucideIcon> = {
@@ -253,9 +290,11 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
     if (!locationId) continue;
     sectMissionByLocation.set(locationId, [...(sectMissionByLocation.get(locationId) ?? []), mission]);
   }
+  const mapLayout = regionMapLayouts[activeRegion?.key ?? ""] ?? {};
   const mapNodes = buildMapNodes({
     locations: allLocations,
     zones,
+    layout: mapLayout,
     currentLocationId,
     knownLocationIds,
     routeByDestinationId,
@@ -291,6 +330,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
             <WorldMapCanvas
               activeRegionKey={activeRegion.key}
               activeRegionName={activeRegion.name}
+              layout={mapLayout}
               nodes={mapNodes}
               knownLocationIds={knownLocationIds}
               currentRealmOrder={currentRealmOrder}
@@ -362,6 +402,7 @@ function getLocationState(
 function buildMapNodes({
   locations,
   zones,
+  layout,
   currentLocationId,
   knownLocationIds,
   routeByDestinationId,
@@ -372,6 +413,7 @@ function buildMapNodes({
 }: {
   locations: WorldMapLocation[];
   zones: Array<{ id: string; key: string; name: string }>;
+  layout: RegionMapLayout;
   currentLocationId: string | null;
   knownLocationIds: Set<string>;
   routeByDestinationId: Map<string, { minimumRealmOrder: number }>;
@@ -394,6 +436,7 @@ function buildMapNodes({
   return locations.map((location) => {
     const state = getLocationState(location, currentLocationId, knownLocationIds, routeByDestinationId, currentRealmOrder);
     const visible = state !== "unknown" || relevantUnknownIds.has(location.id);
+    const configuredPosition = layout.positions?.[location.key];
     const zoneOrder = zoneIndex.get(location.zone.id) ?? 0;
     const zoneLocations = locationsByZone.get(location.zone.id) ?? [];
     const localIndex = Math.max(0, zoneLocations.findIndex((entry) => entry.id === location.id));
@@ -402,8 +445,8 @@ function buildMapNodes({
     const yBase = 16 + rowHeight * zoneOrder;
     const localSpread = zoneLocations.length <= 1 ? 0.5 : localIndex / (zoneLocations.length - 1);
     const wave = Math.sin((localIndex + zoneOrder) * 1.6) * 5;
-    const x = Math.max(6, Math.min(94, 10 + localSpread * 78 + (zoneOrder % 2) * 5));
-    const y = Math.max(8, Math.min(92, yBase + rowHeight * 0.42 + wave));
+    const x = configuredPosition?.mapX ?? Math.max(7, Math.min(93, 10 + localSpread * 78 + (zoneOrder % 2) * 5));
+    const y = configuredPosition?.mapY ?? Math.max(9, Math.min(91, yBase + rowHeight * 0.42 + wave));
     return {
       ...location,
       index: localIndex + 1,
@@ -420,6 +463,7 @@ function buildMapNodes({
 function WorldMapCanvas({
   activeRegionKey,
   activeRegionName,
+  layout,
   nodes,
   knownLocationIds,
   currentRealmOrder,
@@ -427,6 +471,7 @@ function WorldMapCanvas({
 }: {
   activeRegionKey: string;
   activeRegionName: string;
+  layout: RegionMapLayout;
   nodes: MapNode[];
   knownLocationIds: Set<string>;
   currentRealmOrder: number;
@@ -440,8 +485,13 @@ function WorldMapCanvas({
     const destinationKnown = knownLocationIds.has(destination.id);
     const originKnown = knownLocationIds.has(origin.id);
     if (!originKnown && !destinationKnown) return [];
-    return [{ route, origin, destination, destinationKnown }];
+    const routeState = origin.id === currentLocationId && destination.state !== "locked" && route.minimumRealmOrder <= currentRealmOrder
+      ? "direct"
+      : destinationKnown ? "known" : "mystery";
+    const selected = origin.selected || destination.selected;
+    return [{ route, origin, destination, destinationKnown, routeState, selected }];
   }));
+  const backgroundStyle = layout.backgroundImage ? { backgroundImage: `url(${layout.backgroundImage})` } : undefined;
   return (
     <div className="world-map-shell">
       <div className="world-map-title">
@@ -453,6 +503,7 @@ function WorldMapCanvas({
       </div>
       <div className="world-map-viewport">
         <div className="world-map-canvas" role="img" aria-label={`Bản đồ ${activeRegionName}`}>
+          <div className="world-map-art" style={backgroundStyle} />
           <div className="world-map-bg" />
           <svg className="world-route-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
             <defs>
@@ -462,14 +513,13 @@ function WorldMapCanvas({
                 <stop offset="100%" stopColor="rgba(220, 190, 91, 0.45)" />
               </linearGradient>
             </defs>
-            {routes.map(({ route, origin, destination, destinationKnown }) => {
-              const direct = origin.id === currentLocationId && destination.state !== "locked" && route.minimumRealmOrder <= currentRealmOrder;
+            {routes.map(({ route, origin, destination, routeState, selected }) => {
               const path = routePath(origin, destination);
               return (
                 <path
                   key={route.id}
                   d={path}
-                  className={`world-route-path ${direct ? "direct" : ""} ${destinationKnown ? "known" : "mystery"}`}
+                  className={`world-route-path ${routeState} ${selected ? "selected" : ""}`}
                   vectorEffect="non-scaling-stroke"
                 />
               );

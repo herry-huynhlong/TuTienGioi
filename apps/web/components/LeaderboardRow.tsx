@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
 
-export type LeaderboardRowProps = {
+export type LeaderboardEntry = {
   rank: number;
   avatar: ReactNode;
   name: string;
@@ -14,104 +14,194 @@ export type LeaderboardRowProps = {
   theme: LeaderboardTheme;
 };
 
-export function LeaderboardRow({ rank, avatar, name, realm, cultivation, sect, fame, title, theme }: LeaderboardRowProps) {
+export function LeaderboardHeroCard(props: LeaderboardEntry) {
   return (
-    <article className="leaderboard-row" data-theme={theme} data-top-rank={rank <= 10 ? "true" : "false"}>
-      <div className="leaderboard-row-environment" aria-hidden>
-        <span className="leaderboard-vfx-frame" />
-        <span className="leaderboard-left-bloom" />
-        <span className="leaderboard-right-sanctum" />
-        <span className="leaderboard-aura-trail leaderboard-aura-trail-a" />
-        <span className="leaderboard-aura-trail leaderboard-aura-trail-b" />
-        <span className="leaderboard-aura-trail leaderboard-aura-trail-c" />
-        <span className="leaderboard-cloud leaderboard-cloud-a" />
-        <span className="leaderboard-cloud leaderboard-cloud-b" />
-        <span className="leaderboard-light-sweep" />
-      </div>
+    <article className="lb-hero-card" data-theme={props.theme} data-rank={props.rank}>
+      <BackgroundLayer />
+      <EnvironmentLayer />
+      <CreatureLayer theme={props.theme} />
+      <ParticleLayer theme={props.theme} count={props.rank === 1 ? 18 : 14} />
+      <BorderFXLayer />
 
-      <DecorativeCreature theme={theme} />
-      <Particles theme={theme} />
-
-      <div className="leaderboard-row-rank" aria-label={`Hạng ${rank}`}>
-        <div className="leaderboard-rank-frame">
-          <span className="leaderboard-rank-halo" aria-hidden />
-          <strong>{rank}</strong>
+      <div className="lb-hero-character-layer">
+        <RankMedallion rank={props.rank} hero />
+        <CharacterPortrait avatar={props.avatar} hero />
+        <div className="lb-hero-nameplate">
+          <strong>{props.name}</strong>
+          <span>{props.title || "Tán tu"}</span>
         </div>
       </div>
 
-      <div className="leaderboard-row-character">
-        <div className="leaderboard-avatar-shell">{avatar}</div>
-        <div className="leaderboard-name-block">
-          <strong>{name}</strong>
-          <span>{title || "Tán tu"}</span>
+      <div className="lb-hero-content-layer">
+        <div className="lb-hero-realm">
+          <span>Cảnh giới</span>
+          <strong>{props.realm}</strong>
         </div>
       </div>
 
-      <div className="leaderboard-row-realm">
-        <strong>{realm}</strong>
+      <div className="lb-hero-stat-layer">
+        <CultivationStat value={props.cultivation} hero />
+        <SectCrest name={props.sect} hero />
+        <div className="lb-fame-seal">
+          <span>Danh vọng</span>
+          <strong>{props.fame}</strong>
+        </div>
       </div>
 
-      <div className="leaderboard-row-cultivation">
-        <span className="leaderboard-cultivation-orb" aria-hidden />
-        <strong>{cultivation}</strong>
+      <ForegroundLayer />
+    </article>
+  );
+}
+
+export function LeaderboardCompactCard(props: LeaderboardEntry) {
+  return (
+    <article className="lb-compact-card" data-theme={props.theme}>
+      <BackgroundLayer compact />
+      <ParticleLayer theme={props.theme} count={5} compact />
+
+      <div className="lb-compact-main">
+        <RankMedallion rank={props.rank} />
+        <CharacterPortrait avatar={props.avatar} />
+        <div className="lb-compact-identity">
+          <strong>{props.name}</strong>
+          <span>{props.title || "Tán tu"}</span>
+        </div>
       </div>
 
-      <div className="leaderboard-row-sect">
-        <SectGlyph />
-        <strong>{sect}</strong>
-      </div>
-
-      <div className="leaderboard-row-fame">
-        <span aria-hidden />
-        <strong>{fame}</strong>
+      <div className="lb-compact-meta">
+        <div>
+          <span>Cảnh giới</span>
+          <strong>{props.realm}</strong>
+        </div>
+        <div>
+          <span>Tu vi</span>
+          <strong>{props.cultivation}</strong>
+        </div>
+        <div>
+          <span>Tông môn</span>
+          <strong>{props.sect}</strong>
+        </div>
+        <div>
+          <span>Danh vọng</span>
+          <strong>{props.fame}</strong>
+        </div>
       </div>
     </article>
   );
 }
 
-function DecorativeCreature({ theme }: { theme: LeaderboardTheme }) {
-  const isPhoenix = theme === "ember";
-
+function BackgroundLayer({ compact = false }: { compact?: boolean }) {
   return (
-    <svg className="leaderboard-creature" viewBox="0 0 420 150" aria-hidden>
-      {isPhoenix ? (
+    <div className={compact ? "lb-background-layer lb-background-layer-compact" : "lb-background-layer"} aria-hidden>
+      <span className="lb-bg-vignette" />
+      <span className="lb-bg-depth lb-bg-depth-a" />
+      <span className="lb-bg-depth lb-bg-depth-b" />
+    </div>
+  );
+}
+
+function EnvironmentLayer() {
+  return (
+    <div className="lb-environment-layer" aria-hidden>
+      <span className="lb-cloud lb-cloud-a" />
+      <span className="lb-cloud lb-cloud-b" />
+      <span className="lb-aura-river lb-aura-river-a" />
+      <span className="lb-aura-river lb-aura-river-b" />
+      <span className="lb-aura-river lb-aura-river-c" />
+      <span className="lb-sanctum" />
+    </div>
+  );
+}
+
+function CreatureLayer({ theme }: { theme: LeaderboardTheme }) {
+  return (
+    <svg className="lb-creature-layer" data-creature={theme === "ember" ? "phoenix" : theme === "frost" ? "ice-dragon" : "dragon"} viewBox="0 0 720 230" aria-hidden>
+      {theme === "ember" ? (
         <>
-          <path d="M33 100c58-43 100-19 139-63 24 24 55 35 97 23-20 19-36 37-44 58-26-24-54-30-86-17-37 14-67 8-106-1Z" />
-          <path d="M128 77c-37-24-70-22-103-4 33-39 81-40 139-15" />
-          <path d="M204 62c55-30 100-28 146-3-45 1-77 18-101 55" />
-          <path d="M170 38c-15-20-23-34-25-47 34 12 62 34 84 71" />
+          <path d="M80 143c101-71 176-30 243-101 41 43 95 61 168 35-35 34-63 65-77 101-45-40-93-53-150-30-65 26-117 12-184-5Z" />
+          <path d="M233 105C165 62 109 67 48 98c62-69 146-70 251-25" />
+          <path d="M380 83c93-51 173-49 254-4-82 2-141 34-185 98" />
+          <path d="M306 51c-27-35-42-60-45-83 62 22 111 61 150 126" />
+          <path d="M214 156c66 47 146 45 243 2" />
         </>
       ) : (
         <>
-          <path d="M28 96c47-66 101 22 162-38 48-47 121-21 164 23-54-18-90 3-129 35-62 51-112-41-197-20Z" />
-          <path d="M270 49c34 4 64 20 88 48-39-18-70-10-101 18 12-24 16-45 13-66Z" />
-          <path d="M84 68c23-14 43-13 60 2M169 82c25 10 48 6 70-13M251 40l29-31 4 40" />
-          <path d="M207 58c20-23 44-30 72-20" />
+          <path d="M54 145c84-116 182 43 292-66 83-82 212-36 288 43-96-32-160 7-230 64-111 90-202-75-350-41Z" />
+          <path d="M484 72c60 8 114 36 157 86-70-32-126-17-182 33 23-43 29-80 25-119Z" />
+          <path d="M147 100c41-25 78-24 109 3M306 127c45 18 87 10 128-24M452 61l53-56 8 74" />
+          <path d="M370 90c37-42 81-55 131-37" />
+          <path d="M248 74c-20-18-48-25-83-21" />
         </>
       )}
     </svg>
   );
 }
 
-function Particles({ theme }: { theme: LeaderboardTheme }) {
-  const particles = Array.from({ length: theme === "normal" ? 4 : 9 }, (_, index) => index);
-
+function ParticleLayer({ theme, count, compact = false }: { theme: LeaderboardTheme; count: number; compact?: boolean }) {
   return (
-    <div className="leaderboard-particles" aria-hidden>
-      {particles.map((particle) => (
-        <span key={particle} style={{ "--particle-index": particle } as CSSProperties} />
+    <div className={compact ? "lb-particle-layer lb-particle-layer-compact" : "lb-particle-layer"} data-theme={theme} aria-hidden>
+      {Array.from({ length: count }, (_, index) => (
+        <span key={index} style={{ "--particle-index": index } as CSSProperties} />
       ))}
     </div>
   );
 }
 
-function SectGlyph() {
+function ForegroundLayer() {
   return (
-    <svg className="leaderboard-sect-glyph" viewBox="0 0 60 46" aria-hidden>
-      <path d="M8 37h44v5H8z" />
-      <path d="M14 24h32v13H14z" />
-      <path d="M30 6 6 23h48L30 6Z" />
-      <path d="M20 37V25m20 12V25" />
-    </svg>
+    <div className="lb-foreground-layer" aria-hidden>
+      <span className="lb-light-sweep" />
+    </div>
+  );
+}
+
+function BorderFXLayer() {
+  return (
+    <div className="lb-border-fx-layer" aria-hidden>
+      <span className="lb-corner lb-corner-tl" />
+      <span className="lb-corner lb-corner-tr" />
+      <span className="lb-corner lb-corner-bl" />
+      <span className="lb-corner lb-corner-br" />
+    </div>
+  );
+}
+
+function CharacterPortrait({ avatar, hero = false }: { avatar: ReactNode; hero?: boolean }) {
+  return (
+    <div className={hero ? "lb-character-portrait lb-character-portrait-hero" : "lb-character-portrait"}>
+      <span className="lb-portrait-halo" aria-hidden />
+      <div className="lb-portrait-frame">{avatar}</div>
+    </div>
+  );
+}
+
+function RankMedallion({ rank, hero = false }: { rank: number; hero?: boolean }) {
+  return (
+    <div className={hero ? "lb-rank-medallion lb-rank-medallion-hero" : "lb-rank-medallion"} aria-label={`Hạng ${rank}`}>
+      <span className="lb-rank-wings" aria-hidden />
+      <span className="lb-rank-ring" aria-hidden />
+      <strong>{rank}</strong>
+    </div>
+  );
+}
+
+function CultivationStat({ value, hero = false }: { value: string; hero?: boolean }) {
+  return (
+    <div className={hero ? "lb-cultivation-stat lb-cultivation-stat-hero" : "lb-cultivation-stat"}>
+      <span>Tu vi</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SectCrest({ name, hero = false }: { name: string; hero?: boolean }) {
+  return (
+    <div className={hero ? "lb-sect-crest lb-sect-crest-hero" : "lb-sect-crest"}>
+      <svg viewBox="0 0 72 72" aria-hidden>
+        <path d="M36 6 57 18v22c0 14-8 23-21 28C23 63 15 54 15 40V18L36 6Z" />
+        <path d="M25 31h22M29 24h14M24 45h24M30 31v14M42 31v14M36 18v31" />
+      </svg>
+      <strong>{name}</strong>
+    </div>
   );
 }

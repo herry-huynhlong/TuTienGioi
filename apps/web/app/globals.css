@@ -4381,6 +4381,9 @@ select.field option {
     radial-gradient(circle at 8% 50%, var(--rank-accent-soft), transparent 13rem),
     radial-gradient(circle at 68% 50%, color-mix(in srgb, var(--rank-accent) 13%, transparent), transparent 16rem),
     linear-gradient(92deg, rgba(10, 15, 13, 0.98), rgba(17, 24, 20, 0.95) 46%, var(--rank-accent-deep));
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035), 0 14px 30px rgba(0, 0, 0, 0.18);
   color: rgba(244, 239, 227, 0.86);
   padding: 0.95rem 1.1rem;
@@ -4392,10 +4395,11 @@ select.field option {
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--rank-accent) 18%, transparent) 34%, transparent 56%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 18px);
+    linear-gradient(90deg, rgba(0, 0, 0, 0.16), transparent 16%, transparent 74%, rgba(0, 0, 0, 0.12)),
+    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--rank-accent) 10%, transparent) 34%, transparent 56%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 18px);
   background-size: 240% 100%, auto;
-  opacity: 0.72;
+  opacity: 0.46;
   content: "";
   animation: leaderboardShimmer 9s linear infinite;
 }
@@ -4422,6 +4426,9 @@ select.field option {
   --rank-accent-soft: rgba(240, 191, 71, 0.28);
   --rank-accent-deep: rgba(84, 55, 12, 0.72);
   --rank-text: #ffe9a8;
+  background-image:
+    linear-gradient(90deg, rgba(4, 8, 7, 0.08), rgba(4, 8, 7, 0.26) 25%, rgba(4, 8, 7, 0.18) 52%, rgba(4, 8, 7, 0.1)),
+    url("/leaderboard/rank-1-row.webp");
   min-height: 7.8rem;
 }
 
@@ -4430,6 +4437,9 @@ select.field option {
   --rank-accent-soft: rgba(125, 200, 255, 0.24);
   --rank-accent-deep: rgba(12, 48, 82, 0.62);
   --rank-text: #dff3ff;
+  background-image:
+    linear-gradient(90deg, rgba(4, 8, 12, 0.08), rgba(4, 8, 12, 0.26) 25%, rgba(4, 8, 12, 0.18) 52%, rgba(4, 8, 12, 0.1)),
+    url("/leaderboard/rank-2-row.webp");
 }
 
 .leaderboard-entry[data-rank-tier="3"] {
@@ -4437,6 +4447,9 @@ select.field option {
   --rank-accent-soft: rgba(240, 123, 52, 0.24);
   --rank-accent-deep: rgba(92, 35, 15, 0.66);
   --rank-text: #ffc092;
+  background-image:
+    linear-gradient(90deg, rgba(8, 5, 4, 0.08), rgba(8, 5, 4, 0.28) 25%, rgba(8, 5, 4, 0.18) 52%, rgba(8, 5, 4, 0.12)),
+    url("/leaderboard/rank-3-row.webp");
 }
 
 .leaderboard-entry[data-rank-tier="4"] {
@@ -4444,6 +4457,9 @@ select.field option {
   --rank-accent-soft: rgba(50, 232, 211, 0.22);
   --rank-accent-deep: rgba(11, 71, 63, 0.6);
   --rank-text: #a7fff2;
+  background-image:
+    linear-gradient(90deg, rgba(2, 10, 9, 0.08), rgba(2, 10, 9, 0.26) 25%, rgba(2, 10, 9, 0.18) 52%, rgba(2, 10, 9, 0.1)),
+    url("/leaderboard/rank-4-row.webp");
 }
 
 .leaderboard-entry[data-rank-tier="5"] {
@@ -4451,6 +4467,9 @@ select.field option {
   --rank-accent-soft: rgba(183, 131, 255, 0.22);
   --rank-accent-deep: rgba(61, 34, 99, 0.62);
   --rank-text: #dec4ff;
+  background-image:
+    linear-gradient(90deg, rgba(8, 3, 12, 0.08), rgba(8, 3, 12, 0.26) 25%, rgba(8, 3, 12, 0.18) 52%, rgba(8, 3, 12, 0.1)),
+    url("/leaderboard/rank-5-row.webp");
 }
 
 .leaderboard-entry[data-rank-tier="normal"] {
@@ -4462,6 +4481,26 @@ select.field option {
   background:
     linear-gradient(92deg, rgba(18, 24, 20, 0.94), rgba(24, 31, 27, 0.86)),
     rgba(255, 255, 255, 0.02);
+}
+
+.leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-dragon {
+  display: none;
+}
+
+.leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-rank-emblem {
+  transform: translateX(1.1rem);
+}
+
+.leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-rank-emblem .rank-wing,
+.leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-rank-emblem .rank-ring {
+  opacity: 0;
+}
+
+.leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-rank-emblem b {
+  border-color: transparent;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.48), rgba(0, 0, 0, 0.08) 62%, transparent);
+  box-shadow: none;
+  font-size: 2.25rem;
 }
 
 .leaderboard-entry[data-rank-tier="normal"]::before,

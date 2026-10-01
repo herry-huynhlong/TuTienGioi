@@ -1339,7 +1339,10 @@ export async function fightMonster(db: Db, characterId: string, monsterKey: stri
 }
 
 export const AUCTION_BID_STEP_BPS = 3000n;
-export const AUCTION_REGISTRATION_MS = 5 * 60_000;
+export const AUCTION_REGISTRATION_GAME_DAYS = 7;
+export const AUCTION_LIVE_GAME_DAYS = 1;
+export const AUCTION_REGISTRATION_MS = AUCTION_REGISTRATION_GAME_DAYS * REAL_MS_PER_GAME_DAY;
+export const AUCTION_LIVE_MS = AUCTION_LIVE_GAME_DAYS * REAL_MS_PER_GAME_DAY;
 export const AUCTION_TURN_MS = 60_000;
 
 function auctionBidStep(startingPrice: bigint) {
@@ -1410,11 +1413,12 @@ async function settleAuctionTx(tx: Tx, auctionId: string, now = new Date()) {
 async function advanceAuctionAfterAction(tx: Tx, auctionId: string, now = new Date()) {
   const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: true } });
   if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) return null;
+  if (auction.endsAt <= now) return settleAuctionTx(tx, auctionId, now);
   const active = auction.participants.filter((participant) => participant.status === AuctionParticipantStatus.ACTIVE);
   if (active.length <= 1 && active.some((participant) => participant.characterId === auction.highestBidderId)) return settleAuctionTx(tx, auctionId, now);
   const next = await nextTurnParticipant(tx, auctionId, auction.highestBidderId);
   if (!next) return settleAuctionTx(tx, auctionId, now);
-  await tx.auction.update({ where: { id: auctionId }, data: { currentTurnParticipantId: next.id, turnEndsAt: new Date(now.getTime() + AUCTION_TURN_MS) } });
+  await tx.auction.update({ where: { id: auctionId }, data: { currentTurnParticipantId: next.id, turnEndsAt: new Date(Math.min(now.getTime() + AUCTION_TURN_MS, auction.endsAt.getTime())) } });
   return { status: "live" as const, nextParticipantId: next.id };
 }
 
@@ -1426,18 +1430,14 @@ async function startLiveAuctionTx(tx: Tx, auctionId: string, now = new Date()) {
     await tx.gameLog.create({ data: { characterId: auction.sellerId, type: "auction", message: `Không ai tham gia đấu giá ${auction.item.template.name}; vật phẩm được giữ lại.` } });
     return { status: "cancelled" as const };
   }
-  const first = auction.highestBidderId ? auction.participants.find((participant) => participant.characterId === auction.highestBidderId) : auction.participants[0];
-  if (!first) return null;
-  if (!auction.highestBidderId) {
-    await holdAuctionEscrow(tx, first, auction.startingPrice, 0, "registration-start");
-    await tx.auctionBid.create({ data: { auctionId, bidderId: first.characterId, round: 0, amount: auction.startingPrice } });
-    await tx.auction.update({ where: { id: auctionId }, data: { highestBidderId: first.characterId, currentPrice: auction.startingPrice, currentBid: auction.startingPrice, currentRound: 0 } });
-  }
-  if (auction.participants.length === 1) return settleAuctionTx(tx, auctionId, now);
-  const next = auction.participants.find((participant) => participant.characterId !== (auction.highestBidderId ?? first.characterId)) ?? null;
+  const next = auction.participants[0] ?? null;
   await tx.auction.update({
     where: { id: auctionId },
-    data: { phase: AuctionPhase.LIVE, currentTurnParticipantId: next?.id ?? null, turnEndsAt: next ? new Date(now.getTime() + AUCTION_TURN_MS) : null }
+    data: {
+      phase: AuctionPhase.LIVE,
+      currentTurnParticipantId: next?.id ?? null,
+      turnEndsAt: next ? new Date(Math.min(now.getTime() + AUCTION_TURN_MS, auction.endsAt.getTime())) : null
+    }
   });
   if (!next) return settleAuctionTx(tx, auctionId, now);
   await tx.worldNews.create({ data: { title: "Đấu Giá Trực Tiếp bắt đầu", body: `${auction.item.template.name} bắt đầu phiên trả giá theo lượt tại Vạn Bảo Lâu.`, category: "auction" } });
@@ -1447,25 +1447,27 @@ async function startLiveAuctionTx(tx: Tx, auctionId: string, now = new Date()) {
 export async function processAuctionHouse(db: Db, now = new Date(), limit = 50) {
   const registrationEnded = await db.auction.findMany({ where: { status: AuctionStatus.ACTIVE, phase: AuctionPhase.OPEN_REGISTRATION, registrationEndsAt: { lte: now } }, take: limit, orderBy: { registrationEndsAt: "asc" } });
   for (const auction of registrationEnded) await db.$transaction((tx) => startLiveAuctionTx(tx, auction.id, now), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  const liveEnded = await db.auction.findMany({ where: { status: AuctionStatus.ACTIVE, phase: AuctionPhase.LIVE, endsAt: { lte: now } }, take: limit, orderBy: { endsAt: "asc" } });
+  for (const auction of liveEnded) await db.$transaction((tx) => settleAuctionTx(tx, auction.id, now), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   const timedOut = await db.auction.findMany({ where: { status: AuctionStatus.ACTIVE, phase: AuctionPhase.LIVE, turnEndsAt: { lte: now } }, take: limit, orderBy: { turnEndsAt: "asc" } });
   for (const auction of timedOut) {
     await db.$transaction(async (tx) => {
       const current = await tx.auction.findUnique({ where: { id: auction.id }, include: { currentTurnParticipant: true } });
       if (!current?.currentTurnParticipant || current.phase !== AuctionPhase.LIVE || current.status !== AuctionStatus.ACTIVE || !current.turnEndsAt || current.turnEndsAt > now) return null;
+      if (current.endsAt <= now) return settleAuctionTx(tx, auction.id, now);
       await releaseAuctionEscrow(tx, current.currentTurnParticipant, "auto-pass");
       await tx.auctionParticipant.update({ where: { id: current.currentTurnParticipant.id }, data: { status: AuctionParticipantStatus.PASSED, lastActionAt: now } });
       await tx.gameLog.create({ data: { characterId: current.currentTurnParticipant.characterId, type: "auction", message: "Bạn đã quá thời gian lượt và tự rút khỏi phiên đấu giá." } });
       return advanceAuctionAfterAction(tx, auction.id, now);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
-  return { registrationStarted: registrationEnded.length, autoPassed: timedOut.length };
+  return { registrationStarted: registrationEnded.length, settled: liveEnded.length, autoPassed: timedOut.length };
 }
 
 export async function createAuction(db: Db, sellerId: string, itemId: string, startingPrice: bigint, now = new Date()) {
   if (startingPrice <= 0n) throw new GameError("INVALID_PRICE", "Giá khởi điểm không hợp lệ.");
   if (startingPrice > 999_999_999_999n) throw new GameError("INVALID_PRICE", "Giá khởi điểm quá lớn.");
   return db.$transaction(async (tx) => {
-    await assertAtMarket(tx, sellerId);
     const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
     if (!item || item.ownerId !== sellerId || item.quantity <= 0) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
     if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể đấu giá vật phẩm đang trang bị.");
@@ -1483,7 +1485,7 @@ export async function createAuction(db: Db, sellerId: string, itemId: string, st
         currentBid: 0n,
         currentRound: -1,
         registrationEndsAt: new Date(now.getTime() + AUCTION_REGISTRATION_MS),
-        endsAt: new Date(now.getTime() + 24 * 60 * 60_000)
+        endsAt: new Date(now.getTime() + AUCTION_REGISTRATION_MS + AUCTION_LIVE_MS)
       }
     });
     await tx.gameLog.create({ data: { characterId: sellerId, type: "auction", message: `Đưa ${item.template.name} lên Đấu Giá với giá khởi điểm ${formatAuctionAmount(startingPrice)}.` } });
@@ -1498,7 +1500,6 @@ export async function createAuction(db: Db, sellerId: string, itemId: string, st
 export async function joinAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
   if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
   return db.$transaction(async (tx) => {
-    await assertAtMarket(tx, characterId);
     const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: { orderBy: [{ joinedAt: "asc" }, { id: "asc" }] }, item: { include: { template: true } } } });
     if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.OPEN_REGISTRATION) throw new GameError("AUCTION_CLOSED", "Phiên đấu giá không còn nhận người tham gia.");
     if (auction.registrationEndsAt <= now) throw new GameError("AUCTION_REGISTRATION_CLOSED", "Phiên đấu giá đã bắt đầu trả giá.");
@@ -1506,15 +1507,10 @@ export async function joinAuction(db: Db, characterId: string, auctionId: string
     const existing = auction.participants.find((participant) => participant.characterId === characterId);
     if (existing) {
       if (existing.status === AuctionParticipantStatus.PASSED) throw new GameError("AUCTION_ALREADY_PASSED", "Bạn đã rút khỏi phiên đấu giá này.");
-      return existing;
+      throw new GameError("AUCTION_ALREADY_JOINED", "Bạn đã đăng ký tham gia phiên đấu giá này.");
     }
-    await debitWallet(tx, characterId, Currency.LINH_THACH, auction.startingPrice, WalletTxType.ESCROW, "Auction", auctionId, `auction:join:${auctionId}:${characterId}:${actionKey}`);
-    const participant = await tx.auctionParticipant.create({ data: { auctionId, characterId, status: AuctionParticipantStatus.ACTIVE, joinedAt: now, lastActionAt: now, lastBidRound: 0, lastBidPrice: auction.startingPrice } });
-    if (!auction.highestBidderId) {
-      await tx.auction.update({ where: { id: auctionId }, data: { highestBidderId: characterId, currentPrice: auction.startingPrice, currentBid: auction.startingPrice, currentRound: 0 } });
-      await tx.auctionBid.create({ data: { auctionId, bidderId: characterId, round: 0, amount: auction.startingPrice } });
-    }
-    await tx.gameLog.create({ data: { characterId, type: "auction", message: `Bạn tham gia đấu giá ${auction.item.template.name} ở mức ${formatAuctionAmount(auction.startingPrice)}.` } });
+    const participant = await tx.auctionParticipant.create({ data: { auctionId, characterId, status: AuctionParticipantStatus.ACTIVE, joinedAt: now, lastActionAt: now, lastBidRound: null, lastBidPrice: 0n } });
+    await tx.gameLog.create({ data: { characterId, type: "auction", message: `Bạn đăng ký tham gia đấu giá ${auction.item.template.name}.` } });
     return participant;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -1522,9 +1518,9 @@ export async function joinAuction(db: Db, characterId: string, auctionId: string
 export async function raiseAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
   if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
   return db.$transaction(async (tx) => {
-    await assertAtMarket(tx, characterId);
     const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { currentTurnParticipant: true, participants: true, item: { include: { template: true } } } });
     if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) throw new GameError("AUCTION_NOT_LIVE", "Phiên đấu giá chưa tới lượt trả giá.");
+    if (auction.endsAt <= now) throw new GameError("AUCTION_ENDED", "Phiên đấu giá đã kết thúc.");
     const participant = auction.participants.find((entry) => entry.characterId === characterId);
     if (!participant) throw new GameError("AUCTION_NOT_JOINED", "Bạn chưa tham gia phiên đấu giá này.");
     if (participant.status === AuctionParticipantStatus.PASSED) throw new GameError("AUCTION_ALREADY_PASSED", "Bạn đã rút khỏi phiên đấu giá này.");
@@ -1551,9 +1547,9 @@ export async function raiseAuction(db: Db, characterId: string, auctionId: strin
 export async function passAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
   if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
   return db.$transaction(async (tx) => {
-    await assertAtMarket(tx, characterId);
     const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { currentTurnParticipant: true, participants: true } });
     if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) throw new GameError("AUCTION_NOT_LIVE", "Phiên đấu giá chưa tới lượt trả giá.");
+    if (auction.endsAt <= now) throw new GameError("AUCTION_ENDED", "Phiên đấu giá đã kết thúc.");
     const participant = auction.participants.find((entry) => entry.characterId === characterId);
     if (!participant) throw new GameError("AUCTION_NOT_JOINED", "Bạn chưa tham gia phiên đấu giá này.");
     if (participant.status === AuctionParticipantStatus.PASSED) throw new GameError("AUCTION_ALREADY_PASSED", "Bạn đã rút khỏi phiên đấu giá này.");

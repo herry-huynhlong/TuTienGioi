@@ -59,7 +59,7 @@ const navGroups: NavGroup[] = [
     title: "Kinh tế",
     links: [
       { href: "/game/market", label: "Vạn Bảo Lâu", icon: ShoppingBag, status: "partial", featureKey: "market" },
-      { href: "/game/auction", label: "Đấu Giá", icon: Gavel, status: "coming_soon", featureKey: "auction" },
+      { href: "/game/auction", label: "Đấu Giá", icon: Gavel, status: "partial", featureKey: "auction" },
       { href: "/game/profession", label: "Nghề Nghiệp", icon: BriefcaseBusiness, status: "partial", featureKey: "profession" }
     ]
   },

@@ -6,18 +6,21 @@ import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
-import { auctionClassLabel, auctionPriceForRound, canAuctionItem } from "@ttg/game";
+import { AUCTION_LIVE_GAME_DAYS, AUCTION_REGISTRATION_GAME_DAYS, auctionClassLabel, auctionPriceForRound, canAuctionItem, processAuctionHouse } from "@ttg/game";
 import { cancelAuctionAction, createAuctionAction, joinAuctionAction, passAuctionAction, raiseAuctionAction } from "@/lib/forms";
+
+type AuctionTab = "upcoming" | "live" | "ended" | "sell" | "my";
 
 export default async function AuctionPage({ searchParams }: { searchParams?: Promise<{ tab?: string; detail?: string; sellItem?: string; error?: string; ok?: string }> }) {
   const user = await getUser();
   if (!user) redirect("/");
   const params = await searchParams;
-  const tab = params?.tab === "sell" || params?.tab === "my" ? params.tab : "live";
+  const tab: AuctionTab = params?.tab === "live" || params?.tab === "ended" || params?.tab === "sell" || params?.tab === "my" ? params.tab : "upcoming";
+  const now = new Date();
+  await processAuctionHouse(prisma, now);
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId: user.id },
     include: {
-      currentLocation: true,
       items: {
         where: { quantity: { gt: 0 }, equippedSlot: null },
         include: { template: true, listings: { where: { status: "ACTIVE" }, select: { id: true } }, auctions: { where: { status: "ACTIVE" }, select: { id: true } } },
@@ -25,13 +28,18 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       }
     }
   });
-  const atMarket = Array.isArray(character.currentLocation?.services) && character.currentLocation.services.includes("auction");
-  const [auctions, myAuctions] = await Promise.all([
+  const [activeAuctions, endedAuctions, myAuctions] = await Promise.all([
     prisma.auction.findMany({
       where: { status: AuctionStatus.ACTIVE },
       take: 30,
       include: { item: { include: { template: true } }, seller: true, highestBidder: true, currentTurnParticipant: { include: { character: true } }, participants: { include: { character: true }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }] }, bids: { include: { bidder: true }, orderBy: { round: "asc" } } },
       orderBy: [{ phase: "asc" }, { registrationEndsAt: "asc" }]
+    }),
+    prisma.auction.findMany({
+      where: { status: { in: [AuctionStatus.SETTLED, AuctionStatus.CANCELLED] } },
+      take: 30,
+      include: { item: { include: { template: true } }, seller: true, highestBidder: true, currentTurnParticipant: { include: { character: true } }, participants: { include: { character: true }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }] }, bids: { include: { bidder: true }, orderBy: { round: "asc" } } },
+      orderBy: { settledAt: "desc" }
     }),
     prisma.auction.findMany({
       where: { sellerId: character.id },
@@ -40,7 +48,10 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       orderBy: { startsAt: "desc" }
     })
   ]);
-  const selectedAuction = auctions.find((auction) => auction.id === params?.detail) ?? auctions[0] ?? null;
+  const upcomingAuctions = activeAuctions.filter((auction) => auction.phase === AuctionPhase.OPEN_REGISTRATION);
+  const liveAuctions = activeAuctions.filter((auction) => auction.phase === AuctionPhase.LIVE);
+  const visibleAuctions = tab === "live" ? liveAuctions : tab === "ended" ? endedAuctions : upcomingAuctions;
+  const selectedAuction = visibleAuctions.find((auction) => auction.id === params?.detail) ?? visibleAuctions[0] ?? null;
   const sellableItems = character.items.filter((item) => canAuctionItem(item.template) && !item.bound && item.listings.length === 0 && item.auctions.length === 0);
   const selectedItem = sellableItems.find((item) => item.id === params?.sellItem) ?? sellableItems[0];
 
@@ -49,54 +60,51 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Đấu Giá</p>
         <h1 className="mt-1 text-3xl font-black">Đấu Giá Trực Tiếp</h1>
-        <p className="muted mt-2">Phiên trả giá theo lượt. Mỗi lần nâng cố định +30% giá khởi điểm, không nhập giá tự do.</p>
+        <p className="muted mt-2">Hệ thống đấu giá toàn cục. Vật phẩm lên sàn chờ đăng ký {AUCTION_REGISTRATION_GAME_DAYS} ngày game, sau đó mở đấu tối đa {AUCTION_LIVE_GAME_DAYS} ngày game.</p>
       </header>
       <ActionAlert message={params?.error} />
       <ActionAlert message={okMessage(params?.ok)} />
-      {!atMarket ? (
-        <section className="panel rounded-lg p-5 mb-5">
-          <h2 className="text-xl font-bold text-gold">Bạn chưa ở khu Đấu Giá</h2>
-          <p className="muted mt-2">Đấu giá chỉ mở khi nhân vật đứng tại địa điểm có dịch vụ Đấu Giá.</p>
-          <Link href="/game/world" className="btn mt-4">Xem bản đồ</Link>
-        </section>
-      ) : null}
 
       <nav className="tab-row mb-5">
-        <Link href="/game/auction" className={tab === "live" ? "active" : ""}>Phiên đấu</Link>
+        <Link href="/game/auction" className={tab === "upcoming" ? "active" : ""}>Sắp đấu giá</Link>
+        <Link href="/game/auction?tab=live" className={tab === "live" ? "active" : ""}>Đang đấu giá</Link>
+        <Link href="/game/auction?tab=ended" className={tab === "ended" ? "active" : ""}>Đã kết thúc</Link>
         <Link href={selectedItem ? `/game/auction?tab=sell&sellItem=${selectedItem.id}` : "/game/auction?tab=sell"} className={tab === "sell" ? "active" : ""}>Đưa lên sàn</Link>
         <Link href="/game/auction?tab=my" className={tab === "my" ? "active" : ""}>Phiên của tôi</Link>
       </nav>
 
-      {tab === "live" ? <LiveAuctions auctions={auctions} selectedAuction={selectedAuction} characterId={character.id} balance={character.linhThach} disabled={!atMarket} /> : null}
-      {tab === "sell" ? <SellAuctionTab items={sellableItems} selectedItem={selectedItem} disabled={!atMarket} /> : null}
+      {tab === "upcoming" || tab === "live" || tab === "ended" ? <AuctionList tab={tab} auctions={visibleAuctions} selectedAuction={selectedAuction} characterId={character.id} balance={character.linhThach} now={now} /> : null}
+      {tab === "sell" ? <SellAuctionTab items={sellableItems} selectedItem={selectedItem} /> : null}
       {tab === "my" ? <MyAuctionTab auctions={myAuctions} /> : null}
     </div>
   );
 }
 
-function LiveAuctions({ auctions, selectedAuction, characterId, balance, disabled }: { auctions: Array<any>; selectedAuction: any | null; characterId: string; balance: bigint; disabled: boolean }) {
+function AuctionList({ tab, auctions, selectedAuction, characterId, balance, now }: { tab: AuctionTab; auctions: Array<any>; selectedAuction: any | null; characterId: string; balance: bigint; now: Date }) {
+  const title = tab === "live" ? "Đang đấu giá" : tab === "ended" ? "Đã kết thúc" : "Sắp đấu giá";
+  const empty = tab === "live" ? "Chưa có phiên đang đấu giá." : tab === "ended" ? "Chưa có phiên đã kết thúc." : "Chưa có phiên đang chờ đăng ký.";
   return (
     <section className="grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
       <div className="panel rounded-lg p-5">
-        <h2 className="text-xl font-bold text-gold">Danh sách phiên</h2>
+        <h2 className="text-xl font-bold text-gold">{title}</h2>
         <div className="market-sell-list mt-4">
           {auctions.map((auction) => (
-            <Link key={auction.id} href={`/game/auction?detail=${auction.id}`} className={selectedAuction?.id === auction.id ? "selected" : ""}>
+            <Link key={auction.id} href={`/game/auction${tab === "upcoming" ? "" : `?tab=${tab}`}${tab === "upcoming" ? "?" : "&"}detail=${auction.id}`} className={selectedAuction?.id === auction.id ? "selected" : ""}>
               <b>{auction.item.template.name}</b>
-              <small>{phaseLabel(auction.phase)} · hiện tại {formatAmount(auction.currentPrice || auction.startingPrice)}</small>
+              <small>{phaseLabel(auction.phase)} · {auctionTimeLabel(auction, now)} · {auction.participants.length} đăng ký</small>
             </Link>
           ))}
-          {auctions.length === 0 ? <p className="muted">Chưa có phiên đấu giá đang mở.</p> : null}
+          {auctions.length === 0 ? <p className="muted">{empty}</p> : null}
         </div>
       </div>
       <div className="panel rounded-lg p-5">
-        {selectedAuction ? <AuctionDetail auction={selectedAuction} characterId={characterId} balance={balance} disabled={disabled} /> : <p className="muted">Chọn một phiên để xem chi tiết.</p>}
+        {selectedAuction ? <AuctionDetail auction={selectedAuction} characterId={characterId} balance={balance} now={now} /> : <p className="muted">Chọn một phiên để xem chi tiết.</p>}
       </div>
     </section>
   );
 }
 
-function AuctionDetail({ auction, characterId, balance, disabled }: { auction: any; characterId: string; balance: bigint; disabled: boolean }) {
+function AuctionDetail({ auction, characterId, balance, now }: { auction: any; characterId: string; balance: bigint; now: Date }) {
   const me = auction.participants.find((participant: any) => participant.characterId === characterId);
   const isSeller = auction.sellerId === characterId;
   const nextRound = auction.currentRound < 0 ? 0 : auction.currentRound + 1;
@@ -115,15 +123,16 @@ function AuctionDetail({ auction, characterId, balance, disabled }: { auction: a
         { label: "Giá khởi điểm", value: <CurrencyAmount amount={auction.startingPrice} /> },
         { label: "Bước giá", value: <CurrencyAmount amount={auction.bidStep} /> },
         { label: "Giá hiện tại", value: <CurrencyAmount amount={currentPrice} /> },
+        { label: "Thời gian", value: auctionTimeLabel(auction, now) },
         { label: "Lượt hiện tại", value: auction.currentTurnParticipant?.character.name ?? "Chưa bắt đầu" },
         { label: "Người dẫn đầu", value: auction.highestBidder?.name ?? "Chưa có" },
-        { label: "Số người tham gia", value: auction.participants.length.toLocaleString("vi-VN") }
+        { label: "Đã đăng ký", value: auction.participants.length.toLocaleString("vi-VN") }
       ]}
       action={
         <div className="auction-action-box">
           <p className="muted">{statusText(auction, me, isSeller, isMyTurn)}</p>
-          {canJoin ? <JoinAuctionForm auction={auction} balance={balance} disabled={disabled} /> : null}
-          {canAct ? <TurnActionForms auction={auction} nextPrice={nextPrice} disabled={disabled} balance={balance} /> : null}
+          {canJoin ? <JoinAuctionForm auction={auction} /> : null}
+          {canAct ? <TurnActionForms auction={auction} nextPrice={nextPrice} balance={balance} /> : null}
           <AuctionLog auction={auction} />
         </div>
       }
@@ -131,21 +140,20 @@ function AuctionDetail({ auction, characterId, balance, disabled }: { auction: a
   );
 }
 
-function JoinAuctionForm({ auction, balance, disabled }: { auction: any; balance: bigint; disabled: boolean }) {
-  const blocked = disabled || balance < auction.startingPrice;
+function JoinAuctionForm({ auction }: { auction: any }) {
   return (
     <form action={joinAuctionAction} className="item-card-action">
       <input type="hidden" name="auctionId" value={auction.id} />
       <input type="hidden" name="actionKey" value={randomUUID()} />
-      <button className="btn w-full" disabled={blocked}>{blocked ? "Không đủ điều kiện" : `Tham gia ${formatAmount(auction.startingPrice)}`}</button>
+      <button className="btn w-full">Đăng ký tham gia</button>
     </form>
   );
 }
 
-function TurnActionForms({ auction, nextPrice, disabled, balance }: { auction: any; nextPrice: bigint; disabled: boolean; balance: bigint }) {
+function TurnActionForms({ auction, nextPrice, balance }: { auction: any; nextPrice: bigint; balance: bigint }) {
   const currentHold = auction.currentTurnParticipant?.lastBidPrice ?? 0n;
   const needMore = nextPrice > currentHold ? nextPrice - currentHold : 0n;
-  const blocked = disabled || balance < needMore;
+  const blocked = balance < needMore;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <form action={raiseAuctionAction} className="item-card-action">
@@ -156,7 +164,7 @@ function TurnActionForms({ auction, nextPrice, disabled, balance }: { auction: a
       <form action={passAuctionAction} className="item-card-action">
         <input type="hidden" name="auctionId" value={auction.id} />
         <input type="hidden" name="actionKey" value={randomUUID()} />
-        <button className="btn btn-secondary w-full" disabled={disabled}>Bỏ Qua</button>
+        <button className="btn btn-secondary w-full">Bỏ Qua</button>
       </form>
     </div>
   );
@@ -174,7 +182,7 @@ function AuctionLog({ auction }: { auction: any }) {
   );
 }
 
-function SellAuctionTab({ items, selectedItem, disabled }: { items: Array<any>; selectedItem: any | undefined; disabled: boolean }) {
+function SellAuctionTab({ items, selectedItem }: { items: Array<any>; selectedItem: any | undefined }) {
   return (
     <section className="grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
       <div className="panel rounded-lg p-5">
@@ -198,7 +206,7 @@ function SellAuctionTab({ items, selectedItem, disabled }: { items: Array<any>; 
               { label: "Hạng", value: auctionClassLabel(selectedItem.template) || "Đấu giá thường" },
               { label: "Điều kiện", value: "Có thể đưa lên Đấu Giá" }
             ]}
-            action={<CreateAuctionForm item={selectedItem} disabled={disabled} />}
+            action={<CreateAuctionForm item={selectedItem} />}
           />
         ) : <p className="muted">Chọn vật phẩm để tạo phiên.</p>}
       </div>
@@ -206,13 +214,13 @@ function SellAuctionTab({ items, selectedItem, disabled }: { items: Array<any>; 
   );
 }
 
-function CreateAuctionForm({ item, disabled }: { item: any; disabled: boolean }) {
+function CreateAuctionForm({ item }: { item: any }) {
   return (
     <form action={createAuctionAction} className="grid gap-3">
       <input type="hidden" name="itemId" value={item.id} />
       <label>Giá khởi điểm<input className="field" name="startingPrice" inputMode="numeric" min="1" defaultValue="100000" required /></label>
-      <button className="btn" disabled={disabled}>Mở phiên đấu giá</button>
-      <small className="muted">Người tham gia sẽ đăng ký trong 5 phút, sau đó trả giá theo lượt 60 giây.</small>
+      <button className="btn">Đưa lên Đấu Giá</button>
+      <small className="muted">Phiên sẽ chờ đăng ký {AUCTION_REGISTRATION_GAME_DAYS} ngày game, sau đó mở đấu tối đa {AUCTION_LIVE_GAME_DAYS} ngày game.</small>
     </form>
   );
 }
@@ -247,16 +255,16 @@ function CancelAuctionForm({ auctionId }: { auctionId: string }) {
 
 function phaseLabel(phase: string) {
   return ({
-    OPEN_REGISTRATION: "Đang chờ người tham gia",
+    OPEN_REGISTRATION: "Đang đăng ký",
     LIVE: "Đang trả giá",
     SETTLED: "Đã kết thúc",
-    CANCELLED: "Đã hủy"
+    CANCELLED: "Không bán được"
   } as Record<string, string>)[phase] ?? phase;
 }
 
 function statusText(auction: any, me: any, isSeller: boolean, isMyTurn: boolean) {
   if (isSeller) return "Bạn là người bán, chỉ có thể theo dõi phiên.";
-  if (!me && auction.phase === AuctionPhase.OPEN_REGISTRATION) return "Bạn có thể tham gia bằng giá khởi điểm.";
+  if (!me && auction.phase === AuctionPhase.OPEN_REGISTRATION) return "Bạn có thể đăng ký slot tham gia. Đăng ký chưa giữ tiền.";
   if (!me) return "Phiên đã bắt đầu, không thể tham gia thêm.";
   if (me.status === AuctionParticipantStatus.PASSED) return "Bạn đã rút khỏi phiên đấu giá này.";
   if (auction.phase === AuctionPhase.OPEN_REGISTRATION) return "Bạn đã tham gia. Chờ hết thời gian đăng ký để bắt đầu trả giá.";
@@ -276,4 +284,19 @@ function okMessage(ok?: string) {
 
 function formatAmount(amount: bigint) {
   return `${amount.toLocaleString("vi-VN")} Linh Thạch`;
+}
+
+function auctionTimeLabel(auction: any, now: Date) {
+  if (auction.phase === AuctionPhase.OPEN_REGISTRATION) return `Mở sau ${formatDuration(auction.registrationEndsAt.getTime() - now.getTime())}`;
+  if (auction.phase === AuctionPhase.LIVE) return `Kết thúc sau ${formatDuration(auction.endsAt.getTime() - now.getTime())}`;
+  return auction.settledAt ? `Kết thúc ${auction.settledAt.toLocaleString("vi-VN")}` : "Đã khép lại";
+}
+
+function formatDuration(ms: number) {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours >= 24) return `${Math.floor(hours / 24)} ngày ${hours % 24} giờ`;
+  if (hours > 0) return `${hours} giờ ${minutes} phút`;
+  return `${minutes} phút`;
 }

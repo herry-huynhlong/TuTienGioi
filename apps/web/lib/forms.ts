@@ -725,12 +725,13 @@ export async function createAuctionAction(formData: FormData) {
 }
 
 export async function joinAuctionAction(formData: FormData) {
+  const auctionId = String(formData.get("auctionId") ?? "");
   try {
-    await joinAuction(prisma, await characterId(), String(formData.get("auctionId")), String(formData.get("actionKey") ?? ""));
+    await joinAuction(prisma, await characterId(), auctionId, String(formData.get("actionKey") ?? ""));
   } catch (error) {
     redirectGameError(error, "/game/auction");
   }
-  redirect(`/game/auction?detail=${encodeURIComponent(String(formData.get("auctionId") ?? ""))}&ok=joined`);
+  redirect(`/game/auction?detail=${encodeURIComponent(auctionId)}&ok=joined`);
 }
 
 export async function raiseAuctionAction(formData: FormData) {
@@ -738,9 +739,9 @@ export async function raiseAuctionAction(formData: FormData) {
   try {
     await raiseAuction(prisma, await characterId(), auctionId, String(formData.get("actionKey") ?? ""));
   } catch (error) {
-    redirectGameError(error, `/game/auction?detail=${encodeURIComponent(auctionId)}`);
+    redirectGameError(error, `/game/auction?tab=live&detail=${encodeURIComponent(auctionId)}`);
   }
-  redirect(`/game/auction?detail=${encodeURIComponent(auctionId)}&ok=raised`);
+  redirect(`/game/auction?tab=live&detail=${encodeURIComponent(auctionId)}&ok=raised`);
 }
 
 export async function passAuctionAction(formData: FormData) {
@@ -748,9 +749,9 @@ export async function passAuctionAction(formData: FormData) {
   try {
     await passAuction(prisma, await characterId(), auctionId, String(formData.get("actionKey") ?? ""));
   } catch (error) {
-    redirectGameError(error, `/game/auction?detail=${encodeURIComponent(auctionId)}`);
+    redirectGameError(error, `/game/auction?tab=live&detail=${encodeURIComponent(auctionId)}`);
   }
-  redirect(`/game/auction?detail=${encodeURIComponent(auctionId)}&ok=passed`);
+  redirect(`/game/auction?tab=live&detail=${encodeURIComponent(auctionId)}&ok=passed`);
 }
 
 export async function cancelAuctionAction(formData: FormData) {

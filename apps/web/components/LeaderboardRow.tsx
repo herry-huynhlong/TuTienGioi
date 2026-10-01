@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
-import { CinematicBackground, type CinematicSource } from "./CinematicBackground";
+import { getLeaderboardCinematic } from "@/lib/leaderboardCinematics";
+import { CinematicBackground } from "./CinematicBackground";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
 
@@ -115,55 +116,23 @@ function EnvironmentLayer() {
 }
 
 function CinematicSceneLayer({ theme, rank }: { theme: LeaderboardTheme; rank: number }) {
-  const cinematic = getCinematicAsset(theme, rank);
+  const cinematic = getLeaderboardCinematic(rank, theme);
 
   return (
-    <div className="lb-cinematic-layer" data-theme={theme} aria-hidden>
-      <CinematicBackground sources={cinematic.sources} poster={cinematic.poster} label={cinematic.label} />
+    <div className="lb-cinematic-layer" data-theme={cinematic.theme} aria-hidden>
+      <CinematicBackground
+        webm={cinematic.webm}
+        mp4={cinematic.mp4}
+        poster={cinematic.poster}
+        label={cinematic.label}
+        missingLabel={`MISSING: ${cinematic.webm}`}
+        preload={cinematic.preload}
+      />
       <span className="lb-cinematic-fallback" />
       <span className="lb-cinematic-depth lb-cinematic-depth-a" />
       <span className="lb-cinematic-depth lb-cinematic-depth-b" />
     </div>
   );
-}
-
-function getCinematicAsset(theme: LeaderboardTheme, rank: number): { sources: CinematicSource[]; poster: string; label: string } {
-  if (theme === "gold") {
-    return {
-      sources: [
-        { src: "/leaderboard/cinematics/rank1-golden-dragon.webm", type: "video/webm" },
-        { src: "/leaderboard/cinematics/rank1-golden-dragon.mp4", type: "video/mp4" }
-      ],
-      poster: "/leaderboard/posters/rank1-golden-dragon-poster.webp",
-      label: "Cinematic Kim Long hạng 1"
-    };
-  }
-  if (theme === "frost") {
-    return {
-      sources: [
-        { src: "/leaderboard/cinematics/rank2-ice-moon-dragon.webm", type: "video/webm" },
-        { src: "/leaderboard/cinematics/rank2-ice-moon-dragon.mp4", type: "video/mp4" }
-      ],
-      poster: "/leaderboard/posters/rank2-ice-moon-dragon-poster.webp",
-      label: "Cinematic Băng Long hạng 2"
-    };
-  }
-  if (theme === "ember") {
-    return {
-      sources: [
-        { src: "/leaderboard/cinematics/rank3-fire-phoenix.webm", type: "video/webm" },
-        { src: "/leaderboard/cinematics/rank3-fire-phoenix.mp4", type: "video/mp4" }
-      ],
-      poster: "/leaderboard/posters/rank3-fire-phoenix-poster.webp",
-      label: "Cinematic Hỏa Phượng hạng 3"
-    };
-  }
-
-  return {
-    sources: [{ src: `/leaderboard/cinematics/rank${rank}-ambient.webm`, type: "video/webm" }],
-    poster: `/leaderboard/posters/rank${rank}-ambient-poster.webp`,
-    label: `Cinematic hạng ${rank}`
-  };
 }
 
 function ParticleLayer({ theme, count, compact = false }: { theme: LeaderboardTheme; count: number; compact?: boolean }) {

@@ -4491,7 +4491,6 @@ select.field option {
   transform: translateX(1.1rem);
 }
 
-.leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-rank-emblem .rank-wing,
 .leaderboard-entry:not([data-rank-tier="normal"]) .leaderboard-rank-emblem .rank-ring {
   opacity: 0;
 }
@@ -4583,28 +4582,6 @@ select.field option {
   border-radius: 50%;
   box-shadow: inset 0 0 24px color-mix(in srgb, var(--rank-accent) 18%, transparent);
   animation: leaderboardRankPulse 4.8s ease-in-out infinite;
-}
-
-.rank-wing {
-  position: absolute;
-  top: 1.22rem;
-  width: 2.7rem;
-  height: 2.25rem;
-  border-top: 1px solid color-mix(in srgb, var(--rank-accent) 65%, white 8%);
-  background:
-    linear-gradient(135deg, transparent 38%, color-mix(in srgb, var(--rank-accent) 30%, transparent) 39% 54%, transparent 55%),
-    linear-gradient(25deg, transparent 34%, color-mix(in srgb, var(--rank-accent) 45%, transparent) 35% 49%, transparent 50%);
-  opacity: 0.95;
-}
-
-.rank-wing-left {
-  left: 0.1rem;
-  transform: skewY(-13deg);
-}
-
-.rank-wing-right {
-  right: 0.1rem;
-  transform: scaleX(-1) skewY(-13deg);
 }
 
 .leaderboard-person {
@@ -4969,9 +4946,6 @@ select.field option {
     font-size: 1.35rem;
   }
 
-  .rank-wing {
-    display: none;
-  }
 }
 
 /* Layered leaderboard, built from live HTML data instead of static row banners. */
@@ -6387,8 +6361,7 @@ select.field option {
   font-size: 2rem;
 }
 
-.lb-rank-ring,
-.lb-rank-wings {
+.lb-rank-ring {
   position: absolute;
 }
 
@@ -6398,15 +6371,6 @@ select.field option {
   border-radius: 50%;
   box-shadow: inset 0 0 24px color-mix(in srgb, var(--lb-accent) 18%, transparent);
   animation: lbHaloRotate 18s linear infinite;
-}
-
-.lb-rank-wings {
-  inset: 1.1rem -0.35rem auto;
-  height: 2.4rem;
-  background:
-    linear-gradient(120deg, transparent 0 16%, color-mix(in srgb, var(--lb-accent) 38%, transparent) 17% 24%, transparent 25% 35%, color-mix(in srgb, var(--lb-accent) 28%, transparent) 36% 44%, transparent 45%),
-    linear-gradient(240deg, transparent 0 16%, color-mix(in srgb, var(--lb-accent) 38%, transparent) 17% 24%, transparent 25% 35%, color-mix(in srgb, var(--lb-accent) 28%, transparent) 36% 44%, transparent 45%);
-  opacity: 0.8;
 }
 
 .lb-character-portrait {
@@ -6486,34 +6450,38 @@ select.field option {
   transform-origin: center;
 }
 
-.winged-avatar-video .lb-cinematic-video,
-.winged-avatar-video .lb-cinematic-poster,
+.winged-avatar-motion,
 .winged-avatar-poster {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   border: 0;
+  background: transparent;
   object-fit: contain;
   opacity: 1;
-  mix-blend-mode: screen;
   pointer-events: none;
 }
 
-.winged-avatar[data-wing-tier="1"] .lb-cinematic-video,
-.winged-avatar[data-wing-tier="1"] .lb-cinematic-poster,
+.winged-avatar-motion {
+  mix-blend-mode: screen;
+}
+
+.winged-avatar-poster {
+  mix-blend-mode: normal;
+}
+
+.winged-avatar[data-wing-tier="1"] .winged-avatar-motion,
 .winged-avatar[data-wing-tier="1"] .winged-avatar-poster {
   filter: saturate(1.2) contrast(1.1) brightness(1.1) drop-shadow(0 0 16px rgba(255, 218, 94, 0.32));
 }
 
-.winged-avatar[data-wing-tier="2"] .lb-cinematic-video,
-.winged-avatar[data-wing-tier="2"] .lb-cinematic-poster,
+.winged-avatar[data-wing-tier="2"] .winged-avatar-motion,
 .winged-avatar[data-wing-tier="2"] .winged-avatar-poster {
   filter: saturate(1.12) contrast(1.06) brightness(1.05) drop-shadow(0 0 12px rgba(114, 202, 255, 0.25));
 }
 
-.winged-avatar[data-wing-tier="3"] .lb-cinematic-video,
-.winged-avatar[data-wing-tier="3"] .lb-cinematic-poster,
+.winged-avatar[data-wing-tier="3"] .winged-avatar-motion,
 .winged-avatar[data-wing-tier="3"] .winged-avatar-poster {
   filter: saturate(1.16) contrast(1.08) brightness(1.04) drop-shadow(0 0 12px rgba(242, 122, 48, 0.24));
 }
@@ -6597,7 +6565,8 @@ select.field option {
   font-size: clamp(1.35rem, 2vw, 2rem);
   font-weight: 1000;
   line-height: 1.04;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
   text-shadow: 0 0 18px color-mix(in srgb, var(--lb-accent) 28%, transparent), 0 2px 0 rgba(0, 0, 0, 0.65);
 }
 
@@ -6893,15 +6862,38 @@ select.field option {
 
 @media (max-width: 1180px) {
   .lb-hero-card {
-    grid-template-columns: minmax(19rem, 1.15fr) minmax(13rem, 0.85fr) minmax(12rem, 0.7fr);
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+    min-height: 14.5rem;
+  }
+
+  .lb-hero-character-layer {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .winged-avatar-xl {
+    --winged-avatar-width: clamp(12.5rem, 24vw, 16rem);
+    --winged-avatar-height: clamp(7.2rem, 14vw, 9.2rem);
+  }
+
+  .lb-character-portrait-hero {
+    width: 6.2rem;
+    height: 6.2rem;
+  }
+
+  .lb-hero-content-layer {
+    justify-items: start;
+    text-align: left;
   }
 
   .lb-hero-stat-layer {
-    grid-template-columns: auto auto;
+    grid-template-columns: minmax(9rem, auto) minmax(8rem, auto) minmax(5rem, auto);
+    justify-content: start;
+    width: 100%;
   }
 
   .lb-fame-seal {
-    display: none;
+    display: grid;
   }
 }
 
@@ -6957,41 +6949,66 @@ select.field option {
   }
 
   .lb-hero-card {
+    gap: 0.85rem;
     padding: 0.95rem;
   }
 
   .lb-hero-character-layer {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto auto minmax(0, 1fr);
     grid-template-areas:
-      "rank name"
-      "portrait name";
+      "rank portrait name";
     gap: 0.7rem 0.85rem;
   }
 
   .lb-rank-medallion-hero {
     grid-area: rank;
-    width: 4.5rem;
-    height: 4.5rem;
+    width: 3.7rem;
+    height: 3.7rem;
   }
 
   .lb-rank-medallion-hero strong {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.45rem;
+    width: 2.55rem;
+    height: 2.55rem;
+    font-size: 1.22rem;
   }
 
   .lb-character-portrait-hero {
     grid-area: portrait;
-    width: 5.4rem;
-    height: 5.4rem;
+    width: 4.6rem;
+    height: 4.6rem;
+  }
+
+  .lb-winged-avatar {
+    grid-area: portrait;
+    justify-self: center;
+  }
+
+  .winged-avatar-xl {
+    --winged-avatar-width: clamp(8.7rem, 38vw, 11.8rem);
+    --winged-avatar-height: clamp(5rem, 22vw, 6.8rem);
   }
 
   .lb-hero-nameplate {
     grid-area: name;
+    align-self: center;
+    min-width: 0;
   }
 
   .lb-hero-nameplate strong {
-    font-size: 1.28rem;
+    display: -webkit-box;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(1.05rem, 5vw, 1.28rem);
+    line-height: 1.12;
+    overflow-wrap: normal;
+    text-overflow: ellipsis;
+    word-break: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .lb-hero-realm strong {
+    font-size: 1.02rem;
   }
 
   .lb-hero-stat-layer {
@@ -7001,8 +7018,8 @@ select.field option {
   }
 
   .lb-cultivation-stat-hero {
-    width: 4.8rem;
-    height: 4.8rem;
+    width: 100%;
+    min-height: 4rem;
   }
 
   .lb-sect-crest-hero svg {
@@ -7012,8 +7029,10 @@ select.field option {
 
   .lb-fame-seal {
     display: grid;
-    width: 3.7rem;
-    height: 3.7rem;
+    width: 100%;
+    height: 4rem;
+    clip-path: none;
+    border-radius: 0.45rem;
   }
 
   .lb-compact-main {

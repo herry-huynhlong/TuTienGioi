@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import math
 import random
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-import imageio.v2 as imageio
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
+import imageio_ffmpeg
 
 
 WIDTH = 720
@@ -128,7 +129,7 @@ def draw_particles(layer: Image.Image, palette: WingPalette, t: float, seed: int
 
 
 def render_frame(palette: WingPalette, t: float, rank_scale: float, seed: int, fire: bool = False) -> Image.Image:
-    img = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 255))
+    img = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
 
     aura = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     ad = ImageDraw.Draw(aura, "RGBA")
@@ -151,7 +152,17 @@ def render_frame(palette: WingPalette, t: float, rank_scale: float, seed: int, f
     cd = ImageDraw.Draw(center, "RGBA")
     cd.ellipse((WIDTH * 0.40, HEIGHT * 0.24, WIDTH * 0.60, HEIGHT * 0.76), fill=(0, 0, 0, 130))
     add_layer(img, center, blur=18)
-    return img.convert("RGB")
+    return img
+
+
+def transparentize_source(source: Image.Image) -> Image.Image:
+    rgb = np.asarray(source.convert("RGB")).astype(np.float32)
+    luminance = rgb[..., 0] * 0.2126 + rgb[..., 1] * 0.7152 + rgb[..., 2] * 0.0722
+    chroma = rgb.max(axis=2) - rgb.min(axis=2)
+    alpha = np.clip((luminance - 8) * 4.4 + chroma * 1.15, 0, 255)
+    alpha = cv2.GaussianBlur(alpha.astype(np.uint8), (0, 0), 0.8)
+    rgba_arr = np.dstack([rgb.astype(np.uint8), alpha])
+    return Image.fromarray(rgba_arr, "RGBA")
 
 
 def load_source_art(name: str) -> Image.Image | None:
@@ -159,12 +170,13 @@ def load_source_art(name: str) -> Image.Image | None:
     if not path.exists():
         return None
     source = Image.open(path).convert("RGB")
-    return ImageOps.fit(source, (WIDTH, HEIGHT), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)).convert("RGBA")
+    fitted = ImageOps.fit(source, (WIDTH, HEIGHT), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+    return transparentize_source(fitted)
 
 
 def source_wing_motion_frame(source: Image.Image, palette: WingPalette, t: float, rank_scale: float, seed: int, fire: bool = False) -> Image.Image:
-    rgb = np.asarray(source.convert("RGB"))
-    h, w = rgb.shape[:2]
+    rgba_source = np.asarray(source.convert("RGBA"))
+    h, w = rgba_source.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     nx = xx / w
     ny = yy / h
@@ -181,8 +193,8 @@ def source_wing_motion_frame(source: Image.Image, palette: WingPalette, t: float
         np.sin(xx / 44.0 + t * math.tau * 1.7 + seed * 0.2) * 5.2
         + np.cos(yy / 34.0 - t * math.tau * 1.2) * 3.2
     ) * wing_mask
-    warped = cv2.remap(rgb, xx + dx, yy + dy, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
-    img = Image.fromarray(warped, "RGB").convert("RGBA")
+    warped = cv2.remap(rgba_source, xx + dx, yy + dy, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    img = Image.fromarray(warped, "RGBA")
 
     energy = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw_energy(energy, palette, t, rank_scale)
@@ -197,15 +209,66 @@ def source_wing_motion_frame(source: Image.Image, palette: WingPalette, t: float
 
     center_shadow = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     cd = ImageDraw.Draw(center_shadow, "RGBA")
-    cd.ellipse((WIDTH * 0.40, HEIGHT * 0.18, WIDTH * 0.60, HEIGHT * 0.82), fill=(0, 0, 0, 88))
+    cd.ellipse((WIDTH * 0.40, HEIGHT * 0.18, WIDTH * 0.60, HEIGHT * 0.82), fill=(0, 0, 0, 52))
     add_layer(img, center_shadow, blur=20)
-    return img.convert("RGB")
+    return img
 
 
-def write_video(frames: list[np.ndarray], path: Path, codec: str, params: list[str]) -> None:
-    with imageio.get_writer(path, fps=FPS, codec=codec, macro_block_size=1, output_params=params) as writer:
-        for frame in frames:
-            writer.append_data(frame)
+def write_webm_alpha(frames: list[np.ndarray], path: Path) -> None:
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-pix_fmt", "rgba",
+        "-s", f"{WIDTH}x{HEIGHT}",
+        "-r", str(FPS),
+        "-i", "-",
+        "-an",
+        "-c:v", "libvpx-vp9",
+        "-pix_fmt", "yuva420p",
+        "-auto-alt-ref", "0",
+        "-crf", "32",
+        "-b:v", "0",
+        "-row-mt", "1",
+        str(path),
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    assert proc.stdin is not None
+    for frame in frames:
+        proc.stdin.write(frame.tobytes())
+    proc.stdin.close()
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg failed while writing {path}")
+
+
+def write_mp4_preview(frames: list[np.ndarray], path: Path) -> None:
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-pix_fmt", "rgba",
+        "-s", f"{WIDTH}x{HEIGHT}",
+        "-r", str(FPS),
+        "-i", "-",
+        "-vf", "format=yuv420p",
+        "-an",
+        "-c:v", "libx264",
+        "-crf", "25",
+        "-preset", "medium",
+        "-movflags", "+faststart",
+        str(path),
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    assert proc.stdin is not None
+    for frame in frames:
+        proc.stdin.write(frame.tobytes())
+    proc.stdin.close()
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg failed while writing {path}")
 
 
 def render_asset(name: str, palette: WingPalette, scale: float, seed: int, fire: bool = False) -> None:
@@ -219,13 +282,13 @@ def render_asset(name: str, palette: WingPalette, scale: float, seed: int, fire:
         frame = source_wing_motion_frame(source, palette, t, scale, seed, fire) if source else render_frame(palette, t, scale, seed, fire)
         if index == FRAMES // 4:
             poster = frame.copy()
-        frames.append(np.asarray(frame))
+        frames.append(np.asarray(frame.convert("RGBA")))
         if index % 24 == 0:
             print(f"  frame {index + 1}/{FRAMES}")
     assert poster is not None
-    poster.save(WINGS / f"{name}-poster.webp", "WEBP", quality=88, method=6)
-    write_video(frames, WINGS / f"{name}.mp4", "libx264", ["-pix_fmt", "yuv420p", "-crf", "25", "-preset", "medium", "-movflags", "+faststart", "-an"])
-    write_video(frames, WINGS / f"{name}.webm", "libvpx-vp9", ["-pix_fmt", "yuv420p", "-crf", "34", "-b:v", "0", "-row-mt", "1", "-an"])
+    poster.save(WINGS / f"{name}-poster.webp", "WEBP", quality=88, method=6, lossless=False)
+    write_mp4_preview(frames, WINGS / f"{name}.mp4")
+    write_webm_alpha(frames, WINGS / f"{name}.webm")
 
 
 def main() -> None:

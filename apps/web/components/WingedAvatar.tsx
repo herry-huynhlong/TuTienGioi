@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { RankVisual } from "@/lib/leaderboardWings";
 import { getWingForRankVisual } from "@/lib/leaderboardWings";
-import { CinematicBackground } from "./CinematicBackground";
 
 type WingedAvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
@@ -22,14 +21,9 @@ export function WingedAvatar({ avatar, rankVisual, size = "md", animated = true,
       {wing ? (
         <div className="winged-avatar-video" aria-hidden>
           {animated ? (
-            <CinematicBackground
-              webm={wing.webm}
-              mp4={wing.mp4}
-              poster={wing.poster}
-              label={wing.label}
-              missingLabel={`MISSING: ${wing.webm}`}
-              preload={wing.preload}
-            />
+            <video className="winged-avatar-motion" autoPlay muted loop playsInline preload={wing.preload} poster={wing.poster} aria-label={wing.label}>
+              <source src={wing.webm} type="video/webm" />
+            </video>
           ) : (
             <img className="winged-avatar-poster" src={wing.poster} alt="" loading="lazy" decoding="async" />
           )}

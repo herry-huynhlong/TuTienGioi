@@ -185,7 +185,6 @@ function CharacterPortrait({ avatar, rankVisual, hero = false }: { avatar: React
 function RankMedallion({ rank, hero = false }: { rank: number; hero?: boolean }) {
   return (
     <div className={hero ? "lb-rank-medallion lb-rank-medallion-hero" : "lb-rank-medallion"} aria-label={`Hạng ${rank}`}>
-      <span className="lb-rank-wings" aria-hidden />
       <span className="lb-rank-ring" aria-hidden />
       <strong>{rank}</strong>
     </div>

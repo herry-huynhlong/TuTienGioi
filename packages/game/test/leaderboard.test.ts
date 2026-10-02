@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getLeaderboardRankVisual } from "../src/index.js";
+import { calculateWealthScore, getLeaderboardRankVisual, isLeaderboardType } from "../src/index.js";
 
 describe("leaderboard rank visuals", () => {
   it("maps top 1-5 to descending special tiers", () => {
@@ -16,5 +16,13 @@ describe("leaderboard rank visuals", () => {
     expect(getLeaderboardRankVisual(0).tier).toBe("normal");
     expect(getLeaderboardRankVisual(null).tier).toBe("normal");
     expect(getLeaderboardRankVisual(undefined).tier).toBe("normal");
+  });
+
+  it("validates leaderboard categories and calculates wealth from server-owned currency", () => {
+    expect(isLeaderboardType("cultivation")).toBe(true);
+    expect(isLeaderboardType("wealth")).toBe(true);
+    expect(isLeaderboardType("sect")).toBe(true);
+    expect(isLeaderboardType("realm-name")).toBe(false);
+    expect(calculateWealthScore({ linhThach: 1_000n, tienNgoc: 5n })).toBe(1_500n);
   });
 });

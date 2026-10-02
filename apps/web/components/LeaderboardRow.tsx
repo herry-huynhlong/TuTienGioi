@@ -6,6 +6,7 @@ import { SectEmblem } from "./SectEmblem";
 import { WingedAvatar } from "./WingedAvatar";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
+export type LeaderboardKind = "cultivation" | "wealth" | "sect";
 
 export type LeaderboardEntry = {
   rank: number;
@@ -15,12 +16,21 @@ export type LeaderboardEntry = {
   cultivation: string;
   sect: { type: "sect"; name: string; iconKey?: string | null } | { type: "independent" };
   fame: string;
-  title?: string | null;
+  metricLabel?: string | undefined;
+  metricValue?: string | undefined;
+  title?: string | null | undefined;
   theme: LeaderboardTheme;
   rankVisual?: RankVisual | null;
+  kind?: LeaderboardKind | undefined;
+  memberCount?: number | undefined;
+  leaderName?: string | undefined;
+  background?: string | null | undefined;
 };
 
 export function LeaderboardHeroCard(props: LeaderboardEntry) {
+  if (props.kind === "sect") return <LeaderboardSectHeroCard {...props} />;
+  const metricLabel = props.metricLabel ?? "Tu vi";
+  const metricValue = props.metricValue ?? props.cultivation;
   return (
     <article className="lb-hero-card" data-theme={props.theme} data-rank={props.rank}>
       <BackgroundLayer />
@@ -46,7 +56,7 @@ export function LeaderboardHeroCard(props: LeaderboardEntry) {
       </div>
 
       <div className="lb-hero-stat-layer">
-        <CultivationStat value={props.cultivation} hero />
+        {props.kind === "wealth" ? <MetricStat label={metricLabel} value={metricValue} hero /> : null}
         <SectCrest sect={props.sect} hero />
         <div className="lb-fame-seal">
           <span>Danh vọng</span>
@@ -60,6 +70,9 @@ export function LeaderboardHeroCard(props: LeaderboardEntry) {
 }
 
 export function LeaderboardCompactCard(props: LeaderboardEntry) {
+  if (props.kind === "sect") return <LeaderboardSectCompactCard {...props} />;
+  const metricLabel = props.kind === "wealth" ? props.metricLabel ?? "Tài bảo" : "Cảnh giới";
+  const metricValue = props.kind === "wealth" ? props.metricValue ?? props.cultivation : props.realm;
   return (
     <article className="lb-compact-card" data-theme={props.theme}>
       <BackgroundLayer compact />
@@ -76,12 +89,8 @@ export function LeaderboardCompactCard(props: LeaderboardEntry) {
 
       <div className="lb-compact-meta">
         <div>
-          <span>Cảnh giới</span>
-          <strong>{props.realm}</strong>
-        </div>
-        <div>
-          <span>Tu vi</span>
-          <strong>{props.cultivation}</strong>
+          <span>{metricLabel}</span>
+          <strong>{metricValue}</strong>
         </div>
         <div>
           <span>{props.sect.type === "sect" ? "Tông môn" : ""}</span>
@@ -90,6 +99,74 @@ export function LeaderboardCompactCard(props: LeaderboardEntry) {
         <div>
           <span>Danh vọng</span>
           <strong>{props.fame}</strong>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function LeaderboardSectHeroCard(props: LeaderboardEntry) {
+  return (
+    <article className="lb-hero-card lb-sect-hero-card" data-theme={props.theme} data-rank={props.rank} style={props.background ? { "--sect-bg": `url("${props.background}")` } as CSSProperties : undefined}>
+      <BackgroundLayer />
+      <EnvironmentLayer />
+      <ParticleLayer theme={props.theme} count={props.rank === 1 ? 18 : 14} />
+      <BorderFXLayer />
+
+      <div className="lb-sect-hero-emblem">
+        <RankMedallion rank={props.rank} hero />
+        <SectCrest sect={props.sect} hero />
+      </div>
+
+      <div className="lb-hero-content-layer">
+        <div className="lb-hero-nameplate">
+          <strong>{props.name}</strong>
+          <span>{props.realm}</span>
+        </div>
+      </div>
+
+      <div className="lb-hero-stat-layer">
+        <MetricStat label="Uy danh" value={props.fame} hero />
+        <div className="lb-fame-seal">
+          <span>Tông chủ</span>
+          <strong>{props.leaderName ?? "Chưa rõ"}</strong>
+        </div>
+        <div className="lb-fame-seal">
+          <span>Thành viên</span>
+          <strong>{props.memberCount?.toLocaleString("vi-VN") ?? "0"}</strong>
+        </div>
+      </div>
+
+      <ForegroundLayer />
+    </article>
+  );
+}
+
+function LeaderboardSectCompactCard(props: LeaderboardEntry) {
+  return (
+    <article className="lb-compact-card lb-sect-compact-card" data-theme={props.theme}>
+      <BackgroundLayer compact />
+      <ParticleLayer theme={props.theme} count={5} compact />
+      <div className="lb-compact-main">
+        <RankMedallion rank={props.rank} />
+        <SectCrest sect={props.sect} />
+        <div className="lb-compact-identity">
+          <strong>{props.name}</strong>
+          <span>{props.realm}</span>
+        </div>
+      </div>
+      <div className="lb-compact-meta">
+        <div>
+          <span>Uy danh</span>
+          <strong>{props.fame}</strong>
+        </div>
+        <div>
+          <span>Tông chủ</span>
+          <strong>{props.leaderName ?? "Chưa rõ"}</strong>
+        </div>
+        <div>
+          <span>Thành viên</span>
+          <strong>{props.memberCount?.toLocaleString("vi-VN") ?? "0"}</strong>
         </div>
       </div>
     </article>
@@ -192,10 +269,10 @@ function RankMedallion({ rank, hero = false }: { rank: number; hero?: boolean })
   );
 }
 
-function CultivationStat({ value, hero = false }: { value: string; hero?: boolean }) {
+function MetricStat({ label, value, hero = false }: { label: string; value: string; hero?: boolean }) {
   return (
     <div className={hero ? "lb-cultivation-stat lb-cultivation-stat-hero" : "lb-cultivation-stat"}>
-      <span>Tu vi</span>
+      <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
@@ -209,10 +286,7 @@ function SectCrest({ sect, hero = false }: { sect: LeaderboardEntry["sect"]; her
       {isSect ? (
         <SectEmblem iconKey={sect.iconKey} size={hero ? "lg" : "sm"} />
       ) : (
-        <svg viewBox="0 0 72 72" aria-hidden>
-          <path d="M36 8c8 8 12 17 12 27 0 13-8 24-12 29-4-5-12-16-12-29 0-10 4-19 12-27Z" />
-          <path d="M22 46c7-3 12-3 14 3 2-6 7-6 14-3M28 25c4 4 12 4 16 0" />
-        </svg>
+        <SectEmblem type="independent" size={hero ? "lg" : "sm"} />
       )}
       <strong>{isSect ? sect.name : "Tán tu"}</strong>
     </div>

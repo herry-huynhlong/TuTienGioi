@@ -5967,6 +5967,32 @@ select.field option {
   margin-bottom: 1.35rem;
 }
 
+.lb-category-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.lb-category-tabs a {
+  border: 1px solid rgba(244, 239, 227, 0.12);
+  background: rgba(244, 239, 227, 0.045);
+  color: rgba(244, 239, 227, 0.72);
+  padding: 0.85rem 1rem;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.lb-category-tabs a.active,
+.lb-category-tabs a:hover {
+  border-color: rgba(45, 212, 191, 0.5);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.16), rgba(214, 178, 94, 0.12));
+  color: #eafffb;
+  box-shadow: 0 0 24px rgba(45, 212, 191, 0.1);
+}
+
 .lb-featured-ranks {
   display: grid;
   gap: 1rem;
@@ -6068,6 +6094,34 @@ select.field option {
     inset 0 0 78px rgba(240, 189, 63, 0.14),
     0 24px 54px rgba(0, 0, 0, 0.3),
     0 0 32px rgba(240, 189, 63, 0.09);
+}
+
+.lb-sect-hero-card {
+  grid-template-columns: minmax(13rem, 0.7fr) minmax(18rem, 1fr) minmax(19rem, 0.9fr);
+  background:
+    linear-gradient(90deg, rgba(5, 10, 9, 0.88), rgba(10, 15, 14, 0.72), rgba(5, 10, 9, 0.9)),
+    var(--sect-bg),
+    linear-gradient(92deg, rgba(5, 10, 9, 0.98), rgba(13, 18, 16, 0.97) 50%, color-mix(in srgb, var(--lb-deep) 86%, black));
+  background-size: cover;
+  background-position: center;
+}
+
+.lb-sect-hero-emblem {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.lb-sect-hero-card .lb-sect-crest-hero .sect-emblem {
+  width: 6.6rem;
+  height: 6.6rem;
+}
+
+.lb-sect-compact-card .lb-sect-crest {
+  grid-template-columns: auto;
+  min-width: 4rem;
 }
 
 .lb-hero-card:hover,

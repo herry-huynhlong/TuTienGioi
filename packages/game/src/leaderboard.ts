@@ -1,4 +1,6 @@
 export type LeaderboardRankTier = 1 | 2 | 3 | 4 | 5 | "normal";
+export const leaderboardTypes = ["cultivation", "wealth", "sect"] as const;
+export type LeaderboardType = (typeof leaderboardTypes)[number];
 
 export type LeaderboardRankVisual = {
   tier: LeaderboardRankTier;
@@ -33,4 +35,12 @@ const normalRankVisual: LeaderboardRankVisual = {
 export function getLeaderboardRankVisual(rank: number | null | undefined): LeaderboardRankVisual {
   if (!Number.isInteger(rank) || !rank || rank < 1) return normalRankVisual;
   return topRankVisuals[rank] ?? normalRankVisual;
+}
+
+export function isLeaderboardType(value: unknown): value is LeaderboardType {
+  return typeof value === "string" && leaderboardTypes.includes(value as LeaderboardType);
+}
+
+export function calculateWealthScore(character: { linhThach: bigint; tienNgoc: bigint }) {
+  return character.linhThach + character.tienNgoc * 100n;
 }

@@ -1,7 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { getLeaderboardCinematic } from "@/lib/leaderboardCinematics";
-import { getLeaderboardWing } from "@/lib/leaderboardWings";
+import type { RankVisual } from "@/lib/leaderboardWings";
 import { CinematicBackground } from "./CinematicBackground";
+import { WingedAvatar } from "./WingedAvatar";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
 
@@ -15,6 +16,7 @@ export type LeaderboardEntry = {
   fame: string;
   title?: string | null;
   theme: LeaderboardTheme;
+  rankVisual?: RankVisual | null;
 };
 
 export function LeaderboardHeroCard(props: LeaderboardEntry) {
@@ -27,9 +29,8 @@ export function LeaderboardHeroCard(props: LeaderboardEntry) {
       <BorderFXLayer />
 
       <div className="lb-hero-character-layer">
-        <WingCinematicLayer rank={props.rank} theme={props.theme} />
         <RankMedallion rank={props.rank} hero />
-        <CharacterPortrait avatar={props.avatar} hero />
+        <CharacterPortrait avatar={props.avatar} rankVisual={props.rankVisual} hero />
         <div className="lb-hero-nameplate">
           <strong>{props.name}</strong>
           <span>{props.title || "Tán tu"}</span>
@@ -65,7 +66,7 @@ export function LeaderboardCompactCard(props: LeaderboardEntry) {
 
       <div className="lb-compact-main">
         <RankMedallion rank={props.rank} />
-        <CharacterPortrait avatar={props.avatar} />
+        <CharacterPortrait avatar={props.avatar} rankVisual={props.rankVisual} />
         <div className="lb-compact-identity">
           <strong>{props.name}</strong>
           <span>{props.title || "Tán tu"}</span>
@@ -137,24 +138,6 @@ function CinematicSceneLayer({ theme, rank }: { theme: LeaderboardTheme; rank: n
   );
 }
 
-function WingCinematicLayer({ theme, rank }: { theme: LeaderboardTheme; rank: number }) {
-  const wing = getLeaderboardWing(rank, theme);
-  if (!wing) return null;
-
-  return (
-    <div className="lb-wing-layer" data-wing-theme={wing.theme} data-wing-rank={rank} aria-hidden>
-      <CinematicBackground
-        webm={wing.webm}
-        mp4={wing.mp4}
-        poster={wing.poster}
-        label={wing.label}
-        missingLabel={`MISSING: ${wing.webm}`}
-        preload={wing.preload}
-      />
-    </div>
-  );
-}
-
 function ParticleLayer({ theme, count, compact = false }: { theme: LeaderboardTheme; count: number; compact?: boolean }) {
   return (
     <div className={compact ? "lb-particle-layer lb-particle-layer-compact" : "lb-particle-layer"} data-theme={theme} aria-hidden>
@@ -184,12 +167,18 @@ function BorderFXLayer() {
   );
 }
 
-function CharacterPortrait({ avatar, hero = false }: { avatar: ReactNode; hero?: boolean }) {
-  return (
+function CharacterPortrait({ avatar, rankVisual, hero = false }: { avatar: ReactNode; rankVisual?: RankVisual | null | undefined; hero?: boolean }) {
+  const portrait = (
     <div className={hero ? "lb-character-portrait lb-character-portrait-hero" : "lb-character-portrait"}>
       <span className="lb-portrait-halo" aria-hidden />
       <div className="lb-portrait-frame">{avatar}</div>
     </div>
+  );
+
+  if (!rankVisual) return portrait;
+
+  return (
+    <WingedAvatar avatar={portrait} rankVisual={rankVisual} size={hero ? "xl" : "md"} animated={hero} className="lb-winged-avatar" />
   );
 }
 

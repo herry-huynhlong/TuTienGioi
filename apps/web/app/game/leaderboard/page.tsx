@@ -1,6 +1,7 @@
 import { prisma } from "@ttg/db";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { LeaderboardCompactCard, LeaderboardHeroCard, type LeaderboardEntry, type LeaderboardTheme } from "@/components/LeaderboardRow";
+import { getRankVisualForLeaderboardRank } from "@/lib/leaderboardWings";
 
 export default async function LeaderboardPage() {
   const rows = await prisma.character.findMany({
@@ -24,7 +25,8 @@ export default async function LeaderboardPage() {
       cultivation: character.cultivation.toLocaleString("vi-VN"),
       sect,
       fame: character.reputation.toLocaleString("vi-VN"),
-      theme
+      theme,
+      rankVisual: getRankVisualForLeaderboardRank(rank)
     };
   });
   const featured = entries.slice(0, 3);

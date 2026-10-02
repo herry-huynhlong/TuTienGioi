@@ -209,8 +209,6 @@ def make_background(idx: int) -> Image.Image:
 
 def main() -> None:
     ensure_dirs()
-    for idx in range(20):
-        make_icon(idx).save(ICON_DIR / f"sect-icon-{idx + 1:02d}.webp", "WEBP", quality=92, method=6)
     for idx in range(8):
         make_background(idx).save(BG_DIR / f"sect-bg-{idx + 1:02d}.webp", "WEBP", quality=86, method=6)
 

@@ -10,26 +10,26 @@ export const sectBackgroundCatalog = [
 ] as const;
 
 export const sectIconCatalog = [
-  { key: "golden-dragon", name: "Kim Long Ấn", file: "sect-icon-01.webp", backgroundKey: "golden-gate" },
-  { key: "azure-dragon", name: "Thanh Long Ấn", file: "sect-icon-02.webp", backgroundKey: "cloud-mountain" },
-  { key: "white-tiger", name: "Bạch Hổ Ấn", file: "sect-icon-03.webp", backgroundKey: "sword-peak" },
-  { key: "vermillion-phoenix", name: "Chu Tước Ấn", file: "sect-icon-04.webp", backgroundKey: "fire-sect" },
-  { key: "black-tortoise", name: "Huyền Vũ Ấn", file: "sect-icon-05.webp", backgroundKey: "moon-temple" },
-  { key: "immortal-sword", name: "Tiên Kiếm Ấn", file: "sect-icon-06.webp", backgroundKey: "sword-peak" },
-  { key: "lotus", name: "Liên Hoa Ấn", file: "sect-icon-07.webp", backgroundKey: "forest-sect" },
-  { key: "moon", name: "Nguyệt Luân Ấn", file: "sect-icon-08.webp", backgroundKey: "moon-temple" },
-  { key: "sun", name: "Thái Dương Ấn", file: "sect-icon-09.webp", backgroundKey: "golden-gate" },
-  { key: "mountain-peak", name: "Sơn Nhạc Ấn", file: "sect-icon-10.webp", backgroundKey: "cloud-mountain" },
-  { key: "ancient-pagoda", name: "Bảo Tháp Ấn", file: "sect-icon-11.webp", backgroundKey: "ancient-palace" },
-  { key: "spirit-crane", name: "Linh Hạc Ấn", file: "sect-icon-12.webp", backgroundKey: "cloud-mountain" },
-  { key: "qilin", name: "Kỳ Lân Ấn", file: "sect-icon-13.webp", backgroundKey: "golden-gate" },
-  { key: "celestial-cloud", name: "Thiên Vân Ấn", file: "sect-icon-14.webp", backgroundKey: "cloud-mountain" },
-  { key: "thunder-seal", name: "Lôi Ấn", file: "sect-icon-15.webp", backgroundKey: "sword-peak" },
-  { key: "flame-seal", name: "Hỏa Ấn", file: "sect-icon-16.webp", backgroundKey: "fire-sect" },
-  { key: "ice-crystal", name: "Băng Tinh Ấn", file: "sect-icon-17.webp", backgroundKey: "frost-sect" },
-  { key: "yin-yang", name: "Âm Dương Ấn", file: "sect-icon-18.webp", backgroundKey: "moon-temple" },
-  { key: "sacred-tree", name: "Thần Mộc Ấn", file: "sect-icon-19.webp", backgroundKey: "forest-sect" },
-  { key: "heavenly-gate", name: "Thiên Khuyết Ấn", file: "sect-icon-20.webp", backgroundKey: "ancient-palace" }
+  { key: "golden-dragon", name: "Kim Long Ấn", file: "kim-long-an.webp", backgroundKey: "golden-gate" },
+  { key: "azure-dragon", name: "Thanh Long Ấn", file: "thanh-long-an.webp", backgroundKey: "cloud-mountain" },
+  { key: "white-tiger", name: "Bạch Hổ Ấn", file: "bach-ho-an.webp", backgroundKey: "sword-peak" },
+  { key: "vermillion-phoenix", name: "Chu Tước Ấn", file: "chu-tuoc-an.webp", backgroundKey: "fire-sect" },
+  { key: "black-tortoise", name: "Huyền Vũ Ấn", file: "huyen-vu-an.webp", backgroundKey: "moon-temple" },
+  { key: "immortal-sword", name: "Tiên Kiếm Ấn", file: "tien-kiem-an.webp", backgroundKey: "sword-peak" },
+  { key: "lotus", name: "Liên Hoa Ấn", file: "lien-hoa-an.webp", backgroundKey: "forest-sect" },
+  { key: "moon", name: "Nguyệt Luân Ấn", file: "nguyet-luan-an.webp", backgroundKey: "moon-temple" },
+  { key: "sun", name: "Thái Dương Ấn", file: "thai-duong-an.webp", backgroundKey: "golden-gate" },
+  { key: "mountain-peak", name: "Sơn Nhạc Ấn", file: "son-nhac-an.webp", backgroundKey: "cloud-mountain" },
+  { key: "ancient-pagoda", name: "Bảo Tháp Ấn", file: "bao-thap-an.webp", backgroundKey: "ancient-palace" },
+  { key: "spirit-crane", name: "Linh Hạc Ấn", file: "linh-hac-an.webp", backgroundKey: "cloud-mountain" },
+  { key: "qilin", name: "Kỳ Lân Ấn", file: "ky-lan-an.webp", backgroundKey: "golden-gate" },
+  { key: "celestial-cloud", name: "Thiên Vân Ấn", file: "thien-van-an.webp", backgroundKey: "cloud-mountain" },
+  { key: "thunder-seal", name: "Lôi Ấn", file: "loi-an.webp", backgroundKey: "sword-peak" },
+  { key: "flame-seal", name: "Hỏa Ấn", file: "hoa-an.webp", backgroundKey: "fire-sect" },
+  { key: "ice-crystal", name: "Băng Tinh Ấn", file: "bang-tinh-an.webp", backgroundKey: "frost-sect" },
+  { key: "yin-yang", name: "Âm Dương Ấn", file: "am-duong-an.webp", backgroundKey: "moon-temple" },
+  { key: "sacred-tree", name: "Thần Mộc Ấn", file: "than-moc-an.webp", backgroundKey: "forest-sect" },
+  { key: "heavenly-gate", name: "Thiên Khuyết Ấn", file: "thien-khuyet-an.webp", backgroundKey: "ancient-palace" }
 ] as const;
 
 export type SectIconKey = (typeof sectIconCatalog)[number]["key"];

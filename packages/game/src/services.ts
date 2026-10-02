@@ -701,13 +701,15 @@ export async function cancelCultivation(db: Db, characterId: string, activityId:
     await settleActiveCultivation(tx, characterId, now);
     const job = await tx.cultivationActivity.findUnique({ where: { id: activityId } });
     if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy hoạt động.");
+    const totalReward = job.accumulatedReward;
     const updated = await tx.cultivationActivity.updateMany({
       where: { id: activityId, characterId, status: ActivityStatus.ACTIVE },
       data: { status: ActivityStatus.CANCELLED, claimedAt: now }
     });
     if (updated.count !== 1) throw new GameError("CANNOT_CANCEL", "Không thể hủy hoạt động này.");
-    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: `Bạn rời khỏi nhập định. Tổng tu vi tích lũy: ${job.accumulatedReward.toString()}.` } });
-    return { cancelled: true, reward: job.accumulatedReward };
+    if (totalReward > 0n) await recordOnboardingEvent(tx, characterId, "CULTIVATION_CLAIMED");
+    await tx.gameLog.create({ data: { characterId, type: "cultivation", message: `Bạn rời khỏi nhập định. Tổng tu vi tích lũy: ${totalReward.toString()}.` } });
+    return { cancelled: true, reward: totalReward };
   });
 }
 

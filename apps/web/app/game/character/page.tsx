@@ -2,6 +2,7 @@ import { prisma, type SectRoleName } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { CharacterVisual } from "@/components/CharacterVisual";
+import { SectEmblem } from "@/components/SectEmblem";
 import { formatItemCategory, formatRarity } from "@/lib/format";
 import { recordOnboardingEvent, sectRoles } from "@ttg/game";
 
@@ -53,7 +54,10 @@ export default async function CharacterPage() {
             <Info label="Tên" value={c.name} />
             <Info label="Danh hiệu" value={c.title} />
             <Info label="Cảnh giới" value={`${c.realmStage.realm.name} ${c.realmStage.name}`} accent />
-            <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
+            <Info
+              label="Tông môn"
+              value={c.sect ? <span className="inline-sect-emblem"><SectEmblem iconKey={c.sect.iconKey} size="sm" /> {c.sect.name}</span> : "Tán tu"}
+            />
             <Info label="Thân phận" value={c.sectMember ? sectRoles[c.sectMember.role as SectRoleName].label : "Tán tu"} />
             <Info label="Sư phụ" value={c.mentorshipsAsDisciple[0]?.masterCharacter.name ?? "Chưa bái sư"} />
             <Info label="Địa điểm" value={c.currentLocation?.name ?? "Chưa rõ"} />
@@ -142,7 +146,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function Info({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function Info({ label, value, accent = false }: { label: string; value: React.ReactNode; accent?: boolean }) {
   return (
     <div>
       <span>{label}</span>

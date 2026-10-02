@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ActivityStatus } from "@ttg/db";
-import { claimCultivation, claimExploration } from "../src/services.js";
+import { cancelCultivation, claimCultivation, claimExploration } from "../src/services.js";
+import { getFeatureUnlockState } from "../src/onboarding.js";
 
 function fakeDb<Tx extends object>(tx: Tx) {
   return {
@@ -80,5 +81,91 @@ describe("claim services", () => {
     });
     expect(itemCreated).toBe(false);
     expect(logCreated).toBe(false);
+  });
+
+  it("records the first cultivation claim when an active cultivation is stopped with accumulated reward", async () => {
+    const now = new Date("2026-01-01T00:15:00Z");
+    const job = {
+      id: "cult_1",
+      characterId: "char_1",
+      status: ActivityStatus.ACTIVE,
+      startedAt: new Date("2026-01-01T00:00:00Z"),
+      lastProcessedAt: new Date("2026-01-01T00:00:00Z"),
+      endsAt: new Date("2026-01-02T00:00:00Z"),
+      baseReward: 120n,
+      multiplierBps: 10000,
+      accumulatedReward: 0n,
+      metadata: {}
+    };
+    const character = {
+      id: "char_1",
+      name: "Dao Test",
+      cultivation: 0n,
+      realmStage: {
+        requiredCultivation: 0n,
+        order: 1,
+        realm: { order: 1 }
+      }
+    };
+    let progress = {
+      key: "main",
+      status: "ACTIVE",
+      completedObjectives: [] as string[],
+      rewardClaimed: false
+    };
+    let onboardingExists = false;
+    const tx = {
+      cultivationActivity: {
+        findFirst: async () => job.status === ActivityStatus.ACTIVE ? job : null,
+        findUnique: async () => job,
+        update: async ({ data }: { data: any }) => {
+          job.lastProcessedAt = data.lastProcessedAt ?? job.lastProcessedAt;
+          job.accumulatedReward += data.accumulatedReward?.increment ?? 0n;
+          if (data.status) job.status = data.status;
+          return job;
+        },
+        updateMany: async ({ where, data }: { where: any; data: any }) => {
+          if (where.id === job.id && where.characterId === job.characterId && where.status === job.status) {
+            job.status = data.status;
+            return { count: 1 };
+          }
+          return { count: 0 };
+        }
+      },
+      character: {
+        findUniqueOrThrow: async () => character,
+        update: async ({ data }: { data: any }) => {
+          character.cultivation += data.cultivation?.increment ?? 0n;
+          return character;
+        }
+      },
+      realmStage: {
+        findFirst: async () => ({ requiredCultivation: 1000n })
+      },
+      gameLog: {
+        create: async () => undefined
+      },
+      onboardingProgress: {
+        upsert: async ({ create }: { create: typeof progress }) => {
+          if (!onboardingExists) {
+            progress = { ...progress, ...create };
+            onboardingExists = true;
+          }
+          return progress;
+        },
+        update: async ({ data }: { data: Partial<typeof progress> }) => {
+          progress = { ...progress, ...data };
+          return progress;
+        }
+      }
+    };
+
+    const result = await cancelCultivation(fakeDb(tx) as never, "char_1", "cult_1", now);
+    const unlocks = await getFeatureUnlockState(tx as never, "char_1");
+
+    expect(result.reward).toBeGreaterThan(0n);
+    expect(character.cultivation).toBe(result.reward);
+    expect(progress.completedObjectives).toContain("claim-cultivation");
+    expect(unlocks.sect.unlocked).toBe(true);
   });
 });

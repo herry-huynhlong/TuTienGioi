@@ -4,6 +4,7 @@ export * from "./items.js";
 export * from "./item-effects.js";
 export * from "./services.js";
 export * from "./sects.js";
+export * from "./sect-visuals.js";
 export * from "./payment.js";
 export * from "./onboarding.js";
 export * from "./quests.js";

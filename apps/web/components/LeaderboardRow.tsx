@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { getLeaderboardCinematic } from "@/lib/leaderboardCinematics";
 import type { RankVisual } from "@/lib/leaderboardWings";
 import { CinematicBackground } from "./CinematicBackground";
+import { SectEmblem } from "./SectEmblem";
 import { WingedAvatar } from "./WingedAvatar";
 
 export type LeaderboardTheme = "gold" | "frost" | "ember" | "jade" | "violet" | "normal";
@@ -12,7 +13,7 @@ export type LeaderboardEntry = {
   name: string;
   realm: string;
   cultivation: string;
-  sect: { type: "sect"; name: string } | { type: "independent" };
+  sect: { type: "sect"; name: string; iconKey?: string | null } | { type: "independent" };
   fame: string;
   title?: string | null;
   theme: LeaderboardTheme;
@@ -204,20 +205,15 @@ function SectCrest({ sect, hero = false }: { sect: LeaderboardEntry["sect"]; her
   const isSect = sect.type === "sect";
   return (
     <div className={hero ? "lb-sect-crest lb-sect-crest-hero" : "lb-sect-crest"} data-sect-type={sect.type}>
-      <svg viewBox="0 0 72 72" aria-hidden>
-        {isSect ? (
-          <>
-            <path d="M36 6 57 18v22c0 14-8 23-21 28C23 63 15 54 15 40V18L36 6Z" />
-            <path d="M25 31h22M29 24h14M24 45h24M30 31v14M42 31v14M36 18v31" />
-          </>
-        ) : (
-          <>
-            <path d="M36 8c8 8 12 17 12 27 0 13-8 24-12 29-4-5-12-16-12-29 0-10 4-19 12-27Z" />
-            <path d="M22 46c7-3 12-3 14 3 2-6 7-6 14-3M28 25c4 4 12 4 16 0" />
-          </>
-        )}
-      </svg>
       <span>{isSect ? "Tông môn" : ""}</span>
+      {isSect ? (
+        <SectEmblem iconKey={sect.iconKey} size={hero ? "lg" : "sm"} />
+      ) : (
+        <svg viewBox="0 0 72 72" aria-hidden>
+          <path d="M36 8c8 8 12 17 12 27 0 13-8 24-12 29-4-5-12-16-12-29 0-10 4-19 12-27Z" />
+          <path d="M22 46c7-3 12-3 14 3 2-6 7-6 14-3M28 25c4 4 12 4 16 0" />
+        </svg>
+      )}
       <strong>{isSect ? sect.name : "Tán tu"}</strong>
     </div>
   );

@@ -5,7 +5,8 @@ import { applyToSectAction, cancelSectApplicationAction, completeThanhVanAdmissi
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { getSectRank, progressQuestEvent, sectAlignments, sectCreateCost } from "@ttg/game";
-import { BadgeCheck, Castle, Crown, Search, Shield, Sparkles, Users } from "lucide-react";
+import { SectEmblem } from "@/components/SectEmblem";
+import { Crown, Search, Shield, Sparkles, Users } from "lucide-react";
 
 const rankFilters = ["5", "4", "3", "2", "1"] as const;
 
@@ -112,7 +113,7 @@ function SectListCard({ sect, active }: { sect: any; active: boolean }) {
   const leader = sect.members.find((member: any) => member.role === "LEADER")?.character;
   return (
     <a className={`sect-list-card ${active ? "active" : ""}`} href={`/game/sect?sect=${sect.id}`}>
-      <div className="sect-emblem"><Castle size={24} /></div>
+      <SectEmblem iconKey={sect.iconKey} size="md" />
       <div>
         <h2>{sect.name}</h2>
         <p className="muted">[{sect.tag}] · {rank.label} · {sectAlignments[sect.alignment as SectAlignment]}</p>
@@ -134,7 +135,7 @@ function PublicSectProfile({ sect, pendingApplicationId }: { sect: any; pendingA
   return (
     <div className="sect-public-profile">
       <div className="sect-profile-head">
-        <div className="sect-emblem large"><BadgeCheck size={30} /></div>
+        <SectEmblem iconKey={sect.iconKey} size="lg" />
         <div>
           <p className="eyebrow">{sectAlignments[sect.alignment as SectAlignment]}</p>
           <h2>{sect.name}</h2>
@@ -193,12 +194,7 @@ function CreateSectPanel({ characterLinhThach }: { characterLinhThach: bigint })
         <input className="field" name="tag" placeholder="Ký hiệu 2-6 ký tự" minLength={2} maxLength={6} required />
         <textarea className="field" name="description" placeholder="Tuyên ngôn / mô tả tông môn" rows={4} />
         <div className="sect-form-row">
-          <select className="field" name="emblem" defaultValue="yin-yang">
-            <option value="yin-yang">Âm Dương Ấn</option>
-            <option value="mountain">Sơn Môn</option>
-            <option value="sword">Kiếm Ấn</option>
-            <option value="lotus">Liên Hoa</option>
-          </select>
+          <p className="muted sect-create-note">Biểu tượng sơn môn sẽ được Tông Chủ chọn một lần sau khi khai sơn.</p>
           <select className="field" name="alignment" defaultValue={SectAlignment.NEUTRAL}>
             <option value={SectAlignment.RIGHTEOUS}>Chính đạo</option>
             <option value={SectAlignment.NEUTRAL}>Trung lập</option>

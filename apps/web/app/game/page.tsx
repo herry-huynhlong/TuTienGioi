@@ -197,7 +197,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             {activeCultivation ? (
               <form action={cancelCultivationAction}>
                 <input type="hidden" name="id" value={activeCultivation.id} />
-                <button className="btn btn-secondary">Dừng Tu Luyện</button>
+                <button className="btn btn-secondary">Dừng & Nhận Tu Vi</button>
               </form>
             ) : canBreakthrough ? (
               <Link href="/game?breakthrough=1" className="btn">Đột Phá</Link>

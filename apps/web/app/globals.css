@@ -2936,6 +2936,8 @@ select.field option {
   border: 1px solid rgba(214, 178, 94, 0.42);
   background: radial-gradient(circle at 50% 20%, rgba(214, 178, 94, 0.18), rgba(45, 212, 191, 0.08) 42%, rgba(0, 0, 0, 0.22));
   color: #d6b25e;
+  overflow: hidden;
+  box-shadow: 0 0 26px rgba(214, 178, 94, 0.08);
 }
 
 .sect-emblem.large {
@@ -2946,6 +2948,45 @@ select.field option {
 .sect-emblem.hero {
   width: 5rem;
   height: 5rem;
+}
+
+.sect-emblem-sm {
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+.sect-emblem-md {
+  width: 3rem;
+  height: 3rem;
+}
+
+.sect-emblem-lg,
+.sect-emblem.large {
+  width: 4rem;
+  height: 4rem;
+}
+
+.sect-emblem-xl,
+.sect-emblem.hero {
+  width: 5.35rem;
+  height: 5.35rem;
+}
+
+.sect-emblem-img {
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(214, 178, 94, 0.32));
+}
+
+.inline-sect-emblem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.lb-sect-crest .sect-emblem {
+  margin: 0.08rem 0;
 }
 
 .sect-profile-head,
@@ -2975,8 +3016,112 @@ select.field option {
   gap: 0.7rem;
 }
 
+.sect-create-note {
+  display: grid;
+  align-content: center;
+  min-height: 3rem;
+  border: 1px solid rgba(214, 178, 94, 0.18);
+  background: rgba(214, 178, 94, 0.07);
+  padding: 0.7rem 0.8rem;
+}
+
 .sect-home-hero {
   grid-template-columns: auto minmax(0, 1fr) minmax(14rem, auto);
+}
+
+.sect-home-hero-identity {
+  position: relative;
+  overflow: visible;
+  border: 1px solid rgba(214, 178, 94, 0.18);
+  background-size: cover;
+  background-position: center;
+  padding: 1.15rem;
+}
+
+.sect-home-hero-identity::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(11, 17, 14, 0.9), rgba(11, 17, 14, 0.68) 48%, rgba(11, 17, 14, 0.86)),
+    radial-gradient(circle at 20% 28%, rgba(214, 178, 94, 0.2), transparent 34%);
+  pointer-events: none;
+}
+
+.sect-home-hero-identity > * {
+  position: relative;
+  z-index: 1;
+}
+
+.sect-icon-picker {
+  position: relative;
+  width: max-content;
+}
+
+.sect-icon-picker summary {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  cursor: pointer;
+  list-style: none;
+  color: #d6b25e;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.sect-icon-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.sect-icon-picker-popover {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  left: 0;
+  z-index: 15;
+  width: min(42rem, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.9rem;
+  border: 1px solid rgba(214, 178, 94, 0.34);
+  background: rgba(18, 24, 20, 0.98);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  padding: 1rem;
+}
+
+.sect-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.sect-icon-option {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(244, 239, 227, 0.11);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.75rem 0.45rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.sect-icon-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sect-icon-option:has(input:checked),
+.sect-icon-option:hover {
+  border-color: rgba(45, 212, 191, 0.54);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.sect-icon-option span {
+  min-height: 2.1rem;
+  color: #f4efe3;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .sect-rank-panel {
@@ -3277,6 +3422,18 @@ select.field option {
   .sect-storage-row,
   .sect-inline-form {
     grid-template-columns: 1fr;
+  }
+
+  .sect-icon-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sect-icon-picker-popover {
+    position: fixed;
+    inset: auto 1rem 1rem 1rem;
+    width: auto;
+    max-height: 82vh;
+    overflow: auto;
   }
 }
 

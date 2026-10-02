@@ -1067,6 +1067,9 @@ model Sect {
   tag         String @unique
   description String
   emblem      String @default("yin-yang")
+  iconKey     String @default("golden-dragon")
+  iconLockedAt DateTime?
+  backgroundKey String @default("cloud-mountain")
   alignment   SectAlignment @default(NEUTRAL)
   rank        Int @default(5)
   level       Int @default(1)

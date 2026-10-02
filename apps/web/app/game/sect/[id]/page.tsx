@@ -5,10 +5,12 @@ import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectAppli
 import { ActionAlert } from "@/components/ActionAlert";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
-import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
+import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectBackgroundAssetPath, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
+import { SectEmblem } from "@/components/SectEmblem";
+import { SectIconPicker } from "@/components/SectIconPicker";
 import { BookOpen, Boxes, Building2, Castle, Crown, Gem, Landmark, Leaf, Pickaxe, ScrollText, Shield, Sparkles, Users } from "lucide-react";
 
 const tabs = [
@@ -79,8 +81,12 @@ export default async function SectHomePage({ params, searchParams }: { params: P
 
   return (
     <div className="sect-page">
-      <header className="sect-home-hero">
-        <div className="sect-emblem hero"><Castle size={38} /></div>
+      <header className="sect-home-hero sect-home-hero-identity" style={{ backgroundImage: `url("${sectBackgroundAssetPath(sect.backgroundKey)}")` }}>
+        {sect.iconLockedAt || sect.leaderId !== character.id ? (
+          <SectEmblem iconKey={sect.iconKey} size="xl" className="hero" />
+        ) : (
+          <SectIconPicker sectId={sect.id} currentIconKey={sect.iconKey} />
+        )}
         <div className="sect-home-title">
           <p className="eyebrow">{sectAlignments[sect.alignment]}</p>
           <h1>{sect.name}</h1>

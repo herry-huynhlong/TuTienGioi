@@ -12,7 +12,7 @@ export default async function LeaderboardPage() {
   const entries = rows.map((character, index): LeaderboardEntry => {
     const rank = index + 1;
     const realmName = `${character.realmStage.realm.name} ${character.realmStage.name}`;
-    const sect = character.sect ? ({ type: "sect", name: character.sect.name } as const) : ({ type: "independent" } as const);
+    const sect = character.sect ? ({ type: "sect", name: character.sect.name, iconKey: character.sect.iconKey } as const) : ({ type: "independent" } as const);
     const theme = getLeaderboardTheme(rank);
     const avatarSize = getLeaderboardAvatarSize(rank);
 

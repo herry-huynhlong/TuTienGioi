@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, chooseSectIcon, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
 import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
 import { CharacterAppearanceError, characterAppearanceImage, deterministicCharacterAppearanceKey, setCharacterAppearance } from "@ttg/game";
 
@@ -327,6 +327,16 @@ export async function createSectAction(formData: FormData) {
     redirectGameError(error, "/game/sect?tab=create");
   }
   redirect(`/game/sect/${sectId}?created=1`);
+}
+
+export async function chooseSectIconAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await chooseSectIcon(prisma, await characterId(), sectId, String(formData.get("iconKey") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${encodeURIComponent(sectId)}`);
+  }
+  redirect(`/game/sect/${encodeURIComponent(sectId)}?ok=icon`);
 }
 
 export async function applyToSectAction(formData: FormData) {

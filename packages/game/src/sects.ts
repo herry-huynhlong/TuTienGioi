@@ -17,6 +17,7 @@ import { creditWallet, debitWallet } from "./services.js";
 import { cultivationBaseReward, cultivationEnergyCost, currentEnergy } from "./rules.js";
 import { getItemEconomy } from "./items.js";
 import { changeSectContribution } from "./sect-contribution.js";
+import { backgroundForSectIcon, isSectIconKey, normalizeSectIconKey } from "./sect-visuals.js";
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -462,12 +463,14 @@ function deterministicRollBps(seed: string) {
 export async function createSect(
   db: Db,
   characterId: string,
-  input: { name: string; tag: string; description: string; emblem?: string; alignment?: SectAlignment }
+  input: { name: string; tag: string; description: string; emblem?: string; iconKey?: string; backgroundKey?: string; alignment?: SectAlignment }
 ) {
   const name = normalizeText(input.name, 48);
   const tag = normalizeTag(input.tag);
   const description = normalizeText(input.description || "Thanh tu vấn đạo, cầu trường sinh.", 220);
-  const emblem = normalizeText(input.emblem || "yin-yang", 32) || "yin-yang";
+  const iconKey = normalizeSectIconKey(input.iconKey ?? input.emblem ?? "golden-dragon");
+  const emblem = iconKey;
+  const backgroundKey = backgroundForSectIcon(iconKey);
   const alignment = input.alignment ?? SectAlignment.NEUTRAL;
   if (name.length < 3) throw new SectError("BAD_NAME", "Tên tông môn cần ít nhất 3 ký tự.");
   if (tag.length < 2) throw new SectError("BAD_TAG", "Ký hiệu tông môn cần 2-6 ký tự.");
@@ -482,6 +485,8 @@ export async function createSect(
         tag,
         description,
         emblem,
+        iconKey,
+        backgroundKey,
         alignment,
         rank: rank.rank,
         memberLimit: rank.maxMembers,
@@ -514,6 +519,36 @@ export async function createSect(
     await ensureCaves(tx, sect.id, sect.rank, 1);
     await tx.worldNews.create({ data: { title: `${name} khai sơn`, body: `${character.name} dựng cờ ${tag}, khai sinh một thế lực ${getSectRank(5).shortLabel}.`, category: "sect", permanent: true } });
     return sect;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function chooseSectIcon(db: Db, characterId: string, sectId: string, iconKey: string, now = new Date()) {
+  if (!isSectIconKey(iconKey)) throw new SectError("INVALID_SECT_ICON", "Biểu tượng tông môn không hợp lệ.");
+  return db.$transaction(async (tx) => {
+    const member = await assertSectMember(tx, characterId);
+    if (member.sectId !== sectId) throw new SectError("SECT_FORBIDDEN", "Bạn không thuộc tông môn này.");
+    const sect = await tx.sect.findUniqueOrThrow({ where: { id: sectId } });
+    if (sect.leaderId !== characterId) throw new SectError("SECT_FORBIDDEN", "Chỉ Tông Chủ mới được chọn biểu tượng khai sơn.");
+    if (sect.iconLockedAt) throw new SectError("SECT_ICON_LOCKED", "Biểu tượng tông môn đã được xác nhận và không thể đổi.");
+    const backgroundKey = backgroundForSectIcon(iconKey);
+    const updated = await tx.sect.update({
+      where: { id: sectId },
+      data: {
+        iconKey,
+        backgroundKey,
+        emblem: iconKey,
+        iconLockedAt: now
+      }
+    });
+    await tx.sectLog.create({
+      data: {
+        sectId,
+        actorId: characterId,
+        type: SectLogType.ADMIN,
+        message: `${member.sect.name} xác lập biểu tượng sơn môn.`
+      }
+    });
+    return updated;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

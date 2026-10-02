@@ -2802,6 +2802,13 @@ select.field option {
   padding: 0.65rem 0.8rem;
 }
 
+.sect-home-hero-identity .sect-home-stats span {
+  background: rgba(15, 18, 14, 0.58);
+  border-color: rgba(214, 178, 94, 0.3);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(3px);
+}
+
 .sect-hero-stat {
   min-width: 12rem;
   flex-direction: column;
@@ -3053,25 +3060,66 @@ select.field option {
 
 .sect-home-hero-identity {
   position: relative;
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid rgba(214, 178, 94, 0.18);
   background:
-    linear-gradient(90deg, rgba(4, 10, 9, 0.92) 0%, rgba(4, 10, 9, 0.6) 50%, rgba(4, 10, 9, 0.8) 100%),
-    url("/images/sect-bg.webp") center center / cover no-repeat;
+    linear-gradient(90deg, rgba(3, 12, 12, 0.55) 0%, rgba(3, 12, 12, 0.2) 45%, rgba(3, 12, 12, 0.35) 70%, rgba(3, 12, 12, 0.5) 100%),
+    url("/assets/images/sect-bg.webp") center center / cover no-repeat;
   padding: 1.15rem;
 }
 
-.sect-home-hero-identity::before {
-  content: "";
+.sect-hero-video,
+.sect-hero-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(4, 10, 9, 0.16);
   pointer-events: none;
+}
+
+.sect-hero-video {
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 1;
+}
+
+.sect-hero-overlay {
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(3, 12, 12, 0.55) 0%, rgba(3, 12, 12, 0.2) 45%, rgba(3, 12, 12, 0.35) 70%, rgba(3, 12, 12, 0.5) 100%),
+    linear-gradient(180deg, rgba(3, 12, 12, 0.08) 0%, rgba(3, 12, 12, 0.24) 100%);
 }
 
 .sect-home-hero-identity > * {
   position: relative;
+  z-index: 2;
+}
+
+.sect-home-hero-identity .sect-hero-video {
+  position: absolute;
+  z-index: 0;
+}
+
+.sect-home-hero-identity .sect-hero-overlay {
+  position: absolute;
   z-index: 1;
+}
+
+.sect-home-hero-identity:has(.sect-icon-picker[open]) {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sect-hero-video {
+    display: none;
+  }
+
+  .sect-home-hero-identity {
+    background:
+      linear-gradient(90deg, rgba(3, 12, 12, 0.55) 0%, rgba(3, 12, 12, 0.2) 45%, rgba(3, 12, 12, 0.35) 70%, rgba(3, 12, 12, 0.5) 100%),
+      url("/assets/images/sect-bg.webp") center center / cover no-repeat;
+  }
 }
 
 .sect-icon-picker {

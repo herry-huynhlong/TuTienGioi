@@ -95,6 +95,11 @@ export default async function SectHomePage({ params, searchParams }: { params: P
   return (
     <div className="sect-page">
       <header className="sect-home-hero sect-home-hero-identity">
+        <video className="sect-hero-video" autoPlay muted loop playsInline preload="metadata" poster="/assets/images/sect-bg.webp" aria-hidden>
+          <source src="/assets/videos/sect-bg.webm" type="video/webm" />
+          <source src="/assets/videos/sect-bg.mp4" type="video/mp4" />
+        </video>
+        <div className="sect-hero-overlay" aria-hidden />
         {sect.iconLockedAt || sect.leaderId !== character.id ? (
           <SectEmblem iconKey={sect.iconKey} size="xl" className="hero" />
         ) : (

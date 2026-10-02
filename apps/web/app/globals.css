@@ -2821,13 +2821,25 @@ select.field option {
 }
 
 .sect-tabs a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   white-space: nowrap;
   border: 1px solid rgba(244, 239, 227, 0.11);
   background: rgba(244, 239, 227, 0.04);
   color: rgba(244, 239, 227, 0.72);
-  padding: 0.72rem 0.9rem;
+  padding: 0.66rem 0.86rem;
   font-size: 0.82rem;
   font-weight: 900;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.sect-tab-icon {
+  flex: 0 0 auto;
+  color: rgba(214, 178, 94, 0.72);
+  stroke-width: 2;
+  transition: color 180ms ease, filter 180ms ease;
 }
 
 .sect-tabs a.active,
@@ -2835,6 +2847,16 @@ select.field option {
   border-color: rgba(45, 212, 191, 0.42);
   background: rgba(45, 212, 191, 0.12);
   color: #dcfffa;
+}
+
+.sect-tabs a:hover .sect-tab-icon {
+  color: #d6b25e;
+  filter: drop-shadow(0 0 8px rgba(214, 178, 94, 0.24));
+}
+
+.sect-tabs a.active .sect-tab-icon {
+  color: #2dd4bf;
+  filter: drop-shadow(0 0 8px rgba(45, 212, 191, 0.28));
 }
 
 .sect-lobby-grid {
@@ -3033,8 +3055,9 @@ select.field option {
   position: relative;
   overflow: visible;
   border: 1px solid rgba(214, 178, 94, 0.18);
-  background-size: cover;
-  background-position: center;
+  background:
+    linear-gradient(90deg, rgba(4, 10, 9, 0.92) 0%, rgba(4, 10, 9, 0.6) 50%, rgba(4, 10, 9, 0.8) 100%),
+    url("/images/sect-bg.webp") center center / cover no-repeat;
   padding: 1.15rem;
 }
 
@@ -3042,9 +3065,7 @@ select.field option {
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(90deg, rgba(11, 17, 14, 0.9), rgba(11, 17, 14, 0.68) 48%, rgba(11, 17, 14, 0.86)),
-    radial-gradient(circle at 20% 28%, rgba(214, 178, 94, 0.2), transparent 34%);
+  background: rgba(4, 10, 9, 0.16);
   pointer-events: none;
 }
 

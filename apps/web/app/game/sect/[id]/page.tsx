@@ -5,13 +5,13 @@ import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectAppli
 import { ActionAlert } from "@/components/ActionAlert";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
-import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectBackgroundAssetPath, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
+import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 import { SectEmblem } from "@/components/SectEmblem";
 import { SectIconPicker } from "@/components/SectIconPicker";
-import { BookOpen, Boxes, Building2, Castle, Crown, Gem, Landmark, Leaf, Pickaxe, ScrollText, Shield, Sparkles, Users } from "lucide-react";
+import { BookOpen, Boxes, Building2, Castle, Compass, Crown, Gem, Landmark, Leaf, Mountain, PackageOpen, Pickaxe, ScrollText, Settings, Shield, Sparkles, Sprout, Users } from "lucide-react";
 
 const tabs = [
   ["overview", "Tổng Quan"],
@@ -25,6 +25,19 @@ const tabs = [
   ["farm", "Linh Điền"],
   ["admin", "Quản Trị"]
 ] as const;
+
+const tabIcons = {
+  overview: Compass,
+  members: Users,
+  missions: ScrollText,
+  domain: Mountain,
+  caves: Landmark,
+  library: BookOpen,
+  storage: PackageOpen,
+  mine: Pickaxe,
+  farm: Sprout,
+  admin: Settings
+} as const;
 
 export default async function SectHomePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ tab?: string; error?: string; created?: string; ok?: string; storageItem?: string }> }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
@@ -81,7 +94,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
 
   return (
     <div className="sect-page">
-      <header className="sect-home-hero sect-home-hero-identity" style={{ backgroundImage: `url("${sectBackgroundAssetPath(sect.backgroundKey)}")` }}>
+      <header className="sect-home-hero sect-home-hero-identity">
         {sect.iconLockedAt || sect.leaderId !== character.id ? (
           <SectEmblem iconKey={sect.iconKey} size="xl" className="hero" />
         ) : (
@@ -117,9 +130,15 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       </section>
 
       <nav className="sect-tabs sect-tabs-wrap" aria-label="Khu vực tông môn">
-        {tabs.filter(([key]) => key !== "admin" || canAdmin).map(([key, label]) => (
-          <a key={key} className={activeTab === key ? "active" : ""} href={`/game/sect/${id}?tab=${key}`}>{label}</a>
-        ))}
+        {tabs.filter(([key]) => key !== "admin" || canAdmin).map(([key, label]) => {
+          const Icon = tabIcons[key];
+          return (
+            <a key={key} className={activeTab === key ? "active" : ""} href={`/game/sect/${id}?tab=${key}`}>
+              <Icon className="sect-tab-icon" size={17} aria-hidden />
+              <span>{label}</span>
+            </a>
+          );
+        })}
       </nav>
 
       {activeTab === "members" ? <MembersTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_MEMBERS")} /> : null}

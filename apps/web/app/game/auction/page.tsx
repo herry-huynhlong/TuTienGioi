@@ -4,11 +4,12 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
+import { AuctionCreatePanel } from "@/components/AuctionCreatePanel";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
-import { AUCTION_LIVE_GAME_DAYS, AUCTION_REGISTRATION_GAME_DAYS, auctionClassLabel, auctionPriceForRound, canAuctionItem, economyFeatureUnlockReasons, hasReachedLuyenKhi1, processAuctionHouse } from "@ttg/game";
-import { cancelAuctionAction, createAuctionAction, joinAuctionAction, passAuctionAction, raiseAuctionAction } from "@/lib/forms";
+import { AUCTION_LIVE_GAME_DAYS, AUCTION_REGISTRATION_GAME_DAYS, auctionPriceForRound, canAuctionItem, economyFeatureUnlockReasons, hasReachedLuyenKhi1, processAuctionHouse } from "@ttg/game";
+import { cancelAuctionAction, joinAuctionAction, passAuctionAction, raiseAuctionAction } from "@/lib/forms";
 
 type AuctionTab = "upcoming" | "live" | "ended" | "sell" | "my";
 
@@ -24,14 +25,14 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
     include: {
       realmStage: { include: { realm: true } },
       items: {
-        where: { quantity: { gt: 0 }, equippedSlot: null },
+        where: { quantity: { gt: 0 } },
         include: { template: true, listings: { where: { status: "ACTIVE" }, select: { id: true } }, auctions: { where: { status: "ACTIVE" }, select: { id: true } } },
         orderBy: { createdAt: "desc" }
       }
     }
   });
   if (!hasReachedLuyenKhi1(character)) redirect(`/game?error=${encodeURIComponent(economyFeatureUnlockReasons.auction)}`);
-  const [activeAuctions, endedAuctions, myAuctions] = await Promise.all([
+  const [activeAuctions, endedAuctions, myAuctions, economyConfig] = await Promise.all([
     prisma.auction.findMany({
       where: { status: AuctionStatus.ACTIVE },
       take: 30,
@@ -49,13 +50,16 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       take: 30,
       include: { item: { include: { template: true } }, participants: true, highestBidder: true },
       orderBy: { startsAt: "desc" }
-    })
+    }),
+    prisma.gameConfig.findUnique({ where: { key: "economy" } })
   ]);
+  const auctionFeeBps = configNumber(economyConfig?.value, "auctionFeeBps", 300);
   const upcomingAuctions = activeAuctions.filter((auction) => auction.phase === AuctionPhase.OPEN_REGISTRATION);
   const liveAuctions = activeAuctions.filter((auction) => auction.phase === AuctionPhase.LIVE);
   const visibleAuctions = tab === "live" ? liveAuctions : tab === "ended" ? endedAuctions : upcomingAuctions;
   const selectedAuction = visibleAuctions.find((auction) => auction.id === params?.detail) ?? visibleAuctions[0] ?? null;
-  const sellableItems = character.items.filter((item) => canAuctionItem(item.template) && !item.bound && item.listings.length === 0 && item.auctions.length === 0);
+  const auctionItems = character.items.map((item) => ({ ...item, auctionDisabledReason: auctionEligibilityReason(item) }));
+  const sellableItems = auctionItems.filter((item) => !item.auctionDisabledReason);
   const selectedItem = sellableItems.find((item) => item.id === params?.sellItem) ?? sellableItems[0];
 
   return (
@@ -78,8 +82,8 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       </nav>
 
       {tab === "upcoming" || tab === "live" || tab === "ended" ? <AuctionList tab={tab} auctions={visibleAuctions} selectedAuction={selectedAuction} characterId={character.id} balance={character.linhThach} now={now} /> : null}
-      {tab === "sell" ? <SellAuctionTab items={sellableItems} selectedItem={selectedItem} /> : null}
-      {tab === "my" ? <MyAuctionTab auctions={myAuctions} /> : null}
+      {tab === "sell" ? <SellAuctionTab items={auctionItems} selectedItem={selectedItem} auctionFeeBps={auctionFeeBps} /> : null}
+      {tab === "my" ? <MyAuctionTab auctions={myAuctions} now={now} /> : null}
     </div>
     </GamePageBackground>
   );
@@ -187,50 +191,13 @@ function AuctionLog({ auction }: { auction: any }) {
   );
 }
 
-function SellAuctionTab({ items, selectedItem }: { items: Array<any>; selectedItem: any | undefined }) {
+function SellAuctionTab({ items, selectedItem, auctionFeeBps }: { items: Array<any>; selectedItem: any | undefined; auctionFeeBps: number }) {
   return (
-    <section className="grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
-      <div className="panel rounded-lg p-5">
-        <h2 className="text-xl font-bold text-gold">Vật phẩm đủ điều kiện</h2>
-        <div className="market-sell-list mt-4">
-          {items.map((item) => (
-            <Link key={item.id} href={`/game/auction?tab=sell&sellItem=${item.id}`} className={selectedItem?.id === item.id ? "selected" : ""}>
-              <b>{item.template.name}</b>
-              <small>{auctionClassLabel(item.template) || "Được đấu giá"} · x{item.quantity}</small>
-            </Link>
-          ))}
-          {items.length === 0 ? <p className="muted">Không có vật phẩm đủ điều kiện đấu giá. Trang bị cần đạt Trân Phẩm.</p> : null}
-        </div>
-      </div>
-      <div className="panel rounded-lg p-5">
-        {selectedItem ? (
-          <ItemDetailPanel
-            template={selectedItem.template}
-            quantityLabel={`x${selectedItem.quantity}`}
-            details={[
-              { label: "Hạng", value: auctionClassLabel(selectedItem.template) || "Đấu giá thường" },
-              { label: "Điều kiện", value: "Có thể đưa lên Đấu Giá" }
-            ]}
-            action={<CreateAuctionForm item={selectedItem} />}
-          />
-        ) : <p className="muted">Chọn vật phẩm để tạo phiên.</p>}
-      </div>
-    </section>
+    <AuctionCreatePanel items={items} selectedItem={selectedItem} feeBps={auctionFeeBps} registrationDays={AUCTION_REGISTRATION_GAME_DAYS} liveDays={AUCTION_LIVE_GAME_DAYS} />
   );
 }
 
-function CreateAuctionForm({ item }: { item: any }) {
-  return (
-    <form action={createAuctionAction} className="grid gap-3">
-      <input type="hidden" name="itemId" value={item.id} />
-      <label>Giá khởi điểm<input className="field" name="startingPrice" inputMode="numeric" min="1" defaultValue="100000" required /></label>
-      <button className="btn">Đưa lên Đấu Giá</button>
-      <small className="muted">Phiên sẽ chờ đăng ký {AUCTION_REGISTRATION_GAME_DAYS} ngày game, sau đó mở đấu tối đa {AUCTION_LIVE_GAME_DAYS} ngày game.</small>
-    </form>
-  );
-}
-
-function MyAuctionTab({ auctions }: { auctions: Array<any> }) {
+function MyAuctionTab({ auctions, now }: { auctions: Array<any>; now: Date }) {
   return (
     <section className="market-card-grid">
       {auctions.map((auction) => (
@@ -240,7 +207,7 @@ function MyAuctionTab({ auctions }: { auctions: Array<any> }) {
           quantityLabel={`x${auction.item.quantity}`}
           priceLabel={<CurrencyAmount amount={auction.currentPrice > 0n ? auction.currentPrice : auction.startingPrice} />}
           href={`/game/auction?detail=${auction.id}`}
-          sellerLabel={phaseLabel(auction.phase)}
+          sellerLabel={`${phaseLabel(auction.phase)} · ${auctionTimeLabel(auction, now)}`}
           action={auction.phase === AuctionPhase.OPEN_REGISTRATION && auction.participants.length === 0 ? <CancelAuctionForm auctionId={auction.id} /> : null}
         />
       ))}
@@ -265,6 +232,22 @@ function phaseLabel(phase: string) {
     SETTLED: "Đã kết thúc",
     CANCELLED: "Không bán được"
   } as Record<string, string>)[phase] ?? phase;
+}
+
+function auctionEligibilityReason(item: any) {
+  if (item.equippedSlot) return "Vật phẩm này không thể đưa lên đấu giá.";
+  if (item.bound || !item.template.tradeable) return "Vật phẩm này không thể đưa lên đấu giá.";
+  if (item.template.category === "QUEST") return "Vật phẩm này không thể đưa lên đấu giá.";
+  if (item.listings.length > 0) return "Vật phẩm đang được rao bán.";
+  if (item.auctions.length > 0) return "Vật phẩm đang trong phiên đấu giá.";
+  if (!canAuctionItem(item.template)) return item.template.category === "EQUIPMENT" ? "Trang bị cần đạt Trân Phẩm để đấu giá." : "Vật phẩm này không thể đưa lên đấu giá.";
+  return "";
+}
+
+function configNumber(value: unknown, key: string, fallback: number) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : fallback;
 }
 
 function statusText(auction: any, me: any, isSeller: boolean, isMyTurn: boolean) {

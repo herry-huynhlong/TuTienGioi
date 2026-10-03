@@ -803,8 +803,10 @@ export async function cancelMarketListingAction(formData: FormData) {
 export async function createAuctionAction(formData: FormData) {
   const rawPrice = String(formData.get("startingPrice") ?? "0").trim();
   if (!/^\d+$/.test(rawPrice)) redirect("/game/auction?tab=sell&error=Giá khởi điểm không hợp lệ.");
+  const rawQuantity = String(formData.get("quantity") ?? "1").trim();
+  if (!/^\d+$/.test(rawQuantity)) redirect("/game/auction?tab=sell&error=Số lượng đấu giá không hợp lệ.");
   try {
-    await createAuction(prisma, await characterId(), String(formData.get("itemId")), BigInt(rawPrice));
+    await createAuction(prisma, await characterId(), String(formData.get("itemId")), BigInt(rawPrice), Number(rawQuantity), String(formData.get("transactionKey") ?? ""));
   } catch (error) {
     redirectGameError(error, "/game/auction?tab=sell");
   }

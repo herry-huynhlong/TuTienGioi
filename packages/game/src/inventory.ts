@@ -1,6 +1,7 @@
-import { AuctionStatus, ListingStatus, Prisma } from "@ttg/db";
+import { AuctionStatus, ListingStatus, Prisma, type PrismaClient } from "@ttg/db";
 
 type Tx = Prisma.TransactionClient;
+type Db = PrismaClient;
 
 export class InventoryError extends Error {
   constructor(public code: string, message: string) {
@@ -77,4 +78,68 @@ export async function removeItemFromInventory(tx: Tx, characterId: string, itemI
     await tx.itemInstance.update({ where: { id: item.id }, data: { quantity: { decrement: quantity } } });
   }
   return item;
+}
+
+export async function consolidateInventoryStacks(db: Db, characterId: string) {
+  const items = await db.itemInstance.findMany({
+    where: {
+      ownerId: characterId,
+      quantity: { gt: 0 },
+      equippedSlot: null,
+      listings: { none: { status: ListingStatus.ACTIVE } },
+      auctions: { none: { status: AuctionStatus.ACTIVE } },
+      template: { stackable: true }
+    },
+    include: { template: true },
+    orderBy: { createdAt: "asc" }
+  });
+  const groups = new Map<string, typeof items>();
+  for (const item of items) {
+    const key = stackIdentityKey(item);
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const first = group[0];
+    if (!first) continue;
+    let keeper = first;
+    let keeperRoom = Math.max(0, keeper.template.maxStack - keeper.quantity);
+    for (const duplicate of group.slice(1)) {
+      if (duplicate.quantity <= 0) continue;
+      if (keeperRoom <= 0) {
+        keeper = duplicate;
+        keeperRoom = Math.max(0, keeper.template.maxStack - keeper.quantity);
+        continue;
+      }
+      const move = Math.min(keeperRoom, duplicate.quantity);
+      if (move > 0) {
+        keeper = await db.itemInstance.update({ where: { id: keeper.id }, data: { quantity: { increment: move } }, include: { template: true } });
+        keeperRoom -= move;
+        if (move === duplicate.quantity) {
+          await db.itemInstance.delete({ where: { id: duplicate.id } });
+          continue;
+        }
+        keeper = await db.itemInstance.update({ where: { id: duplicate.id }, data: { quantity: { decrement: move } }, include: { template: true } });
+        keeperRoom = Math.max(0, keeper.template.maxStack - keeper.quantity);
+      }
+    }
+  }
+}
+
+function stackIdentityKey(item: {
+  templateId: string;
+  quality: number;
+  enhancement: number;
+  bound: boolean;
+  durability: number | null;
+  customModifiers: unknown;
+}) {
+  return JSON.stringify({
+    templateId: item.templateId,
+    quality: item.quality,
+    enhancement: item.enhancement,
+    bound: item.bound,
+    durability: item.durability,
+    customModifiers: parseJsonRecord(item.customModifiers)
+  });
 }

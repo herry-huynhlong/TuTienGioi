@@ -1357,6 +1357,7 @@ export const AUCTION_LIVE_GAME_DAYS = 1;
 export const AUCTION_REGISTRATION_MS = AUCTION_REGISTRATION_GAME_DAYS * REAL_MS_PER_GAME_DAY;
 export const AUCTION_LIVE_MS = AUCTION_LIVE_GAME_DAYS * REAL_MS_PER_GAME_DAY;
 export const AUCTION_TURN_MS = 60_000;
+export const DEFAULT_AUCTION_FEE_BPS = 300;
 
 function auctionBidStep(startingPrice: bigint) {
   const step = (startingPrice * AUCTION_BID_STEP_BPS) / 10000n;
@@ -1370,6 +1371,18 @@ export function auctionPriceForRound(startingPrice: bigint, round: number) {
 
 function formatAuctionAmount(amount: bigint) {
   return `${amount.toLocaleString("vi-VN")} Linh Thạch`;
+}
+
+function auctionListingFee(startingPrice: bigint, feeBps = DEFAULT_AUCTION_FEE_BPS) {
+  if (feeBps <= 0 || startingPrice <= 0n) return 0n;
+  const fee = (startingPrice * BigInt(feeBps)) / 10000n;
+  return fee > 0n ? fee : 1n;
+}
+
+async function auctionFeeBps(tx: Tx) {
+  const config = await tx.gameConfig.findUnique({ where: { key: "economy" } });
+  const value = parseJsonRecord(config?.value).auctionFeeBps;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : DEFAULT_AUCTION_FEE_BPS;
 }
 
 async function releaseAuctionEscrow(tx: Tx, participant: { id: string; auctionId: string; characterId: string; lastBidPrice: bigint }, reason: string) {
@@ -1477,9 +1490,13 @@ export async function processAuctionHouse(db: Db, now = new Date(), limit = 50) 
   return { registrationStarted: registrationEnded.length, settled: liveEnded.length, autoPassed: timedOut.length };
 }
 
-export async function createAuction(db: Db, sellerId: string, itemId: string, startingPrice: bigint, now = new Date()) {
+export async function createAuction(db: Db, sellerId: string, itemId: string, startingPrice: bigint, quantityOrNow: number | Date = 1, actionKeyOrNow?: string | Date, maybeNow = new Date()) {
   if (startingPrice <= 0n) throw new GameError("INVALID_PRICE", "Giá khởi điểm không hợp lệ.");
   if (startingPrice > 999_999_999_999n) throw new GameError("INVALID_PRICE", "Giá khởi điểm quá lớn.");
+  const quantity = quantityOrNow instanceof Date ? 1 : quantityOrNow;
+  const actionKey = typeof actionKeyOrNow === "string" ? actionKeyOrNow : "";
+  const now = quantityOrNow instanceof Date ? quantityOrNow : actionKeyOrNow instanceof Date ? actionKeyOrNow : maybeNow;
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new GameError("INVALID_QUANTITY", "Số lượng đấu giá không hợp lệ.");
   return db.$transaction(async (tx) => {
     await assertEconomyFeatureUnlocked(tx, sellerId, "auction");
     const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
@@ -1488,6 +1505,34 @@ export async function createAuction(db: Db, sellerId: string, itemId: string, st
     if (item.bound || !item.template.tradeable) throw new GameError("ITEM_BOUND", "Vật phẩm này không thể giao dịch.");
     if (item.listings.length > 0 || (item.auctions?.length ?? 0) > 0) throw new GameError("ITEM_LISTED", "Vật phẩm đang được giao dịch.");
     if (!canAuctionItem(item.template)) throw new GameError("AUCTION_NOT_ELIGIBLE", item.template.category === ItemCategory.EQUIPMENT ? "Trang bị này không đạt phẩm cấp Trân Phẩm để đưa lên Đấu Giá." : "Vật phẩm này không được đưa lên Đấu Giá.");
+    if (quantity > item.quantity) throw new GameError("INVALID_QUANTITY", "Không đủ số lượng vật phẩm trong túi.");
+    if (!item.template.stackable && quantity !== 1) throw new GameError("INVALID_QUANTITY", "Trang bị hoặc vật phẩm đơn lẻ chỉ có thể đăng 1 cái.");
+    const claimed = await tx.itemInstance.updateMany({
+      where: {
+        id: item.id,
+        ownerId: sellerId,
+        quantity: { gte: quantity },
+        equippedSlot: null,
+        listings: { none: { status: ListingStatus.ACTIVE } },
+        auctions: { none: { status: AuctionStatus.ACTIVE } }
+      },
+      data: { quantity }
+    });
+    if (claimed.count !== 1) throw new GameError("ITEM_LISTED", "Vật phẩm đang được giao dịch.");
+    if (quantity < item.quantity) {
+      await tx.itemInstance.create({
+        data: {
+          ownerId: sellerId,
+          templateId: item.templateId,
+          quantity: item.quantity - quantity,
+          quality: item.quality,
+          durability: item.durability,
+          enhancement: item.enhancement,
+          customModifiers: inputJson(parseJsonRecord(item.customModifiers)),
+          bound: item.bound
+        }
+      });
+    }
     const bidStep = auctionBidStep(startingPrice);
     const auction = await tx.auction.create({
       data: {
@@ -1502,7 +1547,9 @@ export async function createAuction(db: Db, sellerId: string, itemId: string, st
         endsAt: new Date(now.getTime() + AUCTION_REGISTRATION_MS + AUCTION_LIVE_MS)
       }
     });
-    await tx.gameLog.create({ data: { characterId: sellerId, type: "auction", message: `Đưa ${item.template.name} lên Đấu Giá với giá khởi điểm ${formatAuctionAmount(startingPrice)}.` } });
+    const fee = auctionListingFee(startingPrice, await auctionFeeBps(tx));
+    if (fee > 0n) await debitWallet(tx, sellerId, Currency.LINH_THACH, fee, WalletTxType.AUCTION, "Auction", auction.id, actionKey ? `auction:create-fee:${sellerId}:${itemId}:${quantity}:${actionKey}` : `auction:create-fee:${auction.id}`);
+    await tx.gameLog.create({ data: { characterId: sellerId, type: "auction", message: `Đưa ${item.template.name} x${quantity} lên Đấu Giá với giá khởi điểm ${formatAuctionAmount(startingPrice)}.` } });
     const meta = parseJsonRecord(item.template.bindRules);
     if (item.template.category === ItemCategory.EQUIPMENT && meta.auctionClass === "PREMIUM") {
       await tx.worldNews.create({ data: { title: "Vạn Bảo Lâu sắp mở đấu giá Trân Phẩm", body: `${item.template.name} xuất hiện trong phiên đấu giá sắp mở.`, category: "auction" } });

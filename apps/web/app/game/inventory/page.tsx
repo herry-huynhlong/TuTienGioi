@@ -2,13 +2,13 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { consumeItemAction, equipItemAction, sellItemToNpcAction, teleportItemAction, unequipItemAction } from "@/lib/forms";
-import { formatEquipmentSlot, formatLocationKind } from "@/lib/format";
-import { getItemEconomy, getItemUsageDefinition } from "@ttg/game";
+import { formatEquipmentSlot, formatLocationKind, formatRarity } from "@/lib/format";
+import { consolidateInventoryStacks, getItemEconomy, getItemUsageDefinition } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { GamePageBackground } from "@/components/GamePageBackground";
-import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
+import { ItemDetailPanel, ItemSummaryCard, ItemVisual } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
 const equipmentSlots = ["WEAPON", "ARMOR", "HELMET", "BOOTS", "RING", "TALISMAN", "ARTIFACT"] as const;
@@ -39,6 +39,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   const params = await searchParams;
   const user = await getUser();
   if (!user) redirect("/");
+  if (user.character?.id) await consolidateInventoryStacks(prisma, user.character.id);
   const c = await prisma.character.findUniqueOrThrow({
     where: { userId: user.id },
     include: {
@@ -53,7 +54,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   const filter = params?.filter ?? "ALL";
   const equipped = c.items.filter((item) => item.equippedSlot);
   const inventory = c.items.filter((item) => !item.equippedSlot && matchesInventoryFilter(item, filter));
-  const selected = inventory.find((item) => item.id === params?.item) ?? inventory[0] ?? c.items.find((item) => item.equippedSlot);
+  const selected = c.items.find((item) => item.id === params?.item) ?? inventory[0] ?? equipped[0];
   const atMarket = Array.isArray(c.currentLocation?.services) && c.currentLocation.services.includes("market");
   const teleportDestinations = c.currentLocation?.routesFrom.map((route) => route.destination).filter((destination) => destination.id !== c.currentLocationId && destination.active && !destination.services.includes("boss") && !destination.services.includes("quest_only") && !destination.services.includes("sealed")) ?? [];
 
@@ -69,15 +70,10 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
 
       <section className="grid gap-5 xl:grid-cols-[.7fr_1fr_.95fr]">
         <Panel title="Trang bị">
-          <div className="equipment-slots">
+          <div className="equipment-slot-grid">
             {equipmentSlots.map((slot) => {
               const item = equipped.find((entry) => entry.equippedSlot === slot);
-              return (
-                <div key={slot} className="equipment-slot-row">
-                  <span>{formatEquipmentSlot(slot)}</span>
-                  {item ? <Link href={`/game/inventory?item=${item.id}`}><b>{item.template.name}</b></Link> : <b>Trống</b>}
-                </div>
-              );
+              return <EquipmentSlotCard key={slot} slot={slot} item={item} selected={selected?.id === item?.id} />;
             })}
           </div>
         </Panel>
@@ -103,6 +99,26 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
       </section>
     </div>
     </GamePageBackground>
+  );
+}
+
+function EquipmentSlotCard({ slot, item, selected }: { slot: string; item: InventoryItem | undefined; selected: boolean }) {
+  const label = formatEquipmentSlot(slot);
+  const content = (
+    <>
+      <span className="equipment-slot-label">{label}</span>
+      <span className="equipment-slot-visual">
+        {item ? <ItemVisual template={item.template} size="card" /> : <span className="equipment-empty-mark">+</span>}
+      </span>
+      <b>{item?.template.name ?? label}</b>
+      <small>{item ? `${formatRarity(item.template.rarity)} Phẩm` : "Trống"}</small>
+    </>
+  );
+  if (!item) return <div className="equipment-slot-card empty">{content}</div>;
+  return (
+    <Link href={`/game/inventory?item=${item.id}`} className={`equipment-slot-card grade-${item.template.rarity.toLowerCase()} ${selected ? "selected" : ""}`}>
+      {content}
+    </Link>
   );
 }
 

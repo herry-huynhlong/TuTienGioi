@@ -3,13 +3,14 @@ import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { buyMarketListingAction, buySystemMarketItemAction, cancelMarketListingAction, sellItemAction, sellItemToNpcAction } from "@/lib/forms";
 import { formatRarity } from "@/lib/format";
-import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, recordOnboardingEvent, refreshSystemMarketStock } from "@ttg/game";
+import { consolidateInventoryStacks, currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, recordOnboardingEvent, refreshSystemMarketStock } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
+import { MarketFilterBar } from "@/components/MarketFilterBar";
 
 const categories = [
   ["", "Tất cả"],
@@ -18,7 +19,7 @@ const categories = [
   [ItemCategory.MATERIAL, "Nguyên liệu"],
   [ItemCategory.TECHNIQUE, "Bí tịch"],
   [ItemCategory.QUEST, "Khác"]
-];
+] as const;
 
 const gradeFilters = [
   ["", "Tất cả"],
@@ -35,6 +36,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
   const tab = params?.tab === "sell" || params?.tab === "my" ? params.tab : "buy";
   const category = categories.some(([value]) => value === params?.category) ? params?.category : "";
   const grade = gradeFilters.some(([value]) => value === params?.grade) ? params?.grade : "";
+  if (user.character?.id) await consolidateInventoryStacks(prisma, user.character.id);
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId: user.id },
     include: {
@@ -126,17 +128,7 @@ function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, c
   return (
     <>
       <section className="panel rounded-lg p-5">
-        <form className="market-toolbar">
-          <input type="hidden" name="tab" value="buy" />
-          <input className="field" name="q" placeholder="Tìm vật phẩm..." defaultValue={q} />
-          <select className="field" name="grade" defaultValue={grade}>
-            {gradeFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <select className="field" name="category" defaultValue={category}>
-            {categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <button className="btn">Tìm</button>
-        </form>
+        <MarketFilterBar q={q} grade={grade} category={category} grades={gradeFilters} categories={categories} />
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
           <span className="muted">{systemStocks.length} vật phẩm Vạn Bảo Lâu · {listings.length} hàng người chơi</span>
           <span className="text-gold">Linh thạch: <CurrencyAmount amount={linhThach} /></span>

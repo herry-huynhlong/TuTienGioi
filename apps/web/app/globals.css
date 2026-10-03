@@ -1040,6 +1040,7 @@ button, input, select, textarea {
 }
 
 .market-toolbar {
+  align-items: center;
   display: grid;
   gap: 0.65rem;
 }
@@ -1048,6 +1049,14 @@ button, input, select, textarea {
   .market-toolbar {
     grid-template-columns: minmax(14rem, 1fr) 11rem 13rem auto;
   }
+}
+
+.market-filter-status {
+  color: rgba(244, 239, 227, 0.54);
+  font-size: 0.76rem;
+  font-weight: 850;
+  justify-self: end;
+  white-space: nowrap;
 }
 
 select.field option {
@@ -2214,6 +2223,93 @@ select.field option {
   gap: 0.45rem;
 }
 
+.equipment-slot-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+}
+
+.equipment-slot-card {
+  align-content: start;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(214, 178, 94, 0.055), transparent 56%),
+    rgba(0, 0, 0, 0.18);
+  color: rgba(244, 239, 227, 0.78);
+  display: grid;
+  gap: 0.42rem;
+  min-height: 146px;
+  min-width: 0;
+  padding: 0.65rem;
+  text-align: center;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.equipment-slot-card:hover,
+.equipment-slot-card.selected {
+  border-color: rgba(214, 178, 94, 0.56);
+  background:
+    linear-gradient(180deg, rgba(214, 178, 94, 0.12), transparent 62%),
+    rgba(214, 178, 94, 0.08);
+  color: #f4efe3;
+  transform: translateY(-1px);
+}
+
+.equipment-slot-card.empty {
+  border-style: dashed;
+  color: rgba(244, 239, 227, 0.42);
+}
+
+.equipment-slot-label {
+  color: #d6b25e;
+  font-size: 0.66rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.equipment-slot-visual {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 58px;
+}
+
+.equipment-slot-visual .item-visual {
+  height: 58px;
+  width: 58px;
+}
+
+.equipment-empty-mark {
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(244, 239, 227, 0.36);
+  display: inline-flex;
+  font-size: 1.5rem;
+  font-weight: 300;
+  height: 58px;
+  justify-content: center;
+  width: 58px;
+}
+
+.equipment-slot-card b {
+  color: #f4efe3;
+  font-size: 0.84rem;
+  font-weight: 950;
+  line-height: 1.18;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipment-slot-card small {
+  color: rgba(244, 239, 227, 0.55);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
 .equipment-slot-row,
 .market-sell-list a,
 .item-stat-list span {
@@ -2238,8 +2334,8 @@ select.field option {
 .inventory-grid,
 .market-card-grid {
   display: grid;
-  gap: 0.9rem;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
 }
 
 .inventory-tile,
@@ -2257,9 +2353,9 @@ select.field option {
 }
 
 .item-shop-card {
-  gap: 0.8rem;
-  min-height: 260px;
-  padding: 0.95rem;
+  gap: 0.62rem;
+  min-height: 218px;
+  padding: 0.72rem;
 }
 
 .item-shop-card.selected {
@@ -2270,7 +2366,7 @@ select.field option {
 .item-card-link {
   color: inherit;
   display: grid;
-  gap: 0.8rem;
+  gap: 0.58rem;
   min-width: 0;
   text-decoration: none;
 }
@@ -2282,8 +2378,8 @@ select.field option {
 .item-card-visual {
   align-items: center;
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 0.58rem;
   min-width: 0;
 }
 
@@ -2292,7 +2388,7 @@ select.field option {
   border: 1px solid rgba(214, 178, 94, 0.22);
   background: rgba(214, 178, 94, 0.09);
   color: #e8ce86;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 900;
   padding: 0.26rem 0.45rem;
   white-space: nowrap;
@@ -2300,13 +2396,13 @@ select.field option {
 
 .item-card-body {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.36rem;
   min-width: 0;
 }
 
 .item-name {
   color: #f4efe3;
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 950;
   line-height: 1.25;
   margin: 0;
@@ -2321,7 +2417,7 @@ select.field option {
   display: flex;
   flex-wrap: wrap;
   gap: 0.38rem;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 850;
   line-height: 1.2;
 }
@@ -2358,12 +2454,12 @@ select.field option {
 .item-card-footer {
   align-items: end;
   display: flex;
-  min-height: 2rem;
+  min-height: 1.5rem;
 }
 
 .item-price {
   color: #d6b25e;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 950;
   white-space: nowrap;
 }
@@ -2429,8 +2525,8 @@ select.field option {
 
 .item-shop-card .item-icon,
 .item-shop-card .item-visual {
-  height: 72px;
-  width: 72px;
+  height: 58px;
+  width: 58px;
 }
 
 .item-icon.grade-ha,
@@ -2572,6 +2668,160 @@ select.field option {
   font-size: 0.78rem;
   font-weight: 850;
   line-height: 1.35;
+}
+
+.auction-create-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1180px) {
+  .auction-create-layout {
+    grid-template-columns: 0.9fr 1.1fr;
+  }
+}
+
+.auction-step-list {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auction-step-list span {
+  border: 1px solid rgba(214, 178, 94, 0.16);
+  background: rgba(214, 178, 94, 0.06);
+  color: rgba(244, 239, 227, 0.68);
+  font-size: 0.76rem;
+  font-weight: 850;
+  padding: 0.45rem 0.55rem;
+}
+
+.auction-item-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+.auction-item-option {
+  align-content: start;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(244, 239, 227, 0.78);
+  display: grid;
+  gap: 0.42rem;
+  min-height: 152px;
+  min-width: 0;
+  padding: 0.68rem;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.auction-item-option:hover,
+.auction-item-option.selected {
+  border-color: rgba(45, 212, 191, 0.5);
+  background: rgba(45, 212, 191, 0.08);
+  transform: translateY(-1px);
+}
+
+.auction-item-option.disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+  opacity: 0.48;
+}
+
+.auction-item-option .item-visual {
+  height: 58px;
+  width: 58px;
+}
+
+.auction-item-option b {
+  color: #f4efe3;
+  font-size: 0.86rem;
+  font-weight: 950;
+  line-height: 1.18;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auction-item-option small,
+.auction-item-option em {
+  color: rgba(244, 239, 227, 0.56);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.auction-item-option em {
+  color: #d6b25e;
+}
+
+.auction-register-panel,
+.auction-register-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.auction-register-form {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 1rem;
+}
+
+.auction-register-form label {
+  color: #d6b25e;
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.auction-fee-preview {
+  border: 1px solid rgba(214, 178, 94, 0.18);
+  background: rgba(214, 178, 94, 0.06);
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem;
+}
+
+.auction-fee-preview span {
+  align-items: center;
+  color: rgba(244, 239, 227, 0.66);
+  display: flex;
+  font-size: 0.82rem;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.auction-fee-preview b {
+  color: #f4efe3;
+}
+
+.auction-confirm-backdrop {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 80;
+}
+
+.auction-confirm-modal {
+  border: 1px solid rgba(214, 178, 94, 0.34);
+  background: #141914;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  display: grid;
+  gap: 1rem;
+  max-width: 440px;
+  padding: 1.25rem;
+  width: min(100%, 440px);
+}
+
+.auction-confirm-modal h3 {
+  color: #d6b25e;
+  font-size: 1.25rem;
+  font-weight: 950;
 }
 
 .admin-shell {

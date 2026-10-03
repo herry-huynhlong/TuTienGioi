@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AuctionPhase, AuctionStatus, ItemCategory } from "@ttg/db";
 import { AUCTION_LIVE_GAME_DAYS, AUCTION_LIVE_MS, AUCTION_REGISTRATION_GAME_DAYS, AUCTION_REGISTRATION_MS, REAL_MS_PER_GAME_DAY, auctionPriceForRound, canAuctionItem, createAuction, getItemEconomy, joinAuction, raiseAuction } from "../src/index.js";
 
-const unlockedCharacter = { realmStage: { order: 0, realm: { order: 1 } } };
+const unlockedCharacter = { realmStage: { order: 0, realm: { order: 1 } }, linhThach: 1_000_000n, tienNgoc: 0n };
 
 describe("turn based auction rules", () => {
   it("uses a fixed +30% step from the starting price", () => {
@@ -47,8 +47,13 @@ describe("turn based auction rules", () => {
     const now = new Date("2026-01-01T00:00:00.000Z");
     const created = { id: "auction-1" };
     const tx: any = {
-      character: { findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter) },
+      character: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter),
+        findUnique: vi.fn().mockResolvedValue({ linhThach: 1_000_000n, tienNgoc: 0n }),
+        update: vi.fn()
+      },
       itemInstance: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findUnique: vi.fn().mockResolvedValue({
           id: "item-1",
           ownerId: "seller-1",
@@ -65,6 +70,8 @@ describe("turn based auction rules", () => {
           }
         })
       },
+      gameConfig: { findUnique: vi.fn().mockResolvedValue({ value: { auctionFeeBps: 300 } }) },
+      walletTransaction: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
       auction: { create: vi.fn().mockResolvedValue(created) },
       gameLog: { create: vi.fn() },
       worldNews: { create: vi.fn() }
@@ -80,6 +87,13 @@ describe("turn based auction rules", () => {
         registrationEndsAt: new Date(now.getTime() + AUCTION_REGISTRATION_MS),
         endsAt: new Date(now.getTime() + AUCTION_REGISTRATION_MS + AUCTION_LIVE_MS)
       })
+    });
+    expect(tx.itemInstance.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: "item-1", ownerId: "seller-1" }),
+      data: { quantity: 1 }
+    }));
+    expect(tx.walletTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ amount: -3000n, type: "AUCTION" })
     });
   });
 

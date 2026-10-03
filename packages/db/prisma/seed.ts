@@ -49,6 +49,88 @@ function professionItemVisualKey(key: string, category: string, icon: string, eq
   return `${folder}/${key}`;
 }
 
+const itemSourceMap: Record<string, string[]> = {
+  "huyen-tinh": ["Linh Khoáng cấp cao"],
+  "xich-viem-tinh-kim": ["Hỏa Diệm Linh Mạch", "Lịch Luyện hiếm"],
+  "ngoc-tuy-tinh-hoa": ["Nhiệm vụ Tông Môn ★★★★★", "Lịch Luyện hiếm"],
+  "truc-co-dan-thuong": ["Luyện Đan"],
+  "tay-tuy-dan": ["Luyện Đan", "Boss cấp cao"],
+  "yeu-dan-nhi-giai": ["Elite / Boss yêu thú"],
+  "thien-tam-ti": ["Lịch Luyện hiếm", "Nhiệm vụ Tông Môn khó"],
+  "dia-mach-linh-tinh": ["Linh Khoáng Tông Môn cấp cao"],
+  "tu-linh-ngoc": ["Boss cấp cao", "Nhiệm vụ Tông Môn ★★★★★"],
+  "truc-co-linh-thao": ["Thanh Linh Sơn Mạch", "Lịch Luyện hiếm"],
+  "ngoc-tuy-chi": ["Thanh Linh Sơn Mạch", "Lịch Luyện hiếm"],
+  "tay-tuy-linh-dich": ["Thanh Linh Sơn Mạch", "Lịch Luyện hiếm"],
+  "long-huyet-thao": ["Hắc Sơn", "Lịch Luyện hiếm"],
+  "thien-nien-linh-chi": ["Thanh Linh Sơn Mạch", "Lịch Luyện hiếm"],
+  "yeu-dan-nhat-giai": ["Yêu thú mạnh", "Nhiệm vụ Tông Môn ★★★"]
+};
+
+const progressionItemSeedOverrides: Record<string, {
+  itemFamily?: string | null;
+  name: string;
+  category: ItemCategory;
+  rarity: Rarity;
+  subType: string;
+  icon: string;
+  description: string;
+  usage: string;
+  price: number;
+  modifiers?: Record<string, unknown>;
+  auctionEligible?: boolean;
+  requiredRealmOrder?: number | null;
+  requiredSectRank?: number | null;
+}> = {
+  "truc-co-dan-thuong": {
+    itemFamily: "truc-co-dan",
+    name: "Trúc Cơ Đan · Thượng Phẩm",
+    category: ItemCategory.CONSUMABLE,
+    rarity: Rarity.THUONG,
+    subType: "Đan Dược",
+    icon: "pill",
+    description: "Trúc Cơ Đan thượng phẩm, tinh luyện cao.",
+    usage: "Tăng mạnh cơ hội đột phá Trúc Cơ, không đồng nghĩa người dùng phải ở cảnh giới cao.",
+    price: 10000,
+    modifiers: { breakthroughBps: 1400 },
+    auctionEligible: true,
+    requiredRealmOrder: 1,
+    requiredSectRank: 3
+  },
+  "tay-tuy-dan": {
+    name: "Tẩy Tủy Đan",
+    category: ItemCategory.CONSUMABLE,
+    rarity: Rarity.THUONG,
+    subType: "Đan Dược",
+    icon: "pill",
+    description: "Đan dược tẩy luyện kinh mạch.",
+    usage: "Vật phẩm hiếm, hiệu ứng sâu hơn sẽ mở về sau.",
+    price: 18000,
+    modifiers: { hpRestore: 200, qiRestore: 200 },
+    auctionEligible: true,
+    requiredRealmOrder: null,
+    requiredSectRank: 2
+  },
+  "yeu-dan-nhi-giai": {
+    name: "Yêu Đan Nhị Giai",
+    category: ItemCategory.MATERIAL,
+    rarity: Rarity.THUONG,
+    subType: "Vật Liệu Tu Luyện",
+    icon: "core",
+    description: "Yêu đan nhị giai chứa yêu lực dày.",
+    usage: "Tu luyện, crafting và mission khó.",
+    price: 14000,
+    modifiers: {},
+    auctionEligible: true,
+    requiredRealmOrder: null,
+    requiredSectRank: 2
+  }
+};
+
+function itemSources(key: string, fallback: string[] = []) {
+  return itemSourceMap[key] ?? fallback;
+}
+
 function professionMaterialSubType(key: string, icon: string) {
   if (key === "linh-thach") return "Tiền Tệ";
   if (icon === "herb" || icon === "leaf" || icon === "root") return "Linh Thảo";
@@ -585,14 +667,18 @@ const materials = [
 ];
 
 function zoneResourceTable(zoneKey: string) {
-  if (zoneKey === "hac-son") return [{ key: "thanh-linh-thao", weight: 55 }, { key: "lang-nha", weight: 18 }, { key: "yeu-dan-cap-thap", weight: 10 }];
-  if (zoneKey === "thanh-linh-son-mach") return [{ key: "ngung-lo-thao", weight: 35 }, { key: "hac-thiet-quang", weight: 45 }, { key: "hoa-linh-chi", weight: 15 }];
+  if (zoneKey === "hac-son") return [{ key: "thanh-linh-thao", weight: 55 }, { key: "lang-nha", weight: 18 }, { key: "yeu-dan-cap-thap", weight: 10 }, { key: "thien-tam-ti", weight: 1 }, { key: "long-huyet-thao", weight: 1 }];
+  if (zoneKey === "thanh-linh-son-mach") return [{ key: "ngung-lo-thao", weight: 35 }, { key: "hac-thiet-quang", weight: 45 }, { key: "hoa-linh-chi", weight: 15 }, { key: "truc-co-linh-thao", weight: 3 }, { key: "ngoc-tuy-chi", weight: 2 }, { key: "tay-tuy-linh-dich", weight: 1 }, { key: "thien-nien-linh-chi", weight: 1 }, { key: "thien-tam-ti", weight: 1 }, { key: "xich-viem-tinh-kim", weight: 0.5 }, { key: "ngoc-tuy-tinh-hoa", weight: 0.5 }];
   return [{ key: "thanh-linh-thao", weight: 45 }, { key: "ngung-lo-thao", weight: 30 }, { key: "hac-thiet-quang", weight: 20 }];
 }
 
 function monsterLootTable(monsterKey: string) {
   if (monsterKey === "yeu-lang") return [{ key: "lang-nha", weight: 65, minQuantity: 1, maxQuantity: 2 }, { key: "yeu-lang-bi", weight: 45, minQuantity: 1, maxQuantity: 1 }, { key: "yeu-dan-cap-thap", weight: 25, minQuantity: 1, maxQuantity: 1 }];
   if (monsterKey === "xich-hoa-xa") return [{ key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }, { key: "hoa-linh-chi", weight: 30, minQuantity: 1, maxQuantity: 1 }];
+  if (monsterKey === "hoa-diem-ma") return [{ key: "yeu-dan-nhi-giai", weight: 2, minQuantity: 1, maxQuantity: 1 }, { key: "xich-viem-tinh-kim", weight: 1, minQuantity: 1, maxQuantity: 1 }, { key: "tay-tuy-dan", weight: 0.5, minQuantity: 1, maxQuantity: 1 }, { key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }];
+  if (monsterKey === "bang-linh-thu") return [{ key: "yeu-dan-nhi-giai", weight: 2, minQuantity: 1, maxQuantity: 1 }, { key: "ngoc-tuy-tinh-hoa", weight: 0.8, minQuantity: 1, maxQuantity: 1 }, { key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }];
+  if (monsterKey === "hac-son-quy") return [{ key: "yeu-dan-nhi-giai", weight: 1.5, minQuantity: 1, maxQuantity: 1 }, { key: "thien-tam-ti", weight: 1, minQuantity: 1, maxQuantity: 1 }, { key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }];
+  if (monsterKey === "co-long-tan-hon") return [{ key: "yeu-dan-nhi-giai", weight: 3, minQuantity: 1, maxQuantity: 1 }, { key: "tu-linh-ngoc", weight: 0.7, minQuantity: 1, maxQuantity: 1 }, { key: "tay-tuy-dan", weight: 0.7, minQuantity: 1, maxQuantity: 1 }, { key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }];
   return [{ key: "yeu-dan-cap-thap", weight: 35, minQuantity: 1, maxQuantity: 1 }, { key: "hac-thiet-quang", weight: 20, minQuantity: 1, maxQuantity: 1 }];
 }
 
@@ -1060,7 +1146,8 @@ async function main() {
       auctionEligible,
       itemFamily,
       requiredRealmOrder,
-      requiredSectRank
+      requiredSectRank,
+      sources: itemSources(key)
     };
     await prisma.itemTemplate.upsert({
       where: { key },
@@ -1283,27 +1370,40 @@ async function main() {
 
   for (const item of allRecipeItems.values()) {
     if (item.key === "linh-thach") continue;
-    const systemMarketEnabled = item.category === ItemCategory.MATERIAL
-      ? item.rarity !== Rarity.TIEN
-      : item.category === ItemCategory.EQUIPMENT && isVanBaoLauEquipmentRarity(item.rarity);
+    const override = progressionItemSeedOverrides[item.key];
+    const seedItem = {
+      ...item,
+      ...(override ?? {}),
+      itemFamily: override?.itemFamily ?? null,
+      stackable: override ? true : item.stackable,
+      modifiers: override?.modifiers ?? item.modifiers
+    };
+    const systemMarketEnabled = seedItem.category === ItemCategory.MATERIAL
+      ? seedItem.rarity !== Rarity.TIEN && !seedItem.auctionEligible
+      : seedItem.category === ItemCategory.EQUIPMENT && isVanBaoLauEquipmentRarity(seedItem.rarity);
     const bindRules = {
-      subType: item.subType,
-      icon: item.icon,
-      visualKey: professionItemVisualKey(item.key, item.category, item.icon, item.equipSlot),
-      usage: item.usage,
-      systemBasePrice: item.price,
-      npcBuyPrice: Math.floor(item.price * 0.7),
+      subType: seedItem.subType,
+      icon: seedItem.icon,
+      visualKey: override ? itemVisualKey(seedItem.key, seedItem.category, seedItem.icon, seedItem.equipSlot) : professionItemVisualKey(seedItem.key, seedItem.category, seedItem.icon, seedItem.equipSlot),
+      usage: seedItem.usage,
+      systemBasePrice: seedItem.price,
+      npcBuyPrice: Math.floor(seedItem.price * 0.7),
       sellableToNpc: true,
       marketEnabled: true,
       systemMarketEnabled,
       sectExchangeEnabled: true,
-      sectContributionPrice: Math.max(1, Math.floor(item.price * 0.4)),
-      donationContributionValue: Math.max(1, Math.floor(item.price * 0.15))
+      sectContributionPrice: Math.max(1, Math.floor(seedItem.price * 0.4)),
+      donationContributionValue: Math.max(1, Math.floor(seedItem.price * 0.15)),
+      sources: itemSources(seedItem.key, seedItem.category === ItemCategory.CONSUMABLE ? ["Luyện Đan"] : ["Lịch Luyện", "Nhiệm vụ Tông Môn"]),
+      auctionEligible: override?.auctionEligible ?? false,
+      itemFamily: seedItem.itemFamily,
+      requiredRealmOrder: override?.requiredRealmOrder ?? null,
+      requiredSectRank: override?.requiredSectRank ?? null
     };
     await prisma.itemTemplate.upsert({
-      where: { key: item.key },
-      update: { name: item.name, category: item.category, rarity: item.rarity, description: item.description, stackable: item.stackable, maxStack: item.stackable ? 999 : 1, tradeable: true, equipSlot: item.equipSlot ?? null, baseModifiers: item.modifiers, bindRules },
-      create: { key: item.key, name: item.name, category: item.category, rarity: item.rarity, description: item.description, stackable: item.stackable, maxStack: item.stackable ? 999 : 1, tradeable: true, equipSlot: item.equipSlot ?? null, baseModifiers: item.modifiers, bindRules }
+      where: { key: seedItem.key },
+      update: { itemFamily: seedItem.itemFamily, name: seedItem.name, category: seedItem.category, rarity: seedItem.rarity, description: seedItem.description, stackable: seedItem.stackable, maxStack: seedItem.stackable ? 999 : 1, tradeable: true, equipSlot: seedItem.equipSlot ?? null, baseModifiers: seedItem.modifiers, bindRules },
+      create: { key: seedItem.key, itemFamily: seedItem.itemFamily, name: seedItem.name, category: seedItem.category, rarity: seedItem.rarity, description: seedItem.description, stackable: seedItem.stackable, maxStack: seedItem.stackable ? 999 : 1, tradeable: true, equipSlot: seedItem.equipSlot ?? null, baseModifiers: seedItem.modifiers, bindRules }
     });
   }
 

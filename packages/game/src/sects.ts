@@ -131,7 +131,9 @@ export const sectMineConfig = {
   personalShareBps: 4000,
   sectShareBps: 6000,
   mines: {
-    "han-thiet-mach": { name: "Hàn Thiết Khoáng Mạch", resourceKey: "huyen-thiet", durationMinutes: 30, baseYield: 20, contribution: 22, reputation: 4, requiredRank: 4, workerLimit: 5, rareDrops: [{ key: "thien-tinh-sa", chanceBps: 300, quantity: 1 }] },
+    "han-thiet-mach": { name: "Hàn Thiết Khoáng Mạch", resourceKey: "huyen-thiet", durationMinutes: 30, baseYield: 20, contribution: 22, reputation: 4, requiredRank: 4, workerLimit: 5, rareDrops: [{ key: "thien-tinh-sa", chanceBps: 300, quantity: 1 }, { key: "huyen-tinh", chanceBps: 100, quantity: 1 }] },
+    "dia-mach-linh-khoang": { name: "Địa Mạch Linh Khoáng", resourceKey: "tu-linh-thach", durationMinutes: 60, baseYield: 14, contribution: 42, reputation: 8, requiredRank: 3, workerLimit: 3, rareDrops: [{ key: "huyen-tinh", chanceBps: 120, quantity: 1 }, { key: "dia-mach-linh-tinh", chanceBps: 45, quantity: 1 }] },
+    "hoa-diem-linh-mach": { name: "Hỏa Diệm Linh Mạch", resourceKey: "tinh-dong", durationMinutes: 60, baseYield: 12, contribution: 40, reputation: 8, requiredRank: 3, workerLimit: 3, rareDrops: [{ key: "xich-viem-tinh-kim", chanceBps: 70, quantity: 1 }] },
     "hac-thiet-mach": { name: "Hắc Thiết Khoáng Mạch", resourceKey: "hac-thiet-quang", durationMinutes: 10, baseYield: 12, contribution: 10, reputation: 2, requiredRank: 5, workerLimit: 3, rareDrops: [] }
   }
 } as const;
@@ -317,17 +319,32 @@ function missionTargetCount(difficulty: number, seed: number) {
   return min + (seed % (max - min + 1));
 }
 
-export function calculateSectMissionReward(input: { difficulty: number; targetStrength?: number; locationDanger?: number; sectRank: number }) {
+function sectMissionRareReward(input: { difficulty: number; targetStrength?: number; locationDanger?: number; sectRank: number; missionType?: SectMissionType; rewardSeed?: string | number }) {
+  if (input.difficulty < 5) return null;
+  const seed = input.rewardSeed ?? `${input.missionType ?? "MISSION"}:${input.sectRank}:${input.targetStrength ?? 0}:${input.locationDanger ?? 0}`;
+  const roll = deterministicRollBps(`sect-mission:rare:${seed}`);
+  if (input.missionType === "HUNT") {
+    return { itemKey: roll < 2500 ? "tu-linh-ngoc" : "yeu-dan-nhi-giai", itemQuantity: 1 };
+  }
+  if (input.missionType === "MINE" || input.missionType === "COLLECT") {
+    return { itemKey: roll < 2000 ? "ngoc-tuy-tinh-hoa" : "thien-tam-ti", itemQuantity: 1 };
+  }
+  return { itemKey: roll < 2500 ? "tu-linh-ngoc" : "ngoc-tuy-tinh-hoa", itemQuantity: 1 };
+}
+
+export function calculateSectMissionReward(input: { difficulty: number; targetStrength?: number; locationDanger?: number; sectRank: number; missionType?: SectMissionType; rewardSeed?: string | number }) {
   const multiplier = sectMissionConfig.difficultyMultipliers[input.difficulty as keyof typeof sectMissionConfig.difficultyMultipliers] ?? 1;
   const dangerFactor = 1 + Math.max(0, input.locationDanger ?? 0) * 0.12;
   const strengthFactor = 1 + Math.max(0, input.targetStrength ?? 0) * 0.08;
   const rankFactor = 1 + (5 - input.sectRank) * 0.08;
   const scale = multiplier * dangerFactor * strengthFactor * rankFactor;
+  const rareReward = sectMissionRareReward(input);
   return {
     cultivation: Math.floor(sectMissionConfig.baseReward.cultivation * scale),
     linhThach: Math.floor(sectMissionConfig.baseReward.linhThach * scale),
     contribution: Math.floor(sectMissionConfig.baseReward.contribution * scale),
-    reputation: Math.floor(sectMissionConfig.baseReward.reputation * scale)
+    reputation: Math.floor(sectMissionConfig.baseReward.reputation * scale),
+    ...(rareReward ?? {})
   };
 }
 
@@ -987,7 +1004,7 @@ export async function refreshSectMissionPool(db: Db | Tx, sectId: string, now = 
       const template = itemTemplates.find((item) => item.key === resourceKey) ?? itemTemplates[index % Math.max(1, itemTemplates.length)];
       const type: SectMissionType = index % 3 === 0 && monster ? "HUNT" : index % 3 === 1 && template ? "COLLECT" : "EXPLORE";
       const targetCount = type === "EXPLORE" ? 1 : missionTargetCount(difficulty, index + sect.rank + location.zone.dangerLevel);
-      const reward = calculateSectMissionReward({ difficulty, targetStrength: monster?.realmOrder ?? 0, locationDanger: location.zone.dangerLevel, sectRank: sect.rank });
+      const reward = calculateSectMissionReward({ difficulty, targetStrength: monster?.realmOrder ?? 0, locationDanger: location.zone.dangerLevel, sectRank: sect.rank, missionType: type, rewardSeed: `${sect.id}:${periodKey}:${index}:${location.key}:${monster?.key ?? template?.key ?? "visit"}` });
       const key = `${type.toLowerCase()}:${location.key}:${monster?.key ?? template?.key ?? "visit"}:${difficulty}`;
       const title = type === "HUNT" && monster ? `Săn ${monster.name}` : type === "COLLECT" && template ? `Thu thập ${template.name}` : `Tuần tra ${location.name}`;
       const objective = {
@@ -1265,6 +1282,7 @@ export async function claimSectMining(db: Db, characterId: string, workId: strin
     for (const rare of mine.rareDrops) {
       if (deterministicRollBps(`${work.id}:${rare.key}`) < rare.chanceBps) {
         await grantItem(tx, characterId, rare.key, rare.quantity);
+        await progressSectMissionObjective(tx, { characterId, eventType: "ITEM_COLLECTED", itemKey: rare.key, amount: rare.quantity });
         rareRewards.push({ key: rare.key, quantity: rare.quantity });
       }
     }

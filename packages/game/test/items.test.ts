@@ -45,6 +45,25 @@ describe("item progression economy", () => {
     expect(stockForSystemMarketItem("thien-cuong-kiem", "CUC", new Date("2026-09-28T00:00:00Z"))).toBe(0);
   });
 
+  it("documents real gameplay sources for every auction progression item", () => {
+    const auctionItems = progressionItemCatalog.filter((item) => item.auctionEligible);
+
+    expect(auctionItems).toHaveLength(9);
+    for (const item of auctionItems) {
+      expect(item.sources.length, item.key).toBeGreaterThan(0);
+      expect(item.sources.join(" "), item.key).not.toMatch(/Đấu Giá sau này|Reward hiếm|Bí cảnh$/);
+      const economy = getItemEconomy({
+        category: item.category,
+        rarity: item.rarity,
+        tradeable: true,
+        itemFamily: item.itemFamily ?? null,
+        baseModifiers: item.baseModifiers ?? {},
+        bindRules: { sources: item.sources, auctionEligible: true }
+      });
+      expect(economy.sources, item.key).toEqual(item.sources);
+    }
+  });
+
   it("prices sect exchange above donation value to avoid obvious arbitrage", () => {
     for (const item of progressionItemCatalog) {
       const economy = getItemEconomy({

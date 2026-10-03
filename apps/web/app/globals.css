@@ -4788,6 +4788,8 @@ select.field option {
 }
 
 .leaderboard-table {
+  width: 100%;
+  max-width: 100%;
   border-collapse: separate;
   border-spacing: 0 0.42rem;
 }
@@ -4943,7 +4945,7 @@ select.field option {
 
 .leaderboard-character-cell {
   display: flex;
-  min-width: 15rem;
+  min-width: 0;
   align-items: center;
   gap: 0.85rem;
 }
@@ -4993,6 +4995,7 @@ select.field option {
 
 .leaderboard-character-name {
   display: grid;
+  min-width: 0;
   gap: 0.18rem;
 }
 
@@ -5000,12 +5003,16 @@ select.field option {
   color: var(--paper);
   font-size: 0.98rem;
   font-weight: 1000;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .leaderboard-character-name span {
   color: rgba(244, 239, 227, 0.56);
   font-size: 0.73rem;
   font-weight: 900;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .leaderboard-name-tier-1 {
@@ -5110,7 +5117,7 @@ select.field option {
   }
 
   .leaderboard-table {
-    min-width: 680px;
+    min-width: 0;
     border-spacing: 0 0.34rem;
   }
 
@@ -5125,7 +5132,7 @@ select.field option {
   }
 
   .leaderboard-character-cell {
-    min-width: 12.5rem;
+    min-width: 0;
   }
 }
 
@@ -6633,6 +6640,7 @@ select.field option {
 .lb-page {
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   overflow-x: hidden;
   padding-bottom: max(6rem, env(safe-area-inset-bottom));
 }
@@ -6645,10 +6653,14 @@ select.field option {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-bottom: 1rem;
 }
 
 .lb-category-tabs a {
+  min-width: 0;
   border: 1px solid rgba(244, 239, 227, 0.12);
   background: rgba(244, 239, 227, 0.045);
   color: rgba(244, 239, 227, 0.72);
@@ -6657,6 +6669,8 @@ select.field option {
   font-size: 0.78rem;
   font-weight: 1000;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .lb-category-tabs a.active,
@@ -6672,6 +6686,7 @@ select.field option {
   gap: 1rem;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
 }
 
 .lb-hero-card,
@@ -6684,6 +6699,9 @@ select.field option {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   color: rgba(244, 239, 227, 0.9);
   transform: translateZ(0);
 }
@@ -6744,8 +6762,8 @@ select.field option {
 
 .lb-hero-card {
   display: grid;
-  grid-template-columns: minmax(22rem, 1.1fr) minmax(17rem, 0.95fr) minmax(15rem, 0.78fr);
-  min-height: 10.8rem;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr) minmax(0, 0.72fr);
+  min-height: clamp(9.5rem, 12vw, 11.2rem);
   align-items: center;
   gap: clamp(1rem, 2vw, 2.2rem);
   border: 1px solid color-mix(in srgb, var(--lb-accent) 62%, transparent);
@@ -6762,7 +6780,7 @@ select.field option {
 }
 
 .lb-hero-card[data-rank="1"] {
-  min-height: 11.8rem;
+  min-height: clamp(10rem, 13vw, 11.8rem);
   box-shadow:
     inset 0 0 0 1px rgba(255, 232, 160, 0.12),
     inset 0 0 78px rgba(240, 189, 63, 0.14),
@@ -6771,7 +6789,7 @@ select.field option {
 }
 
 .lb-sect-hero-card {
-  grid-template-columns: minmax(13rem, 0.7fr) minmax(18rem, 1fr) minmax(19rem, 0.9fr);
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 0.9fr);
   background:
     linear-gradient(90deg, rgba(5, 10, 9, 0.88), rgba(10, 15, 14, 0.72), rgba(5, 10, 9, 0.9)),
     var(--sect-bg),
@@ -6786,16 +6804,17 @@ select.field option {
   display: flex;
   align-items: center;
   gap: 1rem;
+  min-width: 0;
 }
 
 .lb-sect-hero-card .lb-sect-crest-hero .sect-emblem {
-  width: 6.6rem;
-  height: 6.6rem;
+  width: clamp(4.8rem, 8vw, 6.6rem);
+  height: clamp(4.8rem, 8vw, 6.6rem);
 }
 
 .lb-sect-compact-card .lb-sect-crest {
   grid-template-columns: auto;
-  min-width: 4rem;
+  min-width: 0;
 }
 
 .lb-hero-card:hover,
@@ -6911,15 +6930,15 @@ select.field option {
 .lb-cinematic-depth-a {
   left: 14%;
   top: 18%;
-  width: 32rem;
-  height: 7rem;
+  width: min(32rem, 54vw);
+  height: clamp(4.2rem, 8vw, 7rem);
 }
 
 .lb-cinematic-depth-b {
   right: 3%;
   bottom: -2rem;
-  width: 24rem;
-  height: 8rem;
+  width: min(24rem, 46vw);
+  height: clamp(4.6rem, 9vw, 8rem);
   animation-delay: -3.6s;
 }
 
@@ -6973,16 +6992,16 @@ select.field option {
 .lb-bg-depth-a {
   left: -4rem;
   top: 16%;
-  width: 20rem;
-  height: 8rem;
+  width: min(20rem, 48vw);
+  height: clamp(5rem, 9vw, 8rem);
   background: color-mix(in srgb, var(--lb-accent) 22%, transparent);
 }
 
 .lb-bg-depth-b {
   right: 6%;
   bottom: -3rem;
-  width: 24rem;
-  height: 8rem;
+  width: min(24rem, 52vw);
+  height: clamp(5rem, 9vw, 8rem);
   background: color-mix(in srgb, var(--lb-accent) 14%, transparent);
   animation-delay: -3.2s;
 }
@@ -6993,8 +7012,8 @@ select.field option {
 }
 
 .lb-cloud {
-  width: 34rem;
-  height: 9rem;
+  width: min(34rem, 72vw);
+  height: clamp(5.2rem, 10vw, 9rem);
   border-radius: 50%;
   background:
     radial-gradient(ellipse at 16% 55%, color-mix(in srgb, var(--lb-accent) 20%, transparent), transparent 56%),
@@ -7057,8 +7076,8 @@ select.field option {
 .lb-sanctum {
   right: 1.3rem;
   top: 50%;
-  width: 14rem;
-  height: 7rem;
+  width: clamp(7rem, 14vw, 14rem);
+  height: clamp(3.6rem, 7vw, 7rem);
   opacity: 0.52;
   transform: translateY(-50%);
   background:
@@ -7134,7 +7153,7 @@ select.field option {
 .lb-border-fx-layer::after {
   position: absolute;
   top: -1px;
-  width: 14rem;
+  width: min(14rem, 32vw);
   height: 1px;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--lb-accent) 96%, white 6%), transparent);
   box-shadow: 0 0 16px color-mix(in srgb, var(--lb-accent) 48%, transparent);
@@ -7211,24 +7230,24 @@ select.field option {
 .lb-rank-medallion {
   position: relative;
   display: grid;
-  width: 4.5rem;
-  height: 4.5rem;
+  width: clamp(3.45rem, 6vw, 4.5rem);
+  height: clamp(3.45rem, 6vw, 4.5rem);
   place-items: center;
   color: var(--lb-text);
   filter: drop-shadow(0 0 20px color-mix(in srgb, var(--lb-accent) 34%, transparent));
 }
 
 .lb-rank-medallion-hero {
-  width: 6.3rem;
-  height: 6.3rem;
+  width: clamp(4.6rem, 8vw, 6.3rem);
+  height: clamp(4.6rem, 8vw, 6.3rem);
 }
 
 .lb-rank-medallion strong {
   position: relative;
   z-index: 2;
   display: grid;
-  width: 3rem;
-  height: 3rem;
+  width: clamp(2.45rem, 4.5vw, 3rem);
+  height: clamp(2.45rem, 4.5vw, 3rem);
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--lb-accent) 78%, white 7%);
   border-radius: 50%;
@@ -7236,14 +7255,14 @@ select.field option {
     radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 58%),
     radial-gradient(circle, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.34));
   box-shadow: inset 0 0 18px color-mix(in srgb, var(--lb-accent) 18%, transparent), 0 0 18px color-mix(in srgb, var(--lb-accent) 28%, transparent);
-  font-size: 1.45rem;
+  font-size: clamp(1.12rem, 2.6vw, 1.45rem);
   font-weight: 1000;
 }
 
 .lb-rank-medallion-hero strong {
-  width: 4.2rem;
-  height: 4.2rem;
-  font-size: 2rem;
+  width: clamp(3rem, 5.5vw, 4.2rem);
+  height: clamp(3rem, 5.5vw, 4.2rem);
+  font-size: clamp(1.35rem, 3.2vw, 2rem);
 }
 
 .lb-rank-ring {
@@ -7261,14 +7280,16 @@ select.field option {
 .lb-character-portrait {
   position: relative;
   display: grid;
-  width: 4.45rem;
-  height: 4.45rem;
+  width: clamp(3.5rem, 7vw, 4.45rem);
+  height: auto;
+  aspect-ratio: 1;
   place-items: center;
 }
 
 .lb-character-portrait-hero {
-  width: 7.15rem;
-  height: 7.15rem;
+  width: clamp(4.8rem, 10vw, 7.15rem);
+  height: auto;
+  aspect-ratio: 1;
 }
 
 .winged-avatar {
@@ -7277,6 +7298,7 @@ select.field option {
   position: relative;
   display: grid;
   width: var(--winged-avatar-width);
+  max-width: 100%;
   height: var(--winged-avatar-height);
   place-items: center;
   isolation: isolate;
@@ -7294,18 +7316,18 @@ select.field option {
 }
 
 .winged-avatar-md {
-  --winged-avatar-width: 7rem;
-  --winged-avatar-height: 4.8rem;
+  --winged-avatar-width: clamp(5.6rem, 10vw, 7rem);
+  --winged-avatar-height: clamp(3.8rem, 7vw, 4.8rem);
 }
 
 .winged-avatar-lg {
-  --winged-avatar-width: 13rem;
-  --winged-avatar-height: 8.2rem;
+  --winged-avatar-width: clamp(8rem, 14vw, 13rem);
+  --winged-avatar-height: clamp(5.2rem, 9vw, 8.2rem);
 }
 
 .winged-avatar-xl {
-  --winged-avatar-width: clamp(16rem, 23vw, 20rem);
-  --winged-avatar-height: clamp(9.4rem, 14vw, 12rem);
+  --winged-avatar-width: clamp(10rem, 17vw, 17rem);
+  --winged-avatar-height: clamp(6.1rem, 10vw, 10rem);
 }
 
 .winged-avatar[data-wing-tier="1"] {
@@ -7423,7 +7445,15 @@ select.field option {
 }
 
 .lb-character-visual {
+  width: 100% !important;
+  height: 100% !important;
   overflow: hidden;
+}
+
+.lb-character-visual img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
 }
 
 .lb-character-visual img,
@@ -7447,11 +7477,12 @@ select.field option {
 
 .lb-hero-nameplate strong {
   color: var(--lb-text);
-  font-size: clamp(1.35rem, 2vw, 2rem);
+  max-width: 100%;
+  font-size: clamp(1.25rem, 2vw, 2rem);
   font-weight: 1000;
   line-height: 1.04;
-  overflow-wrap: normal;
-  word-break: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-shadow: 0 0 18px color-mix(in srgb, var(--lb-accent) 28%, transparent), 0 2px 0 rgba(0, 0, 0, 0.65);
 }
 
@@ -7459,6 +7490,8 @@ select.field option {
 .lb-compact-identity span {
   color: rgba(244, 239, 227, 0.72);
   font-weight: 800;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .lb-hero-content-layer {
@@ -7488,12 +7521,14 @@ select.field option {
   font-size: clamp(1.05rem, 1.7vw, 1.5rem);
   font-weight: 1000;
   line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-shadow: 0 0 14px rgba(0, 0, 0, 0.45);
 }
 
 .lb-hero-stat-layer {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: repeat(3, minmax(0, auto));
   align-items: center;
   justify-content: end;
   gap: 0.95rem;
@@ -7508,7 +7543,7 @@ select.field option {
 }
 
 .lb-cultivation-stat-hero {
-  width: 6.5rem;
+  width: min(6.5rem, 100%);
   min-height: 4.45rem;
   border: 1px solid color-mix(in srgb, var(--lb-accent) 48%, transparent);
   border-radius: 0.45rem;
@@ -7524,9 +7559,12 @@ select.field option {
 .lb-cultivation-stat strong,
 .lb-fame-seal strong {
   color: var(--lb-text);
-  font-size: 1.05rem;
+  max-width: 100%;
+  font-size: clamp(0.9rem, 1.4vw, 1.05rem);
   font-weight: 1000;
   line-height: 1.05;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-shadow: 0 0 14px color-mix(in srgb, var(--lb-accent) 30%, transparent);
 }
 
@@ -7548,8 +7586,8 @@ select.field option {
 }
 
 .lb-sect-crest svg {
-  width: 3rem;
-  height: 3rem;
+  width: clamp(2.35rem, 4vw, 3rem);
+  height: clamp(2.35rem, 4vw, 3rem);
   fill: color-mix(in srgb, var(--lb-accent) 16%, transparent);
   stroke: color-mix(in srgb, var(--lb-accent) 70%, transparent);
   stroke-width: 2;
@@ -7557,22 +7595,21 @@ select.field option {
 }
 
 .lb-sect-crest-hero svg {
-  width: 4rem;
-  height: 4rem;
+  width: clamp(2.9rem, 5vw, 4rem);
+  height: clamp(2.9rem, 5vw, 4rem);
 }
 
 .lb-sect-crest strong {
-  max-width: 8rem;
-  overflow: hidden;
+  max-width: min(8rem, 100%);
   font-size: 0.94rem;
   font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .lb-fame-seal {
-  width: 4.3rem;
-  height: 4.3rem;
+  width: clamp(3.75rem, 6vw, 4.3rem);
+  height: clamp(3.75rem, 6vw, 4.3rem);
   border: 1px solid color-mix(in srgb, var(--lb-accent) 48%, transparent);
   background: radial-gradient(circle, color-mix(in srgb, var(--lb-accent) 13%, transparent), rgba(0, 0, 0, 0.22));
   box-shadow: inset 0 0 18px color-mix(in srgb, var(--lb-accent) 14%, transparent), 0 0 14px color-mix(in srgb, var(--lb-accent) 17%, transparent);
@@ -7581,6 +7618,7 @@ select.field option {
 
 .lb-compact-ranks {
   margin-top: 1.35rem;
+  min-width: 0;
 }
 
 .lb-compact-title {
@@ -7608,11 +7646,12 @@ select.field option {
   display: grid;
   gap: 0.62rem;
   margin-top: 0.85rem;
+  min-width: 0;
 }
 
 .lb-compact-card {
   display: grid;
-  grid-template-columns: minmax(14rem, 1.25fr) minmax(18rem, 2fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.85fr);
   align-items: center;
   gap: 1rem;
   min-height: 5rem;
@@ -7640,19 +7679,18 @@ select.field option {
 }
 
 .lb-compact-identity strong {
-  overflow: hidden;
   color: var(--lb-text);
   font-size: 1rem;
   font-weight: 1000;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .lb-compact-meta {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(8rem, 1.1fr) minmax(5.5rem, 0.7fr) minmax(6rem, 0.7fr) minmax(4.5rem, 0.5fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   align-items: center;
   min-width: 0;
@@ -7672,12 +7710,11 @@ select.field option {
 }
 
 .lb-compact-meta strong {
-  overflow: hidden;
   color: rgba(244, 239, 227, 0.88);
   font-size: 0.88rem;
   font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @keyframes lbHaloRotate {
@@ -7747,34 +7784,36 @@ select.field option {
 
 @media (max-width: 1180px) {
   .lb-hero-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.82fr) minmax(0, 0.72fr);
     gap: 0.9rem;
-    min-height: 14.5rem;
+    min-height: clamp(9.25rem, 14vw, 10.8rem);
   }
 
   .lb-hero-character-layer {
     grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 0.85rem;
   }
 
   .winged-avatar-xl {
-    --winged-avatar-width: clamp(12.5rem, 24vw, 16rem);
-    --winged-avatar-height: clamp(7.2rem, 14vw, 9.2rem);
+    --winged-avatar-width: clamp(9.5rem, 16vw, 13.5rem);
+    --winged-avatar-height: clamp(5.7rem, 10vw, 8rem);
   }
 
   .lb-character-portrait-hero {
-    width: 6.2rem;
-    height: 6.2rem;
+    width: clamp(4.8rem, 9vw, 6.2rem);
+    height: auto;
   }
 
   .lb-hero-content-layer {
-    justify-items: start;
-    text-align: left;
+    justify-items: center;
+    text-align: center;
   }
 
   .lb-hero-stat-layer {
-    grid-template-columns: minmax(9rem, auto) minmax(8rem, auto) minmax(5rem, auto);
-    justify-content: start;
+    grid-template-columns: repeat(3, minmax(0, auto));
+    justify-content: end;
     width: 100%;
+    gap: 0.65rem;
   }
 
   .lb-fame-seal {
@@ -7799,7 +7838,7 @@ select.field option {
   }
 
   .lb-hero-stat-layer {
-    grid-template-columns: auto auto auto;
+    grid-template-columns: repeat(3, minmax(0, auto));
     justify-content: start;
   }
 
@@ -7819,7 +7858,7 @@ select.field option {
   }
 
   .lb-compact-meta {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -7839,16 +7878,20 @@ select.field option {
   }
 
   .lb-hero-character-layer {
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "rank portrait name";
-    gap: 0.7rem 0.85rem;
+      "rank"
+      "portrait"
+      "name";
+    justify-items: center;
+    text-align: center;
+    gap: 0.62rem;
   }
 
   .lb-rank-medallion-hero {
     grid-area: rank;
-    width: 3.7rem;
-    height: 3.7rem;
+    width: clamp(3.4rem, 16vw, 4rem);
+    height: clamp(3.4rem, 16vw, 4rem);
   }
 
   .lb-rank-medallion-hero strong {
@@ -7859,8 +7902,8 @@ select.field option {
 
   .lb-character-portrait-hero {
     grid-area: portrait;
-    width: 4.6rem;
-    height: 4.6rem;
+    width: clamp(4.6rem, 25vw, 6rem);
+    height: auto;
   }
 
   .lb-winged-avatar {
@@ -7869,27 +7912,28 @@ select.field option {
   }
 
   .winged-avatar-xl {
-    --winged-avatar-width: clamp(8.7rem, 38vw, 11.8rem);
-    --winged-avatar-height: clamp(5rem, 22vw, 6.8rem);
+    --winged-avatar-width: clamp(8.6rem, 48vw, 12rem);
+    --winged-avatar-height: clamp(5.1rem, 28vw, 7.2rem);
   }
 
   .lb-hero-nameplate {
     grid-area: name;
     align-self: center;
+    justify-items: center;
     min-width: 0;
   }
 
   .lb-hero-nameplate strong {
-    display: -webkit-box;
     max-width: 100%;
-    overflow: hidden;
     font-size: clamp(1.05rem, 5vw, 1.28rem);
     line-height: 1.12;
-    overflow-wrap: normal;
-    text-overflow: ellipsis;
-    word-break: normal;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .lb-hero-content-layer {
+    justify-items: center;
+    text-align: center;
   }
 
   .lb-hero-realm strong {
@@ -7897,14 +7941,15 @@ select.field option {
   }
 
   .lb-hero-stat-layer {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+    justify-content: stretch;
     width: 100%;
     gap: 0.6rem;
   }
 
   .lb-cultivation-stat-hero {
     width: 100%;
-    min-height: 4rem;
+    min-height: 3.6rem;
   }
 
   .lb-sect-crest-hero svg {
@@ -7915,16 +7960,35 @@ select.field option {
   .lb-fame-seal {
     display: grid;
     width: 100%;
-    height: 4rem;
+    height: auto;
+    min-height: 3.6rem;
     clip-path: none;
     border-radius: 0.45rem;
   }
 
   .lb-compact-main {
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "rank identity"
+      "portrait identity";
+  }
+
+  .lb-compact-main > .lb-rank-medallion {
+    grid-area: rank;
+  }
+
+  .lb-compact-main > .lb-winged-avatar,
+  .lb-compact-main > .lb-character-portrait,
+  .lb-compact-main > .lb-sect-crest {
+    grid-area: portrait;
+  }
+
+  .lb-compact-identity {
+    grid-area: identity;
+    align-self: center;
   }
 
   .lb-compact-meta {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }

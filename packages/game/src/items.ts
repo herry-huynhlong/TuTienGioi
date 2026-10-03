@@ -18,6 +18,7 @@ export type ItemEconomy = {
   requiredRealmOrder: number | null;
   requiredSectRank: number | null;
   itemFamily: string | null;
+  sources: string[];
 };
 
 type TemplateLike = {
@@ -94,15 +95,15 @@ export const progressionItemCatalog: ProgressionItemDefinition[] = [
   { key: "huyen-thu-cot", name: "Huyền Thú Cốt", category: "MATERIAL", rarity: "TRUNG", subType: "Nguyên Liệu Yêu Thú", icon: "bone", description: "Xương yêu thú đã hấp thu linh khí lâu năm.", usage: "Crafting và mission.", basePrice: 700, sectContributionPrice: 300, systemMarketEnabled: true, sources: ["Yêu thú mạnh"] },
   { key: "tu-linh-thach", name: "Tụ Linh Thạch", category: "MATERIAL", rarity: "TRUNG", subType: "Vật Liệu Tu Luyện", icon: "crystal", description: "Linh thạch đặc biệt giúp tụ linh trong động phủ.", usage: "Hỗ trợ tu luyện, Động Phủ, Tông Môn và crafting.", basePrice: 2000, sectContributionPrice: 900, systemMarketEnabled: true, sources: ["Linh Khoáng", "Tông Môn"] },
   { key: "thien-linh-thao", name: "Thiên Linh Thảo", category: "MATERIAL", rarity: "THUONG", subType: "Linh Thảo", icon: "herb", description: "Linh thảo thượng phẩm cực hiếm.", usage: "Luyện đan cao cấp, nhiệm vụ khó và sự kiện.", basePrice: 5000, sectContributionPrice: 2000, systemMarketEnabled: false, sources: ["Nhiệm vụ khó", "Bí cảnh"] },
-  { key: "huyen-tinh", name: "Huyền Tinh", category: "MATERIAL", rarity: "THUONG", subType: "Khoáng Vật", icon: "crystal", description: "Tinh thể huyền quang, sinh ra trong khoáng mạch hiếm.", usage: "Luyện khí cao cấp và Tông Môn.", basePrice: 8000, sectContributionPrice: 3000, systemMarketEnabled: false, auctionEligible: true, sources: ["Rare mine drop", "Đấu Giá sau này"] },
-  { key: "xich-viem-tinh-kim", name: "Xích Viêm Tinh Kim", category: "MATERIAL", rarity: "THUONG", subType: "Khoáng Vật", icon: "ore", description: "Tinh kim đỏ rực mang địa hỏa.", usage: "Luyện khí thượng phẩm.", basePrice: 12000, sectContributionPrice: 4500, systemMarketEnabled: false, auctionEligible: true, sources: ["Hỏa Diệm Linh Mạch"] },
-  { key: "ngoc-tuy-tinh-hoa", name: "Ngọc Tủy Tinh Hoa", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "crystal", description: "Tinh hoa ngọc tủy đã kết tụ nhiều năm.", usage: "Tu luyện, crafting và nhiệm vụ khó.", basePrice: 15000, sectContributionPrice: 5000, systemMarketEnabled: false, auctionEligible: true, sources: ["Bí cảnh", "Nhiệm vụ ★★★★★"] },
-  { key: "truc-co-dan-thuong", itemFamily: "truc-co-dan", name: "Trúc Cơ Đan · Thượng Phẩm", category: "CONSUMABLE", rarity: "THUONG", subType: "Đan Dược", icon: "pill", description: "Trúc Cơ Đan thượng phẩm, tinh luyện cao.", usage: "Tăng mạnh cơ hội đột phá Trúc Cơ, không đồng nghĩa người dùng phải ở cảnh giới cao.", basePrice: 10000, sectContributionPrice: 4000, systemMarketEnabled: false, auctionEligible: true, baseModifiers: { breakthroughBps: 1400 }, requiredRealmOrder: 1, sources: ["Reward hiếm", "Tông Môn cấp cao"] },
-  { key: "tay-tuy-dan", name: "Tẩy Tủy Đan", category: "CONSUMABLE", rarity: "THUONG", subType: "Đan Dược", icon: "pill", description: "Đan dược tẩy luyện kinh mạch.", usage: "Vật phẩm hiếm, hiệu ứng sâu hơn sẽ mở về sau.", basePrice: 18000, sectContributionPrice: 6000, systemMarketEnabled: false, auctionEligible: true, baseModifiers: { hpRestore: 200, qiRestore: 200 }, sources: ["Boss", "Bí cảnh"] },
-  { key: "yeu-dan-nhi-giai", name: "Yêu Đan Nhị Giai", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "core", description: "Yêu đan nhị giai chứa yêu lực dày.", usage: "Tu luyện, crafting và mission khó.", basePrice: 14000, sectContributionPrice: 5000, systemMarketEnabled: false, auctionEligible: true, sources: ["Elite/Boss"] },
-  { key: "thien-tam-ti", name: "Thiên Tàm Ti", category: "MATERIAL", rarity: "THUONG", subType: "Vật liệu crafting", icon: "silk", description: "Sợi tằm trời bền nhẹ, dùng chế tạo pháp y.", usage: "Crafting cao cấp và nhiệm vụ.", basePrice: 9000, sectContributionPrice: 3500, systemMarketEnabled: false, auctionEligible: true, sources: ["Event", "Bí cảnh"] },
-  { key: "dia-mach-linh-tinh", name: "Địa Mạch Linh Tinh", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "crystal", description: "Tinh thể sinh trong địa mạch nồng đậm.", usage: "Động Phủ, Tông Môn, tu luyện và crafting.", basePrice: 22000, sectContributionPrice: 7000, systemMarketEnabled: false, auctionEligible: true, sources: ["Địa mạch", "Tông Môn cấp cao"] },
-  { key: "tu-linh-ngoc", name: "Tụ Linh Ngọc", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "gem", description: "Ngọc tụ linh thượng phẩm, giá trị cao.", usage: "Hỗ trợ tu luyện, Động Phủ, Tông Môn và crafting.", basePrice: 28000, sectContributionPrice: 8000, systemMarketEnabled: false, auctionEligible: true, sources: ["Boss", "Bí cảnh", "Đấu Giá sau này"] }
+  { key: "huyen-tinh", name: "Huyền Tinh", category: "MATERIAL", rarity: "THUONG", subType: "Khoáng Vật", icon: "crystal", description: "Tinh thể huyền quang, sinh ra trong khoáng mạch hiếm.", usage: "Luyện khí cao cấp và Tông Môn.", basePrice: 8000, sectContributionPrice: 3000, systemMarketEnabled: false, auctionEligible: true, sources: ["Linh Khoáng cấp cao"] },
+  { key: "xich-viem-tinh-kim", name: "Xích Viêm Tinh Kim", category: "MATERIAL", rarity: "THUONG", subType: "Khoáng Vật", icon: "ore", description: "Tinh kim đỏ rực mang địa hỏa.", usage: "Luyện khí thượng phẩm.", basePrice: 12000, sectContributionPrice: 4500, systemMarketEnabled: false, auctionEligible: true, sources: ["Hỏa Diệm Linh Mạch", "Lịch Luyện hiếm"] },
+  { key: "ngoc-tuy-tinh-hoa", name: "Ngọc Tủy Tinh Hoa", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "crystal", description: "Tinh hoa ngọc tủy đã kết tụ nhiều năm.", usage: "Tu luyện, crafting và nhiệm vụ khó.", basePrice: 15000, sectContributionPrice: 5000, systemMarketEnabled: false, auctionEligible: true, sources: ["Nhiệm vụ Tông Môn ★★★★★", "Lịch Luyện hiếm"] },
+  { key: "truc-co-dan-thuong", itemFamily: "truc-co-dan", name: "Trúc Cơ Đan · Thượng Phẩm", category: "CONSUMABLE", rarity: "THUONG", subType: "Đan Dược", icon: "pill", description: "Trúc Cơ Đan thượng phẩm, tinh luyện cao.", usage: "Tăng mạnh cơ hội đột phá Trúc Cơ, không đồng nghĩa người dùng phải ở cảnh giới cao.", basePrice: 10000, sectContributionPrice: 4000, systemMarketEnabled: false, auctionEligible: true, baseModifiers: { breakthroughBps: 1400 }, requiredRealmOrder: 1, sources: ["Luyện Đan"] },
+  { key: "tay-tuy-dan", name: "Tẩy Tủy Đan", category: "CONSUMABLE", rarity: "THUONG", subType: "Đan Dược", icon: "pill", description: "Đan dược tẩy luyện kinh mạch.", usage: "Vật phẩm hiếm, hiệu ứng sâu hơn sẽ mở về sau.", basePrice: 18000, sectContributionPrice: 6000, systemMarketEnabled: false, auctionEligible: true, baseModifiers: { hpRestore: 200, qiRestore: 200 }, sources: ["Luyện Đan", "Boss cấp cao"] },
+  { key: "yeu-dan-nhi-giai", name: "Yêu Đan Nhị Giai", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "core", description: "Yêu đan nhị giai chứa yêu lực dày.", usage: "Tu luyện, crafting và mission khó.", basePrice: 14000, sectContributionPrice: 5000, systemMarketEnabled: false, auctionEligible: true, sources: ["Elite / Boss yêu thú"] },
+  { key: "thien-tam-ti", name: "Thiên Tàm Ti", category: "MATERIAL", rarity: "THUONG", subType: "Vật liệu crafting", icon: "silk", description: "Sợi tằm trời bền nhẹ, dùng chế tạo pháp y.", usage: "Crafting cao cấp và nhiệm vụ.", basePrice: 9000, sectContributionPrice: 3500, systemMarketEnabled: false, auctionEligible: true, sources: ["Lịch Luyện hiếm", "Nhiệm vụ Tông Môn khó"] },
+  { key: "dia-mach-linh-tinh", name: "Địa Mạch Linh Tinh", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "crystal", description: "Tinh thể sinh trong địa mạch nồng đậm.", usage: "Động Phủ, Tông Môn, tu luyện và crafting.", basePrice: 22000, sectContributionPrice: 7000, systemMarketEnabled: false, auctionEligible: true, sources: ["Linh Khoáng Tông Môn cấp cao"] },
+  { key: "tu-linh-ngoc", name: "Tụ Linh Ngọc", category: "MATERIAL", rarity: "THUONG", subType: "Vật Liệu Tu Luyện", icon: "gem", description: "Ngọc tụ linh thượng phẩm, giá trị cao.", usage: "Hỗ trợ tu luyện, Động Phủ, Tông Môn và crafting.", basePrice: 28000, sectContributionPrice: 8000, systemMarketEnabled: false, auctionEligible: true, sources: ["Boss cấp cao", "Nhiệm vụ Tông Môn ★★★★★"] }
 ];
 
 const rarityPriceBps: Record<string, number> = {
@@ -215,6 +216,11 @@ function stringFromMeta(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function stringArrayFromMeta(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+}
+
 export function getItemEconomy(template: TemplateLike): ItemEconomy {
   const meta = jsonRecord(template.bindRules);
   const systemBasePrice = bigintFromMeta(meta.systemBasePrice) ?? calculateSystemBasePrice(template.category, template.rarity, template.baseModifiers);
@@ -238,7 +244,8 @@ export function getItemEconomy(template: TemplateLike): ItemEconomy {
     auctionClass: auctionClassFromMeta(meta.auctionClass),
     requiredRealmOrder: numberFromMeta(meta.requiredRealmOrder),
     requiredSectRank: numberFromMeta(meta.requiredSectRank),
-    itemFamily: stringFromMeta(meta.itemFamily) ?? template.itemFamily ?? null
+    itemFamily: stringFromMeta(meta.itemFamily) ?? template.itemFamily ?? null,
+    sources: stringArrayFromMeta(meta.sources)
   };
 }
 

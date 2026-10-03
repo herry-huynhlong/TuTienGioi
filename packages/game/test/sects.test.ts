@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Currency, SectRoleName, WalletTxType } from "@ttg/db";
-import { calculateSectMissionReward, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, previewSectFarmReward, previewSectMineReward, sectFacilityConfig, depositSectCurrency, exchangeSectAppearanceTalisman, withdrawSectCurrency } from "../src/sects.js";
+import { calculateSectMissionReward, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, previewSectFarmReward, previewSectMineReward, sectFacilityConfig, sectMineConfig, depositSectCurrency, exchangeSectAppearanceTalisman, withdrawSectCurrency } from "../src/sects.js";
 
 function fakeSectDb(role: SectRoleName, characterBalance = 10_000n, treasury = 1_000n, contribution = 0) {
   const state = {
@@ -153,6 +153,14 @@ describe("sect economy services", () => {
     expect(reward.reputation).toBeGreaterThan(0);
   });
 
+  it("keeps auction-grade materials wired to high rank mine rare drops", () => {
+    const rareKeys = Object.values(sectMineConfig.mines).flatMap((mine) => mine.rareDrops.map((drop) => drop.key));
+
+    expect(rareKeys).toContain("huyen-tinh");
+    expect(rareKeys).toContain("dia-mach-linh-tinh");
+    expect(rareKeys).toContain("xich-viem-tinh-kim");
+  });
+
   it("scales generated mission rewards by difficulty and world danger", () => {
     const easy = calculateSectMissionReward({ difficulty: 1, locationDanger: 1, targetStrength: 0, sectRank: 5 });
     const hard = calculateSectMissionReward({ difficulty: 4, locationDanger: 6, targetStrength: 3, sectRank: 3 });
@@ -160,6 +168,13 @@ describe("sect economy services", () => {
     expect(hard.cultivation).toBeGreaterThan(easy.cultivation);
     expect(hard.contribution).toBeGreaterThan(easy.contribution);
     expect(hard.reputation).toBeGreaterThan(easy.reputation);
+  });
+
+  it("adds real rare item rewards to five star sect missions", () => {
+    const reward = calculateSectMissionReward({ difficulty: 5, locationDanger: 6, targetStrength: 3, sectRank: 2, missionType: "HUNT", rewardSeed: "boss-five-star" });
+
+    expect(reward.itemQuantity).toBe(1);
+    expect(["tu-linh-ngoc", "yeu-dan-nhi-giai"]).toContain(reward.itemKey);
   });
 
   it("derives cave benefits from officer roles and excludes inner/outer disciples", () => {

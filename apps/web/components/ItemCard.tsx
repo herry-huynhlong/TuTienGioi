@@ -105,6 +105,12 @@ export function ItemDetailPanel({
         <h4>Công dụng</h4>
         <p>{economy.usage}</p>
       </section>
+      {economy.sources.length > 0 ? (
+        <section className="item-detail-section">
+          <h4>Nguồn nhận</h4>
+          <p>{economy.sources.join(" · ")}</p>
+        </section>
+      ) : null}
 
       {rows.length > 0 ? (
         <div className="info-table mt-4">

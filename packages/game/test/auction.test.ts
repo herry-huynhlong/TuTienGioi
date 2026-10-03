@@ -54,6 +54,7 @@ describe("turn based auction rules", () => {
       },
       itemInstance: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn(),
         findUnique: vi.fn().mockResolvedValue({
           id: "item-1",
           ownerId: "seller-1",
@@ -95,6 +96,98 @@ describe("turn based auction rules", () => {
     expect(tx.walletTransaction.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ amount: -3000n, type: "AUCTION" })
     });
+  });
+
+  it("splits stackable auction quantity without duplicating the seller inventory", async () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const created = { id: "auction-1" };
+    const tx: any = {
+      character: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter),
+        findUnique: vi.fn().mockResolvedValue({ linhThach: 1_000_000n, tienNgoc: 0n }),
+        update: vi.fn()
+      },
+      itemInstance: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn().mockResolvedValue({ id: "remaining-stack" }),
+        findUnique: vi.fn().mockResolvedValue({
+          id: "item-1",
+          ownerId: "seller-1",
+          templateId: "template-huyen-tinh",
+          quantity: 5,
+          quality: 1,
+          enhancement: 0,
+          durability: null,
+          customModifiers: {},
+          equippedSlot: null,
+          bound: false,
+          listings: [],
+          auctions: [],
+          template: {
+            name: "Huyền Tinh",
+            category: ItemCategory.MATERIAL,
+            stackable: true,
+            tradeable: true,
+            bindRules: { auctionEligible: true, auctionClass: "STANDARD" }
+          }
+        })
+      },
+      gameConfig: { findUnique: vi.fn().mockResolvedValue({ value: { auctionFeeBps: 300 } }) },
+      walletTransaction: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+      auction: { create: vi.fn().mockResolvedValue(created) },
+      gameLog: { create: vi.fn() },
+      worldNews: { create: vi.fn() }
+    };
+    const db: any = { $transaction: vi.fn((fn) => fn(tx)) };
+
+    await expect(createAuction(db, "seller-1", "item-1", 100000n, 2, "split", now)).resolves.toBe(created);
+    expect(tx.itemInstance.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: "item-1", quantity: { gte: 2 } }),
+      data: { quantity: 2 }
+    }));
+    expect(tx.itemInstance.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ ownerId: "seller-1", templateId: "template-huyen-tinh", quantity: 3 })
+    });
+  });
+
+  it.each([
+    ["bound item", { bound: true }, "ITEM_BOUND"],
+    ["equipped item", { equippedSlot: "WEAPON" }, "ITEM_EQUIPPED"],
+    ["market listed item", { listings: [{ id: "listing-1" }] }, "ITEM_LISTED"],
+    ["already auctioned item", { auctions: [{ id: "auction-existing" }] }, "ITEM_LISTED"],
+    ["ineligible material", { template: { bindRules: { auctionEligible: false, auctionClass: "NONE" } } }, "AUCTION_NOT_ELIGIBLE"],
+    ["standard equipment", { template: { category: ItemCategory.EQUIPMENT, equipSlot: "WEAPON", bindRules: { auctionEligible: true, auctionClass: "STANDARD" } } }, "AUCTION_NOT_ELIGIBLE"]
+  ])("rejects %s server-side", async (_label, override, code) => {
+    const baseItem = {
+      id: "item-1",
+      ownerId: "seller-1",
+      templateId: "template-1",
+      quantity: 1,
+      quality: 1,
+      enhancement: 0,
+      durability: null,
+      customModifiers: {},
+      equippedSlot: null,
+      bound: false,
+      listings: [],
+      auctions: [],
+      template: {
+        name: "Huyền Tinh",
+        category: ItemCategory.MATERIAL,
+        stackable: true,
+        tradeable: true,
+        bindRules: { auctionEligible: true, auctionClass: "STANDARD" }
+      }
+    };
+    const item = { ...baseItem, ...override, template: { ...baseItem.template, ...((override as { template?: object }).template ?? {}) } };
+    const tx: any = {
+      character: { findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter) },
+      itemInstance: { findUnique: vi.fn().mockResolvedValue(item), updateMany: vi.fn() }
+    };
+    const db: any = { $transaction: vi.fn((fn) => fn(tx)) };
+
+    await expect(createAuction(db, "seller-1", "item-1", 100000n, 1, "invalid")).rejects.toMatchObject({ code });
+    expect(tx.itemInstance.updateMany).not.toHaveBeenCalled();
   });
 
   it("stores auction registration without creating an opening bid or escrow", async () => {

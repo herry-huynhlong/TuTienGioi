@@ -1,4 +1,5 @@
 import { ActionAlert } from "@/components/ActionAlert";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { RealtimeChat } from "@/components/RealtimeChat";
 import { getUser } from "@/lib/auth";
 import { formatItemCategory, formatRarity } from "@/lib/format";
@@ -50,6 +51,7 @@ export default async function ChatPage({ searchParams }: { searchParams?: Promis
     : [];
 
   return (
+    <GamePageBackground type="social">
     <div className="chat-page p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Xã Hội</p>
@@ -84,5 +86,6 @@ export default async function ChatPage({ searchParams }: { searchParams?: Promis
         })}
       />
     </div>
+    </GamePageBackground>
   );
 }

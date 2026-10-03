@@ -6,6 +6,7 @@ import { defaultKnownLocationKeys, getFeatureUnlockState, recordOnboardingEvent,
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import {
   Anchor,
   Castle,
@@ -305,6 +306,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
   });
 
   return (
+    <GamePageBackground type="adventure">
     <div className="world-directory-page p-5 lg:p-8">
       <header className="world-directory-header">
         <div>
@@ -382,6 +384,7 @@ export default async function WorldPage({ searchParams }: { searchParams?: Promi
         <div className="panel mt-5 rounded-lg p-6 muted">Thiên đồ hiện chưa ghi nhận địa vực nào.</div>
       )}
     </div>
+    </GamePageBackground>
   );
 }
 

@@ -1,4 +1,5 @@
 import { getUser } from "@/lib/auth";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { formatQuestType } from "@/lib/game-display";
 import { prisma } from "@ttg/db";
 import { CheckCircle2, CircleDot, Gift, ScrollText } from "lucide-react";
@@ -20,6 +21,7 @@ export default async function QuestLogPage({ searchParams }: { searchParams?: Pr
   });
 
   return (
+    <GamePageBackground type="quests">
     <div className="p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <h1 className="mt-1 text-3xl font-black">Nhiệm Vụ</h1>
@@ -51,6 +53,7 @@ export default async function QuestLogPage({ searchParams }: { searchParams?: Pr
         {quests.length === 0 ? <div className="empty-state"><b>Không có nhiệm vụ trong mục này.</b><p>Hãy trò chuyện với nhân vật ở địa điểm hiện tại để nhận việc mới.</p></div> : null}
       </section>
     </div>
+    </GamePageBackground>
   );
 }
 

@@ -7,6 +7,7 @@ import { getItemEconomy, getItemUsageDefinition } from "@ttg/game";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
@@ -57,6 +58,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
   const teleportDestinations = c.currentLocation?.routesFrom.map((route) => route.destination).filter((destination) => destination.id !== c.currentLocationId && destination.active && !destination.services.includes("boss") && !destination.services.includes("quest_only") && !destination.services.includes("sealed")) ?? [];
 
   return (
+    <GamePageBackground type="inventory">
     <div className="p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Inventory</p>
@@ -100,6 +102,7 @@ export default async function InventoryPage({ searchParams }: { searchParams?: P
         </Panel>
       </section>
     </div>
+    </GamePageBackground>
   );
 }
 

@@ -19,7 +19,8 @@ button, input, select, textarea {
 
 .panel {
   border: 1px solid rgba(255, 255, 255, 0.11);
-  background: linear-gradient(180deg, rgba(42, 45, 42, 0.96), rgba(24, 27, 25, 0.96));
+  background: linear-gradient(180deg, rgba(34, 39, 35, 0.88), rgba(18, 23, 20, 0.84));
+  backdrop-filter: blur(2px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
@@ -73,7 +74,7 @@ button, input, select, textarea {
 
 .game-frame {
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.25), transparent 18rem),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.2), transparent 18rem),
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0, rgba(255, 255, 255, 0.018) 1px, transparent 1px, transparent 4px),
     #121513;
 }
@@ -81,21 +82,42 @@ button, input, select, textarea {
 .game-sidebar {
   min-height: 100vh;
   border-right: 1px solid rgba(255, 255, 255, 0.12);
-  background: #222522;
+  background: rgba(17, 21, 18, 0.9);
+  backdrop-filter: blur(3px);
   padding: 0.55rem;
   box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.55);
 }
 
 .game-main {
   min-width: 0;
-  background: #151816;
+  background: transparent;
+}
+
+.game-page-bg {
+  position: relative;
+  min-height: 100%;
+  isolation: isolate;
+  background-image:
+    linear-gradient(90deg, rgba(5, 11, 9, 0.52) 0%, rgba(5, 11, 9, 0.34) 46%, rgba(5, 11, 9, 0.5) 100%),
+    linear-gradient(180deg, rgba(5, 11, 9, 0.24) 0%, rgba(5, 11, 9, 0.48) 100%),
+    var(--game-page-bg);
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+.game-page-bg > * {
+  position: relative;
+  z-index: 1;
 }
 
 .brand-block {
   border: 1px solid rgba(255, 255, 255, 0.1);
   background:
     radial-gradient(circle at 50% 0, rgba(214, 178, 94, 0.16), transparent 70%),
-    linear-gradient(180deg, #30342f, #1f221f);
+    linear-gradient(180deg, rgba(48, 52, 47, 0.9), rgba(31, 34, 31, 0.86));
+  backdrop-filter: blur(2px);
   padding: 0.7rem;
 }
 
@@ -193,7 +215,8 @@ button, input, select, textarea {
 .sidebar-card {
   margin-top: 0.55rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, #2a2d2a, #202320);
+  background: linear-gradient(180deg, rgba(42, 45, 42, 0.88), rgba(24, 29, 25, 0.84));
+  backdrop-filter: blur(2px);
   padding: 0.65rem;
 }
 
@@ -342,15 +365,28 @@ button, input, select, textarea {
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: #222522;
+  background: rgba(17, 21, 18, 0.9);
+  backdrop-filter: blur(3px);
   padding: 0.75rem 1rem;
   color: rgba(244, 239, 227, 0.72);
+}
+
+.mobile-bottom-nav {
+  background: rgba(14, 19, 16, 0.94);
+  backdrop-filter: blur(3px);
 }
 
 .dashboard-page {
   background:
     radial-gradient(circle at 70% 0, rgba(214, 178, 94, 0.08), transparent 30rem),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 15rem);
+}
+
+@media (max-width: 768px) {
+  .game-page-bg {
+    background-attachment: scroll;
+    background-position: center top;
+  }
 }
 
 .dashboard-grid {
@@ -456,7 +492,8 @@ button, input, select, textarea {
 .dash-panel {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(40, 43, 40, 0.98), rgba(22, 25, 23, 0.98));
+  background: linear-gradient(180deg, rgba(40, 43, 40, 0.88), rgba(18, 23, 20, 0.84));
+  backdrop-filter: blur(2px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 28px rgba(0, 0, 0, 0.18);
 }
 
@@ -1048,8 +1085,8 @@ select.field option {
 
 .facility-page {
   background:
-    radial-gradient(circle at 78% 0, rgba(214, 178, 94, 0.075), transparent 28rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 18rem);
+    radial-gradient(circle at 78% 0, rgba(214, 178, 94, 0.065), transparent 28rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 18rem);
 }
 
 .facility-header {
@@ -1084,7 +1121,8 @@ select.field option {
 .facility-panel {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(40, 43, 40, 0.98), rgba(22, 25, 23, 0.98));
+  background: linear-gradient(180deg, rgba(40, 43, 40, 0.88), rgba(18, 23, 20, 0.84));
+  backdrop-filter: blur(2px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 28px rgba(0, 0, 0, 0.18);
 }
 

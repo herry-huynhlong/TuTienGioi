@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
 import { ActivityCountdown } from "@/components/ActivityCountdown";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemSummaryCard } from "@/components/ItemCard";
 import { Compass, Home, Landmark, Mail, MessageCircle, Route, ScrollText, Shield, ShoppingBag, Swords, Trees, UserRound } from "lucide-react";
 
@@ -88,6 +89,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
   const breakSealItems = usableItems.filter(({ usage }) => usage.effects.some((effect) => effect.type === "BREAK_SEAL"));
 
   return (
+    <GamePageBackground type="adventure">
     <div className="p-5 lg:p-8">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
         <div>
@@ -196,6 +198,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
         </Panel>
       </section>
     </div>
+    </GamePageBackground>
   );
 }
 

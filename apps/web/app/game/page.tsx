@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { dedupeHeavenBoard, formatAptitude, formatGameDate, formatRealm } from "@/lib/game-display";
 
 export default async function Dashboard({ searchParams }: { searchParams?: Promise<{ error?: string; breakthrough?: string }> }) {
@@ -68,6 +69,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   const openBreakthroughPanel = params?.breakthrough === "1";
 
   return (
+    <GamePageBackground type="cultivation">
     <div className="dashboard-page p-4 lg:p-6">
       <header
         className={`dashboard-hero hero-${gameTime.phase}`}
@@ -271,6 +273,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
         </Panel>
       </section>
     </div>
+    </GamePageBackground>
   );
 }
 

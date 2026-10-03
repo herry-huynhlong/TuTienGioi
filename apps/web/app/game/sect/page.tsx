@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { applyToSectAction, cancelSectApplicationAction, completeThanhVanAdmissionAction, createSectAction, revealThanhVanSpiritualRootAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { getSectRank, progressQuestEvent, sectAlignments, sectCreateCost } from "@ttg/game";
 import { SectEmblem } from "@/components/SectEmblem";
 import { Crown, Search, Shield, Sparkles, Users } from "lucide-react";
@@ -63,6 +64,7 @@ export default async function SectLobbyPage({ searchParams }: { searchParams?: P
   const selected = params?.sect ? sects.find((sect) => sect.id === params.sect) ?? await prisma.sect.findUnique({ where: { id: params.sect }, select: publicSectSelect }) : sects[0] ?? null;
 
   return (
+    <GamePageBackground type="sect">
     <div className="sect-page">
       <header className="sect-lobby-hero">
         <div>
@@ -122,6 +124,7 @@ export default async function SectLobbyPage({ searchParams }: { searchParams?: P
         </div>
       )}
     </div>
+    </GamePageBackground>
   );
 }
 

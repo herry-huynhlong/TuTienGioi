@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { AUCTION_LIVE_GAME_DAYS, AUCTION_REGISTRATION_GAME_DAYS, auctionClassLabel, auctionPriceForRound, canAuctionItem, economyFeatureUnlockReasons, hasReachedLuyenKhi1, processAuctionHouse } from "@ttg/game";
 import { cancelAuctionAction, createAuctionAction, joinAuctionAction, passAuctionAction, raiseAuctionAction } from "@/lib/forms";
@@ -58,6 +59,7 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
   const selectedItem = sellableItems.find((item) => item.id === params?.sellItem) ?? sellableItems[0];
 
   return (
+    <GamePageBackground type="auction">
     <div className="p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Đấu Giá</p>
@@ -79,6 +81,7 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       {tab === "sell" ? <SellAuctionTab items={sellableItems} selectedItem={selectedItem} /> : null}
       {tab === "my" ? <MyAuctionTab auctions={myAuctions} /> : null}
     </div>
+    </GamePageBackground>
   );
 }
 

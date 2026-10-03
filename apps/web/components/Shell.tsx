@@ -211,7 +211,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
         </div>
         {children}
       </main>
-      <nav className="fixed inset-x-0 bottom-0 grid grid-cols-5 border-t border-white/10 bg-[#171a18]/95 p-2 lg:hidden">
+      <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 grid grid-cols-5 border-t border-white/10 p-2 lg:hidden">
         {mobileNav.map(({ href, label, icon: Icon, badge }) => (
           <Link key={href} href={href} className="relative flex flex-col items-center gap-1 rounded-md p-2 text-[11px] text-paper/75">
             <Icon size={18} /> {label}

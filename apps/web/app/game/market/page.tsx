@@ -7,6 +7,7 @@ import { currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, re
 import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 
@@ -88,6 +89,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
   ]);
 
   return (
+    <GamePageBackground type="market">
     <div className="p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Vạn Bảo Lâu</p>
@@ -114,6 +116,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
       {tab === "sell" ? <SellTab items={character.items} selectedItem={selectedItem} disabled={!atMarket} /> : null}
       {tab === "my" ? <MyListingsTab listings={myListings} /> : null}
     </div>
+    </GamePageBackground>
   );
 }
 

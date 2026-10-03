@@ -1,5 +1,6 @@
 import { ActionAlert } from "@/components/ActionAlert";
 import { CharacterVisual } from "@/components/CharacterVisual";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { getUser } from "@/lib/auth";
 import { acceptFriendRequestAction, blockPlayerAction, cancelFriendRequestAction, rejectFriendRequestAction, removeFriendAction, sendFriendRequestAction } from "@/lib/forms";
 import { prisma } from "@ttg/db";
@@ -37,6 +38,7 @@ export default async function FriendsPage({ searchParams }: { searchParams?: Pro
   const blockedIds = new Set(blocked.map((row) => row.blockedId));
 
   return (
+    <GamePageBackground type="social">
     <div className="social-page p-5 lg:p-8">
       <header className="mb-5 border-b border-white/10 pb-4">
         <p className="text-xs font-bold uppercase text-jade">Xã Hội</p>
@@ -88,6 +90,7 @@ export default async function FriendsPage({ searchParams }: { searchParams?: Pro
         </Panel>
       </section>
     </div>
+    </GamePageBackground>
   );
 }
 

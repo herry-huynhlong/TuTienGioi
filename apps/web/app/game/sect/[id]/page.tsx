@@ -5,6 +5,7 @@ import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectAppli
 import { ActionAlert } from "@/components/ActionAlert";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, refreshSectRoleCaves, roleHasSectCave, sectAlignments, sectCaveConfig, sectCaveRoleOrder, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
@@ -95,6 +96,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
   const leader = sect.members.find((member) => member.role === "LEADER")?.character;
 
   return (
+    <GamePageBackground type="sect">
     <div className="sect-page">
       <header className="sect-home-hero sect-home-hero-identity">
         {sect.iconLockedAt || sect.leaderId !== character.id ? (
@@ -154,6 +156,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       {activeTab === "admin" && canAdmin ? <AdminTab sect={sect} selfMember={selfMember} /> : null}
       {activeTab === "overview" ? <OverviewTab sect={sect} selfRole={selfMember?.role} selfContribution={selfMember?.contribution ?? 0} thanhVanProgression={thanhVanProgression} thanhVanMentorship={thanhVanMentorship} /> : null}
     </div>
+    </GamePageBackground>
   );
 }
 

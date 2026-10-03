@@ -2,6 +2,7 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FacilityPage, FacilityPanel, FacilityTutorial } from "@/components/FacilityPage";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { formatRarity, formatService } from "@/lib/format";
 import { claimCraftAction, startCraftAction } from "@/lib/forms";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
@@ -52,6 +53,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
   const hasActiveCraft = c.craftJobs.length > 0;
 
   return (
+    <GamePageBackground type="profession">
     <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Cây nghề nghiệp dùng recipe, nguyên liệu, phí và thời gian thật. Công thức bậc hiện tại mở, bậc kế tiếp hiển thị khóa để định hướng tiến triển.">
       {params?.error ? <div className="action-alert error">{params.error}</div> : null}
       <FacilityTutorial title="Hướng dẫn Nghề Nghiệp">
@@ -172,6 +174,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
         </div>
       </FacilityPanel>
     </FacilityPage>
+    </GamePageBackground>
   );
 }
 

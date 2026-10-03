@@ -5,6 +5,7 @@ import { ActionAlert } from "@/components/ActionAlert";
 import { cancelTrainingAction, claimTrainingAction, startTrainingAction } from "@/lib/forms";
 import { currentEnergy, trainingDurationConfigs, trainingDurationOptions, trainingTypeConfigs, trainingTypes, calculateTrainingGain, trainingStatCap, type TrainingDurationKey, type TrainingTypeKey } from "@ttg/game";
 import { FacilityActionCard, FacilityPage, FacilityPanel, FacilityTierStrip, FacilityTutorial } from "@/components/FacilityPage";
+import { GamePageBackground } from "@/components/GamePageBackground";
 import { CheckCircle2, Dumbbell, Lock, Timer, XCircle } from "lucide-react";
 
 export default async function TrainingPage({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
@@ -25,6 +26,7 @@ export default async function TrainingPage({ searchParams }: { searchParams?: Pr
   const active = c.trainingJobs[0] ?? null;
 
   return (
+    <GamePageBackground type="training">
     <FacilityPage eyebrow="Rèn luyện" title="Luyện Võ Trường" description="Rèn thân thể và chiến lực theo phiên thời gian, tách biệt với tu vi cảnh giới.">
       <ActionAlert message={params?.error} />
       <FacilityTutorial title="Hướng dẫn Rèn Luyện">
@@ -71,6 +73,7 @@ export default async function TrainingPage({ searchParams }: { searchParams?: Pr
         </FacilityTierStrip>
       </FacilityPanel>
     </FacilityPage>
+    </GamePageBackground>
   );
 }
 

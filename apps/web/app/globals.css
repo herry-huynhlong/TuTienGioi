@@ -3037,6 +3037,82 @@ select.field option {
   color: #fff4d5;
 }
 
+.sect-public-sections {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sect-public-sections section {
+  border: 1px solid rgba(244, 239, 227, 0.09);
+  background: rgba(0, 0, 0, 0.13);
+  padding: 0.85rem;
+}
+
+.sect-public-sections h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.7rem;
+  color: #d6b25e;
+  font-size: 0.95rem;
+}
+
+.sect-public-member-list,
+.sect-public-chip-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sect-public-member-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  border-bottom: 1px solid rgba(244, 239, 227, 0.07);
+  padding-bottom: 0.55rem;
+}
+
+.sect-public-member-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.sect-public-member-row b,
+.sect-public-member-row span,
+.sect-public-member-row small {
+  display: block;
+}
+
+.sect-public-member-row span {
+  color: #2dd4bf;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.sect-public-member-row small {
+  color: rgba(244, 239, 227, 0.62);
+  font-size: 0.78rem;
+}
+
+.sect-public-chip-list {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.sect-public-chip-list span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border: 1px solid rgba(214, 178, 94, 0.12);
+  background: rgba(214, 178, 94, 0.05);
+  padding: 0.55rem 0.65rem;
+  color: rgba(244, 239, 227, 0.82);
+}
+
+.sect-public-chip-list b {
+  color: #d6b25e;
+  white-space: nowrap;
+}
+
 .sect-create-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.46fr);

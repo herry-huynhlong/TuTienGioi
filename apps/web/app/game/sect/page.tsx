@@ -6,7 +6,8 @@ import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { getSectRank, progressQuestEvent, sectAlignments, sectCreateCost } from "@ttg/game";
 import { SectEmblem } from "@/components/SectEmblem";
-import { Crown, Search, Shield, Sparkles, Users } from "lucide-react";
+import { CharacterVisual } from "@/components/CharacterVisual";
+import { BookOpen, Building2, Crown, Gem, ScrollText, Search, Shield, Sparkles, Users } from "lucide-react";
 
 const rankFilters = ["5", "4", "3", "2", "1"] as const;
 
@@ -30,7 +31,10 @@ export default async function SectLobbyPage({ searchParams }: { searchParams?: P
   const alignment = filter === "RIGHTEOUS" || filter === "NEUTRAL" || filter === "DEMONIC" ? filter : undefined;
   const includeSect = {
     members: { include: { character: { include: { realmStage: { include: { realm: true } } } } }, orderBy: { joinedAt: "asc" as const } },
-    applications: { where: { characterId: character.id, status: "PENDING" as const } }
+    applications: { where: { characterId: character.id, status: "PENDING" as const } },
+    buildings: { orderBy: [{ level: "desc" as const }, { name: "asc" as const }] },
+    missions: { where: { status: "ACTIVE" as const }, orderBy: [{ difficulty: "asc" as const }, { title: "asc" as const }], take: 6 },
+    libraryTechniques: { include: { technique: true }, orderBy: { createdAt: "desc" as const }, take: 6 }
   };
   const sects = await prisma.sect.findMany({
     where: {
@@ -116,13 +120,15 @@ function SectListCard({ sect, active }: { sect: any; active: boolean }) {
       <SectEmblem iconKey={sect.iconKey} size="md" />
       <div>
         <h2>{sect.name}</h2>
-        <p className="muted">[{sect.tag}] · {rank.label} · {sectAlignments[sect.alignment as SectAlignment]}</p>
+        <p className="muted">[{sect.tag}] · {rank.label} · Cấp {sect.level} · {sectAlignments[sect.alignment as SectAlignment]}</p>
         <p>{sect.description}</p>
       </div>
       <div className="sect-list-meta">
         <span><Users size={15} /> {sect.members.length}/{sect.memberLimit}</span>
         <span><Crown size={15} /> {leader?.name ?? "Chưa rõ"}</span>
         <span><Sparkles size={15} /> {sect.reputation.toLocaleString("vi-VN")} Uy Danh</span>
+        <span><Gem size={15} /> {Number(sect.treasury).toLocaleString("vi-VN")} Linh Thạch</span>
+        <span><Shield size={15} /> {sect.recruiting ? "Đang tuyển" : "Đóng tuyển"}</span>
       </div>
     </a>
   );
@@ -132,6 +138,7 @@ function PublicSectProfile({ sect, pendingApplicationId }: { sect: any; pendingA
   const rank = getSectRank(sect.rank);
   const leader = sect.members.find((member: any) => member.role === "LEADER")?.character;
   const alreadyApplied = sect.applications.length > 0 || Boolean(pendingApplicationId);
+  const seniorMembers = [...sect.members].sort((a: any, b: any) => roleWeight(a.role) - roleWeight(b.role) || b.contribution - a.contribution).slice(0, 15);
   return (
     <div className="sect-public-profile">
       <div className="sect-profile-head">
@@ -139,7 +146,7 @@ function PublicSectProfile({ sect, pendingApplicationId }: { sect: any; pendingA
         <div>
           <p className="eyebrow">{sectAlignments[sect.alignment as SectAlignment]}</p>
           <h2>{sect.name}</h2>
-          <p className="muted">[{sect.tag}] · {rank.label}</p>
+          <p className="muted">[{sect.tag}] · {rank.label} · Cấp {sect.level}</p>
         </div>
       </div>
       <blockquote>{sect.description}</blockquote>
@@ -147,9 +154,53 @@ function PublicSectProfile({ sect, pendingApplicationId }: { sect: any; pendingA
         <span>Tông chủ <b>{leader?.name ?? "Chưa rõ"}</b></span>
         <span>Thành viên <b>{sect.members.length}/{sect.memberLimit}</b></span>
         <span>Uy danh <b>{sect.reputation.toLocaleString("vi-VN")}</b></span>
+        <span>Ngân khố <b>{Number(sect.treasury).toLocaleString("vi-VN")} Linh Thạch</b></span>
         <span>Tuyển thành viên <b>{sect.recruiting ? "Đang mở" : "Đóng"}</b></span>
       </div>
       <p className="muted">Yêu cầu gia nhập: {sect.joinRequirement}</p>
+
+      <div className="sect-public-sections">
+        <section>
+          <h3><Users size={16} /> Thành viên tiêu biểu</h3>
+          <div className="sect-public-member-list">
+            {seniorMembers.length === 0 ? <p className="muted">Chưa có thành viên.</p> : seniorMembers.map((member: any) => (
+              <article key={member.id} className="sect-public-member-row">
+                <CharacterVisual character={member.character} mode="avatar" size={40} />
+                <div>
+                  <b>{member.character.name}</b>
+                  <span>{roleLabel(member.role)}</span>
+                  <small>{member.character.realmStage.realm.name} {member.character.realmStage.name}</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section>
+          <h3><Building2 size={16} /> Công trình</h3>
+          <div className="sect-public-chip-list">
+            {sect.buildings.length === 0 ? <p className="muted">Chưa có công trình.</p> : sect.buildings.slice(0, 8).map((building: any) => (
+              <span key={building.id}>{building.name} <b>Lv.{building.level}</b></span>
+            ))}
+          </div>
+        </section>
+        <section>
+          <h3><ScrollText size={16} /> Nhiệm vụ đang mở</h3>
+          <div className="sect-public-chip-list">
+            {sect.missions.length === 0 ? <p className="muted">Chưa có nhiệm vụ đang mở.</p> : sect.missions.map((mission: any) => (
+              <span key={mission.id}>{mission.title} <b>{"★".repeat(mission.difficulty)}</b></span>
+            ))}
+          </div>
+        </section>
+        <section>
+          <h3><BookOpen size={16} /> Tàng Kinh Các</h3>
+          <div className="sect-public-chip-list">
+            {sect.libraryTechniques.length === 0 ? <p className="muted">Chưa mở công pháp.</p> : sect.libraryTechniques.map((entry: any) => (
+              <span key={entry.id}>{entry.technique.name} <b>{entry.technique.rarity}</b></span>
+            ))}
+          </div>
+        </section>
+      </div>
+
       {alreadyApplied ? (
         <form action={cancelSectApplicationAction}>
           <input type="hidden" name="applicationId" value={sect.applications[0]?.id ?? pendingApplicationId} />
@@ -178,6 +229,22 @@ function PublicSectProfile({ sect, pendingApplicationId }: { sect: any; pendingA
       )}
     </div>
   );
+}
+
+function roleWeight(role: string) {
+  return ({ LEADER: 0, VICE_LEADER: 1, ELDER: 2, OFFICER: 3, TRUE_DISCIPLE: 4, INNER: 5, OUTER: 6 } as Record<string, number>)[role] ?? 99;
+}
+
+function roleLabel(role: string) {
+  return ({
+    LEADER: "Tông Chủ",
+    VICE_LEADER: "Phó Tông Chủ",
+    ELDER: "Trưởng Lão",
+    OFFICER: "Chấp Sự",
+    TRUE_DISCIPLE: "Chân Truyền Đệ Tử",
+    INNER: "Nội Môn Đệ Tử",
+    OUTER: "Ngoại Môn Đệ Tử"
+  } as Record<string, string>)[role] ?? "Thành viên";
 }
 
 function CreateSectPanel({ characterLinhThach }: { characterLinhThach: bigint }) {

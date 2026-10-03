@@ -1,4 +1,5 @@
 import {
+  ActivityStatus,
   Currency,
   Prisma,
   SectAlignment,
@@ -14,7 +15,7 @@ import {
   type PrismaClient
 } from "@ttg/db";
 import { creditWallet, debitWallet } from "./services.js";
-import { cultivationBaseReward, cultivationEnergyCost, currentEnergy } from "./rules.js";
+import { addGameDays, cultivationBaseReward, currentEnergy } from "./rules.js";
 import { getItemEconomy } from "./items.js";
 import { changeSectContribution } from "./sect-contribution.js";
 import { backgroundForSectIcon, isSectIconKey, normalizeSectIconKey } from "./sect-visuals.js";
@@ -136,9 +137,14 @@ export const sectMineConfig = {
 } as const;
 
 export const sectCaveConfig = {
+  roleSlots: {
+    [SectRoleName.LEADER]: 1,
+    [SectRoleName.VICE_LEADER]: 2,
+    [SectRoleName.ELDER]: 4,
+    [SectRoleName.OFFICER]: 6,
+    [SectRoleName.TRUE_DISCIPLE]: 10
+  } as Partial<Record<SectRoleName, number>>,
   roleBaseBps: {
-    [SectRoleName.OUTER]: { name: "Ngoại Môn Động Phủ", cultivationBonusBps: 500, breakthroughBonusBps: 0 },
-    [SectRoleName.INNER]: { name: "Nội Môn Động Phủ", cultivationBonusBps: 1000, breakthroughBonusBps: 100 },
     [SectRoleName.TRUE_DISCIPLE]: { name: "Chân Truyền Động Phủ", cultivationBonusBps: 1500, breakthroughBonusBps: 220 },
     [SectRoleName.OFFICER]: { name: "Chấp Sự Động Phủ", cultivationBonusBps: 1200, breakthroughBonusBps: 150 },
     [SectRoleName.ELDER]: { name: "Trưởng Lão Động Phủ", cultivationBonusBps: 1800, breakthroughBonusBps: 300 },
@@ -155,6 +161,16 @@ export const sectCaveConfig = {
   },
   allowMultiplePerCharacter: false
 } as const;
+
+export const sectCaveRoleOrder = [
+  SectRoleName.LEADER,
+  SectRoleName.VICE_LEADER,
+  SectRoleName.ELDER,
+  SectRoleName.OFFICER,
+  SectRoleName.TRUE_DISCIPLE
+] as const;
+
+const activeSectCaveStatuses = ["ROLE_SLOT", "REVOKED"] as const;
 
 export const sectLibraryConfig = {
   baseContributionCostByRarity: {
@@ -363,14 +379,27 @@ function qualityForRank(rank: number) {
 }
 
 export function getSectCaveBenefit(role: SectRoleName, sectRank: number) {
-  const base = sectCaveConfig.roleBaseBps[role] ?? sectCaveConfig.roleBaseBps[SectRoleName.OUTER];
+  const base = sectCaveConfig.roleBaseBps[role as keyof typeof sectCaveConfig.roleBaseBps];
+  if (!base) return null;
   const rankMultiplier = sectCaveConfig.rankMultiplierBps[sectRank] ?? 10000;
+  const level = getSectCaveLevelForRole(role);
   return {
     name: base.name,
+    level,
+    maxSlots: sectCaveConfig.roleSlots[role] ?? 0,
     cultivationBonusBps: Math.floor((base.cultivationBonusBps * rankMultiplier) / 10000),
     breakthroughBonusBps: Math.floor((base.breakthroughBonusBps * rankMultiplier) / 10000),
     rankMultiplierBps: rankMultiplier
   };
+}
+
+export function getSectCaveLevelForRole(role: SectRoleName) {
+  const index = (sectCaveRoleOrder as readonly SectRoleName[]).indexOf(role);
+  return index >= 0 ? index + 1 : null;
+}
+
+export function roleHasSectCave(role: SectRoleName) {
+  return getSectCaveLevelForRole(role) !== null;
 }
 
 async function ensureFacility(tx: Tx, sectId: string, rank: number, facilityType: SectFacilityType) {
@@ -398,22 +427,85 @@ async function ensureFarmPlots(tx: Tx, sectId: string, capacity: number) {
   }
 }
 
-async function ensureCaves(tx: Tx, sectId: string, rank: number, capacity: number) {
-  const existing = await tx.sectCave.count({ where: { sectId } });
+async function ensureCaves(tx: Tx, sectId: string, rank: number, _capacity: number) {
+  await ensureRoleCaves(tx, sectId, rank);
+}
+
+async function ensureRoleCaves(tx: Tx, sectId: string, rank: number) {
   const quality = qualityForRank(rank);
-  const config = sectCaveConfig.qualities[quality];
-  for (let index = existing + 1; index <= capacity; index++) {
-    await tx.sectCave.create({
+  for (const role of sectCaveRoleOrder) {
+    const benefit = getSectCaveBenefit(role, rank);
+    if (!benefit?.level) continue;
+    const slots = sectCaveConfig.roleSlots[role] ?? 0;
+    const existing = await tx.sectCave.findMany({
+      where: { sectId, requiredRole: role, status: { in: [...activeSectCaveStatuses] } },
+      orderBy: { name: "asc" }
+    });
+    for (let index = existing.length + 1; index <= slots; index++) {
+      await tx.sectCave.create({
+        data: {
+          sectId,
+          name: `${benefit.name} ${index.toString().padStart(2, "0")}`,
+          quality,
+          cultivationBonusBps: benefit.cultivationBonusBps,
+          breakthroughBonusBps: benefit.breakthroughBonusBps,
+          requiredRole: role,
+          status: "ROLE_SLOT"
+        }
+      });
+    }
+    await tx.sectCave.updateMany({
+      where: { sectId, requiredRole: role, status: { in: [...activeSectCaveStatuses] } },
       data: {
-        sectId,
-        name: `${config.label} ${index.toString().padStart(2, "0")}`,
         quality,
-        cultivationBonusBps: config.cultivationBonusBps,
-        breakthroughBonusBps: config.breakthroughBonusBps,
-        requiredRole: config.requiredRole
+        cultivationBonusBps: benefit.cultivationBonusBps,
+        breakthroughBonusBps: benefit.breakthroughBonusBps
       }
     });
   }
+}
+
+async function syncRoleCaves(tx: Tx, sectId: string, rank: number) {
+  await ensureRoleCaves(tx, sectId, rank);
+  for (const role of sectCaveRoleOrder) {
+    const slots = await tx.sectCave.findMany({
+      where: { sectId, requiredRole: role, status: { in: [...activeSectCaveStatuses] } },
+      orderBy: { name: "asc" }
+    });
+    const members = await tx.sectMember.findMany({
+      where: { sectId, role },
+      orderBy: [{ joinedAt: "asc" }]
+    });
+    const memberIds = new Set(members.map((member) => member.characterId));
+    for (const slot of slots) {
+      if (slot.assignedCharacterId && !memberIds.has(slot.assignedCharacterId)) {
+        await tx.sectCave.update({
+          where: { id: slot.id },
+          data: { assignedCharacterId: null, status: "ROLE_SLOT" }
+        });
+      }
+    }
+    const availableSlots = slots.filter((slot) => slot.status === "ROLE_SLOT");
+    const alreadyAssigned = new Set(slots.map((slot) => slot.assignedCharacterId).filter((id): id is string => Boolean(id)));
+    const candidates = members.filter((member) => !alreadyAssigned.has(member.characterId));
+    for (const cave of availableSlots) {
+      if (cave.assignedCharacterId) continue;
+      const member = candidates.shift();
+      if (!member) break;
+      await tx.sectCave.update({
+        where: { id: cave.id },
+        data: { assignedCharacterId: member.characterId }
+      });
+    }
+  }
+}
+
+export async function refreshSectRoleCaves(db: Db, sectId: string) {
+  return db.$transaction(async (tx) => {
+    const sect = await tx.sect.findUniqueOrThrow({ where: { id: sectId }, select: { rank: true } });
+    await syncRoleCaves(tx, sectId, sect.rank);
+    return { synced: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 async function grantItem(tx: Tx, characterId: string, templateKey: string, quantity: number) {
@@ -517,6 +609,7 @@ export async function createSect(
     await ensureFacility(tx, sect.id, sect.rank, SectFacilityType.STORAGE);
     await ensureFarmPlots(tx, sect.id, 1);
     await ensureCaves(tx, sect.id, sect.rank, 1);
+    await syncRoleCaves(tx, sect.id, sect.rank);
     await tx.worldNews.create({ data: { title: `${name} khai sơn`, body: `${character.name} dựng cờ ${tag}, khai sinh một thế lực ${getSectRank(5).shortLabel}.`, category: "sect", permanent: true } });
     return sect;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -613,6 +706,136 @@ export async function rejectSectApplication(db: Db, actorId: string, application
     await tx.sectLog.create({ data: { sectId: application.sectId, actorId, type: SectLogType.APPLICATION, message: "Một đơn xin gia nhập đã bị từ chối." } });
     return { rejected: true };
   });
+}
+
+export type SectRecruitmentMode = "FREE" | "REVIEW" | "CLOSED";
+
+export async function updateSectRecruitment(
+  db: Db,
+  actorId: string,
+  sectId: string,
+  input: { mode: SectRecruitmentMode; autoAccept: boolean; joinRequirement: string }
+) {
+  return db.$transaction(async (tx) => {
+    await assertSectPermission(tx, actorId, sectId, "MANAGE_NOTICE");
+    const recruiting = input.mode !== "CLOSED";
+    const autoAccept = recruiting && (input.mode === "FREE" || input.autoAccept);
+    const joinRequirement = normalizeText(input.joinRequirement || "Không yêu cầu", 80) || "Không yêu cầu";
+    const sect = await tx.sect.update({
+      where: { id: sectId },
+      data: { recruiting, autoAccept, joinRequirement }
+    });
+    await tx.sectLog.create({
+      data: {
+        sectId,
+        actorId,
+        type: SectLogType.ADMIN,
+        message: `Cập nhật tuyển thành viên: ${recruiting ? (autoAccept ? "Tự do" : "Cần duyệt") : "Đóng tuyển"}.`
+      }
+    });
+    return sect;
+  });
+}
+
+export async function updateSectInfo(
+  db: Db,
+  actorId: string,
+  sectId: string,
+  input: { description: string; notice: string; recruiting: boolean }
+) {
+  return db.$transaction(async (tx) => {
+    await assertSectPermission(tx, actorId, sectId, "MANAGE_NOTICE");
+    const description = normalizeText(input.description || "Thanh tu vấn đạo, cầu trường sinh.", 260);
+    const notice = normalizeText(input.notice || "Sơn môn yên ổn.", 220);
+    const sect = await tx.sect.update({
+      where: { id: sectId },
+      data: { description, notice, recruiting: input.recruiting }
+    });
+    await tx.sectLog.create({
+      data: { sectId, actorId, type: SectLogType.ADMIN, message: "Cập nhật thông tin và thông báo tông môn." }
+    });
+    return sect;
+  });
+}
+
+const promotableRoles: SectRoleName[] = [
+  SectRoleName.VICE_LEADER,
+  SectRoleName.ELDER,
+  SectRoleName.OFFICER,
+  SectRoleName.TRUE_DISCIPLE,
+  SectRoleName.INNER,
+  SectRoleName.OUTER
+];
+
+function nextManagedRole(role: SectRoleName, direction: "PROMOTE" | "DEMOTE") {
+  const index = promotableRoles.indexOf(role);
+  if (index < 0) throw new SectError("INVALID_ROLE_CHANGE", "Không thể đổi chức vụ này.");
+  const nextIndex = direction === "PROMOTE" ? index - 1 : index + 1;
+  if (nextIndex < 0 || nextIndex >= promotableRoles.length) throw new SectError("INVALID_ROLE_CHANGE", "Chức vụ đã ở giới hạn.");
+  const nextRole = promotableRoles[nextIndex];
+  if (!nextRole) throw new SectError("INVALID_ROLE_CHANGE", "Chức vụ đã ở giới hạn.");
+  return nextRole;
+}
+
+async function assertCanManageTarget(tx: Tx, actorId: string, sectId: string, targetMemberId: string) {
+  const actor = await assertSectPermission(tx, actorId, sectId, "MANAGE_MEMBERS");
+  const target = await tx.sectMember.findUniqueOrThrow({ where: { id: targetMemberId }, include: { character: true, sect: true } });
+  if (target.sectId !== sectId) throw new SectError("SECT_FORBIDDEN", "Thành viên không thuộc tông môn này.");
+  if (target.characterId === actorId) throw new SectError("INVALID_MEMBER_ACTION", "Không thể tự thao tác với chính mình.");
+  if (target.role === SectRoleName.LEADER) throw new SectError("INVALID_MEMBER_ACTION", "Không thể thao tác với Tông Chủ.");
+  if (sectRoles[actor.role].order >= sectRoles[target.role].order) {
+    throw new SectError("SECT_FORBIDDEN", "Không thể thao tác với người cùng hoặc cao chức hơn.");
+  }
+  return { actor, target };
+}
+
+export async function changeSectMemberRole(db: Db, actorId: string, sectId: string, targetMemberId: string, direction: "PROMOTE" | "DEMOTE") {
+  return db.$transaction(async (tx) => {
+    const { target } = await assertCanManageTarget(tx, actorId, sectId, targetMemberId);
+    const role = nextManagedRole(target.role, direction);
+    const roleLimit = sectCaveConfig.roleSlots[role];
+    if (roleLimit) {
+      const currentRoleCount = await tx.sectMember.count({ where: { sectId, role } });
+      if (currentRoleCount >= roleLimit) throw new SectError("ROLE_SLOT_FULL", `${sectRoles[role].label} đã đủ ${roleLimit} người.`);
+    }
+    await tx.sectMember.update({ where: { id: target.id }, data: { role } });
+    await syncRoleCaves(tx, sectId, target.sect.rank);
+    await tx.sectLog.create({
+      data: {
+        sectId,
+        actorId,
+        type: SectLogType.ADMIN,
+        message: `${target.character.name} được đổi chức vụ thành ${sectRoles[role].label}.`
+      }
+    });
+    return { role };
+  });
+}
+
+export async function expelSectMember(db: Db, actorId: string, sectId: string, targetMemberId: string) {
+  return db.$transaction(async (tx) => {
+    const { target } = await assertCanManageTarget(tx, actorId, sectId, targetMemberId);
+    await tx.character.update({ where: { id: target.characterId }, data: { sectId: null } });
+    await tx.sectMember.delete({ where: { id: target.id } });
+    await tx.sectCave.updateMany({ where: { sectId, assignedCharacterId: target.characterId }, data: { assignedCharacterId: null, status: "ROLE_SLOT" } });
+    await syncRoleCaves(tx, sectId, target.sect.rank);
+    await tx.sectLog.create({
+      data: { sectId, actorId, type: SectLogType.ADMIN, message: `${target.character.name} bị khai trừ khỏi tông môn.` }
+    });
+    return { expelled: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function disbandSect(db: Db, actorId: string, sectId: string, confirmation: string) {
+  return db.$transaction(async (tx) => {
+    const sect = await tx.sect.findUniqueOrThrow({ where: { id: sectId } });
+    if (sect.leaderId !== actorId) throw new SectError("SECT_FORBIDDEN", "Chỉ Tông Chủ mới được giải tán tông môn.");
+    if (confirmation.trim() !== sect.name) throw new SectError("BAD_CONFIRMATION", "Tên xác nhận không khớp.");
+    await tx.character.updateMany({ where: { sectId }, data: { sectId: null } });
+    await tx.npc.updateMany({ where: { sectId }, data: { sectId: null } });
+    await tx.sect.delete({ where: { id: sectId } });
+    return { disbanded: true };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function depositSectCurrency(db: Db, characterId: string, amount: bigint, reason = "Cống hiến quỹ tông môn") {
@@ -959,6 +1182,7 @@ export async function upgradeSectRank(db: Db, actorId: string) {
     if (updated.count !== 1) throw new SectError("RANK_UP_CONFLICT", "Điều kiện thăng phẩm đã thay đổi, hãy thử lại.");
     await tx.sectTreasuryTransaction.create({ data: { sectId: member.sectId, characterId: actorId, type: "RANK_COST", currency: Currency.LINH_THACH, amount: -current.rankUpCost.treasury, before: member.sect.treasury, after: member.sect.treasury - current.rankUpCost.treasury, reason: `Thăng phẩm ${current.shortLabel} → ${next.shortLabel}` } });
     for (const facilityType of [SectFacilityType.FARM, SectFacilityType.CAVE, SectFacilityType.MINE, SectFacilityType.STORAGE]) await ensureFacility(tx, member.sectId, next.rank, facilityType);
+    await syncRoleCaves(tx, member.sectId, next.rank);
     await unlockRankLibraryTechniques(tx, member.sectId, next.rank);
     await tx.sectLog.create({ data: { sectId: member.sectId, actorId, type: SectLogType.RANK, message: `${member.sect.name} đã thăng lên ${next.shortLabel}.` } });
     await tx.worldNews.create({ data: { title: `${member.sect.name} thăng phẩm`, body: `${member.sect.name} bước vào hàng ${next.label}, sơn môn mở rộng và khí vận tăng mạnh.`, category: "sect", permanent: true } });
@@ -1069,8 +1293,9 @@ export async function assignSectCave(db: Db, actorId: string, caveId: string, ta
     if (!cave || cave.sectId !== actor.sectId) throw new SectError("CAVE_NOT_FOUND", "Không tìm thấy Động Phủ.");
     if (!target || target.sectId !== actor.sectId) throw new SectError("TARGET_NOT_IN_SECT", "Người nhận không thuộc tông môn.");
     if (target.character.realmStage.realm.order < cave.requiredRealmOrder) throw new SectError("REALM_REQUIREMENT_NOT_MET", "Cảnh giới chưa đủ để nhận Động Phủ này.");
-    if (!sectCaveConfig.allowMultiplePerCharacter) await tx.sectCave.updateMany({ where: { sectId: actor.sectId, assignedCharacterId: targetCharacterId }, data: { assignedCharacterId: null } });
-    const updated = await tx.sectCave.updateMany({ where: { id: caveId, sectId: actor.sectId }, data: { assignedCharacterId: targetCharacterId } });
+    if (cave.status !== "ROLE_SLOT" || cave.requiredRole !== target.role) throw new SectError("CAVE_ROLE_MISMATCH", "Động Phủ này không khớp chức vụ hiện tại.");
+    if (!sectCaveConfig.allowMultiplePerCharacter) await tx.sectCave.updateMany({ where: { sectId: actor.sectId, assignedCharacterId: targetCharacterId }, data: { assignedCharacterId: null, status: "ROLE_SLOT" } });
+    const updated = await tx.sectCave.updateMany({ where: { id: caveId, sectId: actor.sectId, status: "ROLE_SLOT" }, data: { assignedCharacterId: targetCharacterId } });
     if (updated.count !== 1) throw new SectError("CAVE_ASSIGN_CONFLICT", "Động Phủ đã thay đổi trạng thái.");
     await tx.sectLog.create({ data: { sectId: actor.sectId, actorId, type: SectLogType.CAVE, message: `Phân ${cave.name} cho ${target.character.name}.` } });
     return { assigned: true };
@@ -1083,32 +1308,55 @@ export async function unassignSectCave(db: Db, actorId: string, caveId: string) 
     await assertSectPermission(tx, actorId, actor.sectId, "MANAGE_CAVES");
     const cave = await tx.sectCave.findUnique({ where: { id: caveId }, include: { assignedCharacter: true } });
     if (!cave || cave.sectId !== actor.sectId) throw new SectError("CAVE_NOT_FOUND", "Không tìm thấy Động Phủ.");
-    await tx.sectCave.update({ where: { id: caveId }, data: { assignedCharacterId: null } });
+    await tx.sectCave.update({ where: { id: caveId }, data: { assignedCharacterId: null, status: "REVOKED" } });
     await tx.sectLog.create({ data: { sectId: actor.sectId, actorId, type: SectLogType.CAVE, message: `Thu hồi ${cave.name}${cave.assignedCharacter ? ` từ ${cave.assignedCharacter.name}` : ""}.` } });
     return { unassigned: true };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function startSectCaveCultivation(db: Db, characterId: string, caveId: string, minutes: number, now = new Date()) {
+export async function startSectCaveCultivation(db: Db, characterId: string, caveId = "auto", now = new Date()) {
   return db.$transaction(async (tx) => {
     const member = await assertSectMember(tx, characterId);
     const cave = getSectCaveBenefit(member.role, member.sect.rank);
+    if (!cave) throw new SectError("NO_ROLE_CAVE", "Chức vụ hiện tại chưa có Động Phủ riêng.");
+    const assignedCave = await tx.sectCave.findFirst({
+      where: {
+        sectId: member.sectId,
+        assignedCharacterId: characterId,
+        requiredRole: member.role,
+        status: "ROLE_SLOT",
+        ...(caveId && caveId !== "auto" ? { id: caveId } : {})
+      }
+    });
+    if (!assignedCave) throw new SectError("NO_ROLE_CAVE", "Bạn chưa được cấp Động Phủ theo chức vụ hiện tại.");
     const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true, realmStage: { include: { realm: true } } } });
     const energy = currentEnergy(character, now);
-    const cost = cultivationEnergyCost(minutes);
-    if (energy < cost) throw new SectError("NO_ENERGY", "Không đủ Thể Lực để bế quan.");
-    const active = await tx.cultivationActivity.findFirst({ where: { characterId, status: "ACTIVE" } });
+    const entryCost = 1;
+    if (energy < entryCost) throw new SectError("NO_ENERGY", "Không đủ Thể Lực để bế quan.");
+    const active = await tx.cultivationActivity.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
     if (active) throw new SectError("ACTIVE_ACTIVITY", "Bạn đang có hoạt động tu luyện.");
-    await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - cost, energyUpdatedAt: now } });
+    await tx.character.update({ where: { id: characterId }, data: { energyStored: energy - entryCost, energyUpdatedAt: now } });
     const multiplierBps = character.spiritualRoot.multiplierBps + cave.cultivationBonusBps;
     const activity = await tx.cultivationActivity.create({
       data: {
         characterId,
         startedAt: now,
-        endsAt: new Date(now.getTime() + minutes * 60_000),
-        baseReward: cultivationBaseReward(minutes),
+        lastProcessedAt: now,
+        endsAt: addGameDays(now, 3650),
+        baseReward: cultivationBaseReward("day"),
         multiplierBps,
-        metadata: { source: "sect_cave", caveId, caveName: cave.name, caveBonusBps: cave.cultivationBonusBps, role: member.role, sectRank: member.sect.rank }
+        metadata: {
+          mode: "continuous",
+          source: "sect_cave",
+          caveId: assignedCave.id,
+          caveName: cave.name,
+          caveLevel: cave.level,
+          caveBonusBps: cave.cultivationBonusBps,
+          breakthroughBonusBps: cave.breakthroughBonusBps,
+          role: member.role,
+          sectRank: member.sect.rank,
+          entryCost
+        }
       }
     });
     await tx.sectLog.create({ data: { sectId: member.sectId, actorId: characterId, type: SectLogType.CAVE, message: `Vào ${cave.name} bế quan, linh khí tăng ${Math.round(cave.cultivationBonusBps / 100)}%.` } });

@@ -6,7 +6,7 @@ import { formatRarity, formatService } from "@/lib/format";
 import { claimCraftAction, startCraftAction } from "@/lib/forms";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { ItemVisual } from "@/components/ItemCard";
-import { professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationLabels, professionStationServices } from "@ttg/game";
+import { economyFeatureUnlockReasons, hasReachedLuyenKhi1, professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationLabels, professionStationServices } from "@ttg/game";
 import { CheckCircle2, Lock, Play, Timer } from "lucide-react";
 
 type IngredientRow = { itemId?: unknown; key?: unknown; quantity?: unknown; qty?: unknown };
@@ -19,6 +19,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
     prisma.character.findUniqueOrThrow({
       where: { userId: user.id },
       include: {
+        realmStage: { include: { realm: true } },
         currentLocation: true,
         items: { where: { quantity: { gt: 0 } }, select: { templateId: true, quantity: true } },
         professions: { include: { profession: true } },
@@ -31,6 +32,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
       orderBy: { key: "asc" }
     })
   ]);
+  if (!hasReachedLuyenKhi1(c)) redirect(`/game?error=${encodeURIComponent(economyFeatureUnlockReasons.profession)}`);
   const professionOrder = ["alchemy", "forging", "talisman", "formation"];
   professions.sort((a, b) => professionOrder.indexOf(a.key) - professionOrder.indexOf(b.key));
   const activeProfession = professions.find((profession) => profession.key === params?.profession) ?? professions[0];

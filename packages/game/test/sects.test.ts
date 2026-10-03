@@ -162,12 +162,16 @@ describe("sect economy services", () => {
     expect(hard.reputation).toBeGreaterThan(easy.reputation);
   });
 
-  it("derives cave benefits from role and sect rank without manual assignment", () => {
+  it("derives cave benefits from officer roles and excludes inner/outer disciples", () => {
     const outer = getSectCaveBenefit(SectRoleName.OUTER, 5);
+    const leader = getSectCaveBenefit(SectRoleName.LEADER, 5);
     const elderHighRank = getSectCaveBenefit(SectRoleName.ELDER, 2);
 
-    expect(outer.cultivationBonusBps).toBe(500);
-    expect(elderHighRank.cultivationBonusBps).toBeGreaterThan(outer.cultivationBonusBps);
+    expect(outer).toBeNull();
+    expect(leader?.level).toBe(1);
+    expect(leader?.maxSlots).toBe(1);
+    expect(elderHighRank?.level).toBe(3);
+    expect(elderHighRank?.cultivationBonusBps).toBeGreaterThan(0);
   });
 
   it("prices sect storage exchange from backend item economy", () => {

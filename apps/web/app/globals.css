@@ -322,6 +322,7 @@ button, input, select, textarea {
 }
 
 .nav-row-disabled {
+  cursor: not-allowed;
   opacity: 0.45;
 }
 
@@ -2963,10 +2964,10 @@ select.field option {
   width: 3rem;
   height: 3rem;
   border: 1px solid rgba(214, 178, 94, 0.42);
-  background: radial-gradient(circle at 50% 20%, rgba(214, 178, 94, 0.18), rgba(45, 212, 191, 0.08) 42%, rgba(0, 0, 0, 0.22));
+  background: transparent;
   color: #d6b25e;
   overflow: hidden;
-  box-shadow: 0 0 26px rgba(214, 178, 94, 0.08);
+  box-shadow: 0 0 18px rgba(214, 178, 94, 0.12);
 }
 
 .sect-emblem.large {
@@ -3005,7 +3006,10 @@ select.field option {
   width: 86%;
   height: 86%;
   object-fit: contain;
-  filter: drop-shadow(0 0 10px rgba(214, 178, 94, 0.32));
+  background: transparent;
+  filter:
+    drop-shadow(0 0 5px rgba(225, 190, 90, 0.35))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 
 .inline-sect-emblem {
@@ -3063,63 +3067,18 @@ select.field option {
   overflow: hidden;
   border: 1px solid rgba(214, 178, 94, 0.18);
   background:
-    linear-gradient(90deg, rgba(3, 12, 12, 0.55) 0%, rgba(3, 12, 12, 0.2) 45%, rgba(3, 12, 12, 0.35) 70%, rgba(3, 12, 12, 0.5) 100%),
+    linear-gradient(90deg, rgba(5, 12, 11, 0.28) 0%, rgba(5, 12, 11, 0.08) 45%, rgba(5, 12, 11, 0.18) 100%),
     url("/assets/images/sect-bg.webp") center center / cover no-repeat;
   padding: 1.15rem;
 }
 
-.sect-hero-video,
-.sect-hero-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.sect-hero-video {
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  opacity: 1;
-}
-
-.sect-hero-overlay {
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(3, 12, 12, 0.55) 0%, rgba(3, 12, 12, 0.2) 45%, rgba(3, 12, 12, 0.35) 70%, rgba(3, 12, 12, 0.5) 100%),
-    linear-gradient(180deg, rgba(3, 12, 12, 0.08) 0%, rgba(3, 12, 12, 0.24) 100%);
-}
-
 .sect-home-hero-identity > * {
   position: relative;
-  z-index: 2;
-}
-
-.sect-home-hero-identity .sect-hero-video {
-  position: absolute;
-  z-index: 0;
-}
-
-.sect-home-hero-identity .sect-hero-overlay {
-  position: absolute;
   z-index: 1;
 }
 
 .sect-home-hero-identity:has(.sect-icon-picker[open]) {
   overflow: visible;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sect-hero-video {
-    display: none;
-  }
-
-  .sect-home-hero-identity {
-    background:
-      linear-gradient(90deg, rgba(3, 12, 12, 0.55) 0%, rgba(3, 12, 12, 0.2) 45%, rgba(3, 12, 12, 0.35) 70%, rgba(3, 12, 12, 0.5) 100%),
-      url("/assets/images/sect-bg.webp") center center / cover no-repeat;
-  }
 }
 
 .sect-icon-picker {
@@ -3252,6 +3211,220 @@ select.field option {
 .sect-affair span {
   color: rgba(244, 239, 227, 0.68);
   font-size: 0.86rem;
+}
+
+.sect-admin-wide {
+  grid-column: 1 / -1;
+}
+
+.sect-admin-card {
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+}
+
+.sect-admin-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.sect-admin-card-head svg {
+  color: #d6b25e;
+}
+
+.sect-admin-card-head h2 {
+  margin: 0;
+}
+
+.sect-admin-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sect-admin-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.sect-admin-form textarea.field {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.sect-admin-toggle {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid rgba(244, 239, 227, 0.09);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 0.7rem;
+}
+
+.sect-admin-toggle b {
+  color: #d6b25e;
+}
+
+.sect-admin-list,
+.sect-member-admin-list {
+  display: grid;
+}
+
+.sect-admin-person-row,
+.sect-member-admin-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(244, 239, 227, 0.09);
+  padding: 0.75rem 0;
+}
+
+.sect-admin-person-row > div:nth-child(2) b,
+.sect-member-admin-row > div:nth-child(2) b {
+  display: block;
+  color: #fff8e8;
+}
+
+.sect-admin-person-row span,
+.sect-admin-person-row small,
+.sect-member-admin-row span {
+  display: block;
+  color: rgba(244, 239, 227, 0.66);
+  font-size: 0.82rem;
+}
+
+.sect-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.btn.compact {
+  gap: 0.3rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.sect-member-admin-row {
+  grid-template-columns: auto minmax(0, 1fr) 5.5rem auto;
+}
+
+.sect-presence {
+  justify-self: start;
+  border: 1px solid rgba(244, 239, 227, 0.1);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.sect-presence.online {
+  border-color: rgba(45, 212, 191, 0.34);
+  color: #2dd4bf;
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.sect-presence.offline {
+  color: rgba(244, 239, 227, 0.54);
+  background: rgba(244, 239, 227, 0.04);
+}
+
+.sect-member-menu {
+  position: relative;
+}
+
+.sect-member-menu summary {
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid rgba(214, 178, 94, 0.24);
+  background: rgba(214, 178, 94, 0.07);
+  color: #f4efe3;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.sect-member-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.sect-member-menu > div {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 20;
+  min-width: 10rem;
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid rgba(214, 178, 94, 0.28);
+  background: rgba(18, 24, 20, 0.98);
+  padding: 0.45rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+}
+
+.sect-member-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: #f4efe3;
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.sect-member-menu button:hover:not(:disabled) {
+  background: rgba(214, 178, 94, 0.1);
+  color: #d6b25e;
+}
+
+.sect-member-menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.sect-admin-danger {
+  border-color: rgba(248, 113, 113, 0.24);
+}
+
+.sect-danger-confirm summary {
+  width: max-content;
+  list-style: none;
+  cursor: pointer;
+}
+
+.sect-danger-confirm summary::-webkit-details-marker {
+  display: none;
+}
+
+.sect-danger-confirm[open] .sect-danger-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 8, 7, 0.76);
+  padding: 1rem;
+}
+
+.sect-danger-box {
+  width: min(30rem, 100%);
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  background: rgba(18, 24, 20, 0.98);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
+  padding: 1.1rem;
+}
+
+.sect-danger-box h3 {
+  margin: 0 0 0.5rem;
+  color: #fca5a5;
 }
 
 .sect-note,
@@ -3431,6 +3604,62 @@ select.field option {
   border-color: rgba(214, 178, 94, 0.36);
 }
 
+.sect-cave-card {
+  gap: 0.75rem;
+}
+
+.sect-cave-active {
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid rgba(214, 178, 94, 0.24);
+  background: rgba(214, 178, 94, 0.08);
+  padding: 0.8rem;
+}
+
+.sect-cave-active b {
+  color: #fff8e8;
+}
+
+.sect-cave-active span {
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.86rem;
+}
+
+.sect-cave-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sect-cave-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(244, 239, 227, 0.09);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 0.75rem;
+}
+
+.sect-cave-row b,
+.sect-cave-row span,
+.sect-cave-row small {
+  display: block;
+}
+
+.sect-cave-row b {
+  color: #f4efe3;
+}
+
+.sect-cave-row > span {
+  color: #d6b25e;
+  font-weight: 900;
+}
+
+.sect-cave-row small {
+  color: rgba(244, 239, 227, 0.58);
+  font-weight: 800;
+}
+
 .sect-inline-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -3486,11 +3715,23 @@ select.field option {
   .sect-filter-bar,
   .sect-list-card,
   .sect-member-row,
+  .sect-member-admin-row,
+  .sect-admin-person-row,
+  .sect-cave-row,
   .mentor-invite-row,
   .sect-application-row,
   .sect-storage-row,
   .sect-inline-form {
     grid-template-columns: 1fr;
+  }
+
+  .sect-admin-actions {
+    justify-content: flex-start;
+  }
+
+  .sect-member-menu > div {
+    left: 0;
+    right: auto;
   }
 
   .sect-icon-grid {

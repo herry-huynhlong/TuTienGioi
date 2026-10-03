@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AuctionPhase, AuctionStatus, ItemCategory } from "@ttg/db";
 import { AUCTION_LIVE_GAME_DAYS, AUCTION_LIVE_MS, AUCTION_REGISTRATION_GAME_DAYS, AUCTION_REGISTRATION_MS, REAL_MS_PER_GAME_DAY, auctionPriceForRound, canAuctionItem, createAuction, getItemEconomy, joinAuction, raiseAuction } from "../src/index.js";
 
+const unlockedCharacter = { realmStage: { order: 0, realm: { order: 1 } } };
+
 describe("turn based auction rules", () => {
   it("uses a fixed +30% step from the starting price", () => {
     const start = 100000n;
@@ -45,6 +47,7 @@ describe("turn based auction rules", () => {
     const now = new Date("2026-01-01T00:00:00.000Z");
     const created = { id: "auction-1" };
     const tx: any = {
+      character: { findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter) },
       itemInstance: {
         findUnique: vi.fn().mockResolvedValue({
           id: "item-1",
@@ -84,6 +87,7 @@ describe("turn based auction rules", () => {
     const now = new Date("2026-01-01T00:00:00.000Z");
     const participant = { id: "participant-1" };
     const tx: any = {
+      character: { findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter) },
       auction: {
         findUnique: vi.fn().mockResolvedValue({
           id: "auction-1",
@@ -124,6 +128,7 @@ describe("turn based auction rules", () => {
     };
     const dbFor = (auction: any) => ({
       $transaction: vi.fn((fn) => fn({
+        character: { findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter) },
         auction: { findUnique: vi.fn().mockResolvedValue(auction) },
         auctionParticipant: { create: vi.fn() },
         gameLog: { create: vi.fn() }
@@ -138,6 +143,7 @@ describe("turn based auction rules", () => {
   it("locks bidding after the live window ends", async () => {
     const now = new Date("2026-01-01T01:00:00.000Z");
     const tx: any = {
+      character: { findUniqueOrThrow: vi.fn().mockResolvedValue(unlockedCharacter) },
       auction: {
         findUnique: vi.fn().mockResolvedValue({
           id: "auction-1",

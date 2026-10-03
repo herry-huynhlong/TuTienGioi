@@ -24,6 +24,8 @@ const recipe = {
   outputTemplate: { id: "item_pill", key: "tu-khi-dan", name: "Tụ Khí Đan" }
 };
 
+const unlockedCharacter = { realmStage: { order: 0, realm: { order: 1 } } };
+
 describe("profession crafting", () => {
   it("applies profession exp diminishing and promotion thresholds", () => {
     expect(professionExpGain(100, "ADEPT", "APPRENTICE")).toBe(40);
@@ -35,7 +37,7 @@ describe("profession crafting", () => {
   it("rejects crafting when profession rank is too low", async () => {
     const tx = {
       recipe: { findUnique: async () => recipe },
-      character: { findUniqueOrThrow: async () => ({ id: "char_1", currentLocation: { services: ["alchemy"] } }) },
+      character: { findUniqueOrThrow: async () => ({ id: "char_1", currentLocation: { services: ["alchemy"] }, ...unlockedCharacter }) },
       characterProfession: { upsert: async () => ({ id: "cp_1", rank: "APPRENTICE", experience: 0 }) }
     };
     await expect(startCraft(txDb(tx) as never, "char_1", "recipe_1")).rejects.toMatchObject({ code: "PROFESSION_RANK_REQUIRED" });
@@ -46,7 +48,7 @@ describe("profession crafting", () => {
     const tx = {
       recipe: { findUnique: async () => ({ ...recipe, requiredRank: "APPRENTICE" }) },
       character: {
-        findUniqueOrThrow: async () => ({ id: "char_1", currentLocation: { services: ["alchemy"] }, linhThach: 1000n }),
+        findUniqueOrThrow: async () => ({ id: "char_1", currentLocation: { services: ["alchemy"] }, linhThach: 1000n, ...unlockedCharacter }),
         update: async () => { state.debited = true; return {}; }
       },
       walletTransaction: { findUnique: async () => null, create: async () => ({}) },

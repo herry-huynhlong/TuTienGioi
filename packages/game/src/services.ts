@@ -3,7 +3,7 @@ import { ENERGY_REGEN_BPS_PER_GAME_DAY, HP_REGEN_BPS_PER_GAME_DAY, MAX_OFFLINE_C
 import { canAuctionItem, currentSystemMarketPeriod, getItemEconomy, marketListingMaxQuantity, stockForSystemMarketItem } from "./items.js";
 import { getItemUsageDefinition, type ItemEffectSpec } from "./item-effects.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
-import { recordOnboardingEvent } from "./onboarding.js";
+import { economyFeatureUnlockReasons, hasReachedLuyenKhi1, recordOnboardingEvent } from "./onboarding.js";
 import { progressQuestEvent } from "./quests.js";
 import { professionExpGain, professionRankOrder, professionStationServices, promoteProfessionRank } from "./professions.js";
 import { canAccessSectLocation } from "./sect-access.js";
@@ -302,6 +302,16 @@ async function progressSectMissionEvent(tx: Tx, input: { characterId: string; ev
   return progressSectMissionObjective(tx, input);
 }
 
+async function assertEconomyFeatureUnlocked(tx: Tx, characterId: string, feature: "auction" | "profession") {
+  const character = await tx.character.findUniqueOrThrow({
+    where: { id: characterId },
+    select: { realmStage: { select: { order: true, realm: { select: { order: true } } } } }
+  });
+  if (!hasReachedLuyenKhi1(character)) {
+    throw new GameError("FEATURE_LOCKED", economyFeatureUnlockReasons[feature]);
+  }
+}
+
 async function mutateWallet(tx: Tx, characterId: string, currency: Currency, amount: bigint, type: WalletTxType, referenceType?: string, referenceId?: string, idempotencyKey?: string) {
   if (amount === 0n) throw new GameError("INVALID_AMOUNT", "Số tiền không hợp lệ.");
   const existing = idempotencyKey ? await tx.walletTransaction.findUnique({ where: { characterId_currency_idempotencyKey: { characterId, currency, idempotencyKey } } }) : null;
@@ -538,7 +548,8 @@ export async function startCraft(db: Db, characterId: string, recipeId: string, 
     const recipe = await tx.recipe.findUnique({ where: { id: recipeId }, include: { profession: true, outputTemplate: true } });
     if (!recipe) throw new GameError("RECIPE_NOT_FOUND", "Không tìm thấy công thức.");
     if (recipe.unlockType !== RecipeUnlockType.PROFESSION_RANK) throw new GameError("RECIPE_LOCKED", "Công thức này cần mở khóa đặc biệt.");
-    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { currentLocation: true } });
+    const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { currentLocation: true, realmStage: { include: { realm: true } } } });
+    if (!hasReachedLuyenKhi1(character)) throw new GameError("FEATURE_LOCKED", economyFeatureUnlockReasons.profession);
     const services = character.currentLocation?.services ?? [];
     const allowedServices = professionStationServices[recipe.station] ?? [];
     if (allowedServices.length > 0 && !allowedServices.some((service) => services.includes(service))) throw new GameError("STATION_REQUIRED", "Bạn cần tới đúng cơ sở nghề nghiệp để chế tạo.");
@@ -1470,6 +1481,7 @@ export async function createAuction(db: Db, sellerId: string, itemId: string, st
   if (startingPrice <= 0n) throw new GameError("INVALID_PRICE", "Giá khởi điểm không hợp lệ.");
   if (startingPrice > 999_999_999_999n) throw new GameError("INVALID_PRICE", "Giá khởi điểm quá lớn.");
   return db.$transaction(async (tx) => {
+    await assertEconomyFeatureUnlocked(tx, sellerId, "auction");
     const item = await tx.itemInstance.findUnique({ where: { id: itemId }, include: { template: true, listings: { where: { status: ListingStatus.ACTIVE } }, auctions: { where: { status: AuctionStatus.ACTIVE } } } });
     if (!item || item.ownerId !== sellerId || item.quantity <= 0) throw new GameError("ITEM_NOT_FOUND", "Không tìm thấy vật phẩm.");
     if (item.equippedSlot) throw new GameError("ITEM_EQUIPPED", "Không thể đấu giá vật phẩm đang trang bị.");
@@ -1502,6 +1514,7 @@ export async function createAuction(db: Db, sellerId: string, itemId: string, st
 export async function joinAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
   if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
   return db.$transaction(async (tx) => {
+    await assertEconomyFeatureUnlocked(tx, characterId, "auction");
     const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { participants: { orderBy: [{ joinedAt: "asc" }, { id: "asc" }] }, item: { include: { template: true } } } });
     if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.OPEN_REGISTRATION) throw new GameError("AUCTION_CLOSED", "Phiên đấu giá không còn nhận người tham gia.");
     if (auction.registrationEndsAt <= now) throw new GameError("AUCTION_REGISTRATION_CLOSED", "Phiên đấu giá đã bắt đầu trả giá.");
@@ -1520,6 +1533,7 @@ export async function joinAuction(db: Db, characterId: string, auctionId: string
 export async function raiseAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
   if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
   return db.$transaction(async (tx) => {
+    await assertEconomyFeatureUnlocked(tx, characterId, "auction");
     const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { currentTurnParticipant: true, participants: true, item: { include: { template: true } } } });
     if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) throw new GameError("AUCTION_NOT_LIVE", "Phiên đấu giá chưa tới lượt trả giá.");
     if (auction.endsAt <= now) throw new GameError("AUCTION_ENDED", "Phiên đấu giá đã kết thúc.");
@@ -1549,6 +1563,7 @@ export async function raiseAuction(db: Db, characterId: string, auctionId: strin
 export async function passAuction(db: Db, characterId: string, auctionId: string, actionKey: string, now = new Date()) {
   if (!actionKey) throw new GameError("MISSING_ACTION_KEY", "Thiếu khóa thao tác.");
   return db.$transaction(async (tx) => {
+    await assertEconomyFeatureUnlocked(tx, characterId, "auction");
     const auction = await tx.auction.findUnique({ where: { id: auctionId }, include: { currentTurnParticipant: true, participants: true } });
     if (!auction || auction.status !== AuctionStatus.ACTIVE || auction.phase !== AuctionPhase.LIVE) throw new GameError("AUCTION_NOT_LIVE", "Phiên đấu giá chưa tới lượt trả giá.");
     if (auction.endsAt <= now) throw new GameError("AUCTION_ENDED", "Phiên đấu giá đã kết thúc.");

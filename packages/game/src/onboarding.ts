@@ -4,6 +4,28 @@ type Db = PrismaClient;
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 type Data = Db | Tx;
 
+export const LUYEN_KHI_1_REQUIREMENT = {
+  realmOrder: 1,
+  stageOrder: 0,
+  label: "Luyện Khí tầng 1"
+} as const;
+
+export const economyFeatureUnlockReasons = {
+  auction: "Đạt Luyện Khí tầng 1 để mở Đấu Giá.",
+  profession: "Đạt Luyện Khí tầng 1 để mở Nghề Nghiệp."
+} as const;
+
+export function hasReachedRealmStage(
+  character: { realmStage: { order: number; realm: { order: number } } },
+  requirement = LUYEN_KHI_1_REQUIREMENT
+) {
+  return character.realmStage.realm.order > requirement.realmOrder || (character.realmStage.realm.order === requirement.realmOrder && character.realmStage.order >= requirement.stageOrder);
+}
+
+export function hasReachedLuyenKhi1(character: { realmStage: { order: number; realm: { order: number } } }) {
+  return hasReachedRealmStage(character, LUYEN_KHI_1_REQUIREMENT);
+}
+
 export type OnboardingEvent =
   | "VIEW_CHARACTER"
   | "CULTIVATION_STARTED"
@@ -146,11 +168,18 @@ export async function getOnboardingState(db: Data, characterId: string) {
 }
 
 export async function getFeatureUnlockState(db: Data, characterId: string) {
-  const state = await getOnboardingState(db, characterId);
+  const [state, character] = await Promise.all([
+    getOnboardingState(db, characterId),
+    db.character.findUniqueOrThrow({
+      where: { id: characterId },
+      select: { realmStage: { select: { order: true, realm: { select: { order: true } } } } }
+    })
+  ]);
   const completed = new Set(state.currentChapter.objectives.filter((objective) => objective.completed).map((objective) => objective.key));
   const progress = await ensureOnboardingProgress(db, characterId);
   const allCompleted = new Set(parseCompleted(progress.completedObjectives));
   const has = (key: string) => allCompleted.has(key) || completed.has(key);
+  const hasReachedEconomyRealm = hasReachedLuyenKhi1(character);
   return {
     cultivation: { unlocked: true, reason: "Đã mở từ đầu." },
     character: { unlocked: true, reason: "Đã mở từ đầu." },
@@ -158,8 +187,8 @@ export async function getFeatureUnlockState(db: Data, characterId: string) {
     exploration: { unlocked: has("start-travel"), reason: "Bắt đầu một chuyến di chuyển để mở Lịch Luyện." },
     bestiary: { unlocked: has("finish-exploration") || has("monster-encountered"), reason: "Hoàn thành một lần Lịch Luyện để mở Yêu Thú Đồ Giám." },
     market: { unlocked: has("finish-exploration"), reason: "Hoàn thành Lần Đầu Lịch Luyện để mở Chợ." },
-    auction: { unlocked: false, reason: "Đạt cảnh giới cao hơn và hoàn thiện kinh tế Chợ để mở Đấu Giá." },
-    profession: { unlocked: false, reason: "Gặp Bách Nghệ Chấp Sự trong work unit nghề nghiệp sau." },
+    auction: { unlocked: hasReachedEconomyRealm, reason: economyFeatureUnlockReasons.auction },
+    profession: { unlocked: hasReachedEconomyRealm, reason: economyFeatureUnlockReasons.profession },
     secretRealm: { unlocked: false, reason: "Hoàn thành Lần Đầu Lịch Luyện và gặp cơ duyên bí cảnh." },
     sect: { unlocked: has("claim-cultivation"), reason: "Nhận tu vi đầu tiên để bắt đầu tìm hiểu Tông Môn." }
   };

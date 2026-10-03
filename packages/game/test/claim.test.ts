@@ -168,4 +168,29 @@ describe("claim services", () => {
     expect(progress.completedObjectives).toContain("claim-cultivation");
     expect(unlocks.sect.unlocked).toBe(true);
   });
+
+  it("unlocks auction and profession only from Luyen Khi stage 1", async () => {
+    const progress = { key: "main", status: "ACTIVE", completedObjectives: ["finish-exploration"] as string[] };
+    const dbForRealm = (realmOrder: number, stageOrder: number) => ({
+      onboardingProgress: {
+        upsert: async () => progress
+      },
+      character: {
+        findUniqueOrThrow: async () => ({
+          realmStage: {
+            order: stageOrder,
+            realm: { order: realmOrder }
+          }
+        })
+      }
+    });
+
+    const mortal = await getFeatureUnlockState(dbForRealm(0, 0) as never, "char_1");
+    const luyenKhi1 = await getFeatureUnlockState(dbForRealm(1, 0) as never, "char_1");
+
+    expect(mortal.auction).toEqual({ unlocked: false, reason: "Đạt Luyện Khí tầng 1 để mở Đấu Giá." });
+    expect(mortal.profession).toEqual({ unlocked: false, reason: "Đạt Luyện Khí tầng 1 để mở Nghề Nghiệp." });
+    expect(luyenKhi1.auction.unlocked).toBe(true);
+    expect(luyenKhi1.profession.unlocked).toBe(true);
+  });
 });

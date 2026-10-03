@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
-import { AUCTION_LIVE_GAME_DAYS, AUCTION_REGISTRATION_GAME_DAYS, auctionClassLabel, auctionPriceForRound, canAuctionItem, processAuctionHouse } from "@ttg/game";
+import { AUCTION_LIVE_GAME_DAYS, AUCTION_REGISTRATION_GAME_DAYS, auctionClassLabel, auctionPriceForRound, canAuctionItem, economyFeatureUnlockReasons, hasReachedLuyenKhi1, processAuctionHouse } from "@ttg/game";
 import { cancelAuctionAction, createAuctionAction, joinAuctionAction, passAuctionAction, raiseAuctionAction } from "@/lib/forms";
 
 type AuctionTab = "upcoming" | "live" | "ended" | "sell" | "my";
@@ -21,6 +21,7 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId: user.id },
     include: {
+      realmStage: { include: { realm: true } },
       items: {
         where: { quantity: { gt: 0 }, equippedSlot: null },
         include: { template: true, listings: { where: { status: "ACTIVE" }, select: { id: true } }, auctions: { where: { status: "ACTIVE" }, select: { id: true } } },
@@ -28,6 +29,7 @@ export default async function AuctionPage({ searchParams }: { searchParams?: Pro
       }
     }
   });
+  if (!hasReachedLuyenKhi1(character)) redirect(`/game?error=${encodeURIComponent(economyFeatureUnlockReasons.auction)}`);
   const [activeAuctions, endedAuctions, myAuctions] = await Promise.all([
     prisma.auction.findMany({
       where: { status: AuctionStatus.ACTIVE },

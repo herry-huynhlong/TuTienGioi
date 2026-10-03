@@ -1,17 +1,17 @@
 import { prisma, SectFacilityType, SectWorkStatus, type SectRoleName } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectApplicationAction, claimSectMiningAction, claimThanhVanAllowanceAction, completeMentorQuestAction, completeSectMissionAction, completeThanhVanInnerExamAction, completeTrueDisciplePromotionAction, depositSectCurrencyAction, depositSectItemAction, exchangeSectTechniqueAction, expandSectFacilityAction, harvestSectCropAction, plantSectCropAction, rejectMentorInvitationAction, rejectSectApplicationAction, requestThanhVanInnerExamAction, requestTrueDiscipleExamAction, reviewTrueDiscipleExamAction, startSectCaveCultivationAction, startSectMiningAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
+import { acceptMentorInvitationAction, acceptSectMissionAction, approveSectApplicationAction, cancelSectCaveCultivationAction, changeSectMemberRoleAction, claimSectMiningAction, claimThanhVanAllowanceAction, completeMentorQuestAction, completeSectMissionAction, completeThanhVanInnerExamAction, completeTrueDisciplePromotionAction, depositSectCurrencyAction, depositSectItemAction, disbandSectAction, exchangeSectTechniqueAction, expandSectFacilityAction, expelSectMemberAction, harvestSectCropAction, plantSectCropAction, rejectMentorInvitationAction, rejectSectApplicationAction, requestThanhVanInnerExamAction, requestTrueDiscipleExamAction, reviewTrueDiscipleExamAction, startSectCaveCultivationAction, startSectMiningAction, unassignSectCaveAction, updateSectInfoAction, updateSectRecruitmentAction, upgradeSectRankAction, withdrawSectCurrencyAction, withdrawSectItemAction } from "@/lib/forms";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CharacterVisual } from "@/components/CharacterVisual";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
-import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, sectAlignments, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
+import { getItemEconomy, getNextSectRank, getSectCaveBenefit, getSectItemContributionPrice, getSectRank, getThanhVanMentorshipProgression, getThanhVanProgression, hasSectPermission, refreshSectMissionPool, refreshSectRoleCaves, roleHasSectCave, sectAlignments, sectCaveConfig, sectCaveRoleOrder, sectFacilityConfig, sectFarmConfig, sectLibraryConfig, sectMineConfig, sectRankProgress, sectRoles } from "@ttg/game";
 import { formatRarity } from "@/lib/format";
 import { formatCurrency, ItemDetailPanel, ItemSummaryCard } from "@/components/ItemCard";
 import { ItemQuantityControl } from "@/components/ItemQuantityControl";
 import { SectEmblem } from "@/components/SectEmblem";
 import { SectIconPicker } from "@/components/SectIconPicker";
-import { BookOpen, Boxes, Building2, Castle, Compass, Crown, Gem, Landmark, Leaf, Mountain, PackageOpen, Pickaxe, ScrollText, Settings, Shield, Sparkles, Sprout, Users } from "lucide-react";
+import { BookOpen, Boxes, Building2, Castle, Check, ClipboardList, Compass, Crown, Gem, Info, Landmark, Leaf, Mountain, PackageOpen, Pickaxe, Save, ScrollText, Settings, Shield, Sparkles, Sprout, TriangleAlert, UserCog, UserMinus, UserPlus, Users, X } from "lucide-react";
 
 const tabs = [
   ["overview", "Tổng Quan"],
@@ -48,6 +48,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
     include: {
       sectMember: true,
       techniques: { select: { techniqueId: true } },
+      cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { startedAt: "desc" }, take: 1 },
       items: { where: { quantity: { gt: 0 }, equippedSlot: null, bound: false }, include: { template: true, listings: { where: { status: "ACTIVE" }, select: { id: true } } }, orderBy: { createdAt: "desc" } }
     }
   });
@@ -55,6 +56,7 @@ export default async function SectHomePage({ params, searchParams }: { params: P
   if (character.sectId !== id) redirect(`/game/sect/${character.sectId}`);
 
   await refreshSectMissionPool(prisma, id);
+  await refreshSectRoleCaves(prisma, id);
   const sect = await prisma.sect.findUniqueOrThrow({
     where: { id },
     include: {
@@ -95,11 +97,6 @@ export default async function SectHomePage({ params, searchParams }: { params: P
   return (
     <div className="sect-page">
       <header className="sect-home-hero sect-home-hero-identity">
-        <video className="sect-hero-video" autoPlay muted loop playsInline preload="metadata" poster="/assets/images/sect-bg.webp" aria-hidden>
-          <source src="/assets/videos/sect-bg.webm" type="video/webm" />
-          <source src="/assets/videos/sect-bg.mp4" type="video/mp4" />
-        </video>
-        <div className="sect-hero-overlay" aria-hidden />
         {sect.iconLockedAt || sect.leaderId !== character.id ? (
           <SectEmblem iconKey={sect.iconKey} size="xl" className="hero" />
         ) : (
@@ -149,12 +146,12 @@ export default async function SectHomePage({ params, searchParams }: { params: P
       {activeTab === "members" ? <MembersTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_MEMBERS")} /> : null}
       {activeTab === "missions" ? <MissionsTab sect={sect} inventoryItems={character.items} /> : null}
       {activeTab === "domain" ? <DomainTab sect={sect} canManage={hasSectPermission(selfMember?.role, "MANAGE_BUILDINGS")} canRankUp={hasSectPermission(selfMember?.role, "UPGRADE_SECT")} /> : null}
-      {activeTab === "caves" ? <CavesTab sect={sect} role={selfMember?.role} /> : null}
+      {activeTab === "caves" ? <CavesTab sect={sect} role={selfMember?.role} characterId={character.id} activeCultivation={character.cultivationJobs[0] ?? null} /> : null}
       {activeTab === "library" ? <LibraryTab sect={sect} selfRole={selfMember?.role} contribution={selfMember?.contribution ?? 0} ownedTechniqueIds={character.techniques.map((item) => item.techniqueId)} /> : null}
       {activeTab === "storage" ? <StorageTab sect={sect} characterItems={character.items} selectedStorageId={query?.storageItem ?? ""} canManageTreasury={hasSectPermission(selfMember?.role, "MANAGE_TREASURY")} canManageStorage={hasSectPermission(selfMember?.role, "MANAGE_STORAGE")} /> : null}
       {activeTab === "mine" ? <MineTab sect={sect} characterId={character.id} /> : null}
       {activeTab === "farm" ? <FarmTab sect={sect} /> : null}
-      {activeTab === "admin" && canAdmin ? <AdminTab sect={sect} /> : null}
+      {activeTab === "admin" && canAdmin ? <AdminTab sect={sect} selfMember={selfMember} /> : null}
       {activeTab === "overview" ? <OverviewTab sect={sect} selfRole={selfMember?.role} selfContribution={selfMember?.contribution ?? 0} thanhVanProgression={thanhVanProgression} thanhVanMentorship={thanhVanMentorship} /> : null}
     </div>
   );
@@ -696,28 +693,90 @@ function MineTab({ sect, characterId }: { sect: any; characterId: string }) {
   );
 }
 
-function CavesTab({ sect, role }: { sect: any; role?: SectRoleName | undefined }) {
+function CavesTab({ sect, role, characterId, activeCultivation }: { sect: any; role?: SectRoleName | undefined; characterId: string; activeCultivation: any | null }) {
   const effectiveRole = role ?? "OUTER";
   const cave = getSectCaveBenefit(effectiveRole, sect.rank);
+  const now = Date.now();
+  const activeIsSectCave = activeCultivation?.metadata && typeof activeCultivation.metadata === "object" && (activeCultivation.metadata as any).source === "sect_cave";
+  const assignedCave = sect.caves.find((entry: any) => entry.status === "ROLE_SLOT" && entry.assignedCharacterId === characterId);
+  const caveRows = sectCaveRoleOrder.flatMap((caveRole) => {
+    const benefit = getSectCaveBenefit(caveRole, sect.rank);
+    if (!benefit) return [];
+    const slots = sect.caves.filter((entry: any) => (entry.status === "ROLE_SLOT" || entry.status === "REVOKED") && entry.requiredRole === caveRole);
+    const visibleSlots = slots.length > 0 ? slots : Array.from({ length: sectCaveConfig.roleSlots[caveRole] ?? 0 }, (_, index) => ({ id: `${caveRole}-${index}`, status: "PENDING", assignedCharacter: null, assignedCharacterId: null }));
+    return visibleSlots.map((slot: any, index: number) => ({ role: caveRole as SectRoleName, benefit, slot, index }));
+  });
   return (
     <section className="sect-dashboard-grid">
       <div className="panel sect-board large">
         <h2>Động Phủ của bạn</h2>
-        <article className="sect-domain-card">
-          <div className="sect-feature-head"><Landmark /><b>{cave.name}</b><span>{getSectRank(sect.rank).shortLabel}</span></div>
-          <p>Thân phận: {sectRoles[effectiveRole].label}</p>
-          <p>Linh khí +{Math.round(cave.cultivationBonusBps / 100)}% · Đột phá +{Math.round(cave.breakthroughBonusBps / 100)}%</p>
-          <p className="muted">Bonus tự đổi theo chức vụ và phẩm cấp tông môn. Không cần Tông Chủ phân phối thủ công.</p>
-          <form action={startSectCaveCultivationAction} className="sect-inline-form">
-            <input type="hidden" name="sectId" value={sect.id} />
-            <input type="hidden" name="caveId" value="auto" />
-            <select className="field" name="minutes"><option value="1">1 phút</option><option value="3">3 phút</option><option value="5">5 phút</option><option value="10">10 phút</option></select>
-            <button className="btn" type="submit">Bế quan tu luyện</button>
-          </form>
-        </article>
+        {cave && assignedCave ? (
+          <article className="sect-domain-card sect-cave-card">
+            <div className="sect-feature-head"><Landmark /><b>{cave.name}</b><span>Cấp {cave.level}</span></div>
+            <p>Chức vụ: {sectRoles[effectiveRole].label}</p>
+            <p>Linh khí +{Math.round(cave.cultivationBonusBps / 100)}% · Đột phá +{Math.round(cave.breakthroughBonusBps / 100)}%</p>
+            {activeIsSectCave ? (
+              <div className="sect-cave-active">
+                <b>Đang bế quan tu luyện</b>
+                <span>Thời gian: {formatSectDuration(now - activeCultivation.startedAt.getTime())}</span>
+                <span>Tu vi đã tích lũy: +{activeCultivation.accumulatedReward.toString()}</span>
+                <span>Linh khí: +{Math.round(cave.cultivationBonusBps / 100)}%</span>
+              </div>
+            ) : null}
+            {activeIsSectCave ? (
+              <form action={cancelSectCaveCultivationAction}>
+                <input type="hidden" name="sectId" value={sect.id} />
+                <input type="hidden" name="id" value={activeCultivation.id} />
+                <button className="btn btn-secondary" type="submit">Kết thúc bế quan</button>
+              </form>
+            ) : (
+              <form action={startSectCaveCultivationAction}>
+                <input type="hidden" name="sectId" value={sect.id} />
+                <input type="hidden" name="caveId" value={assignedCave.id} />
+                <button className="btn" type="submit" disabled={Boolean(activeCultivation)}>Bế quan tu luyện</button>
+              </form>
+            )}
+          </article>
+        ) : (
+          <article className="sect-domain-card">
+            <div className="sect-feature-head"><Landmark /><b>Chưa có Động Phủ riêng</b><span>{sectRoles[effectiveRole].label}</span></div>
+            <p className="muted">{roleHasSectCave(effectiveRole) ? "Chức vụ này có Động Phủ nhưng slot chưa được đồng bộ. Hãy đổi chức vụ hoặc tải lại sau khi Tông Môn cập nhật." : "Nội Môn và Ngoại Môn không dùng Động Phủ riêng."}</p>
+          </article>
+        )}
+      </div>
+
+      <div className="panel sect-board large">
+        <h2>Động Phủ Tông Môn</h2>
+        <div className="sect-cave-list">
+          {caveRows.map(({ role: caveRole, benefit, slot, index }) => (
+            <article key={slot.id} className="sect-cave-row">
+              <div>
+                <b>{sectRoles[caveRole as SectRoleName].label}</b>
+                <span>{slot.assignedCharacter?.name ?? "Chưa có người giữ chức"}</span>
+              </div>
+              <span>Động Phủ cấp {benefit.level}</span>
+              <small>{slot.status === "REVOKED" ? "Đã thu hồi" : `Slot ${index + 1}/${benefit.maxSlots}`}</small>
+              {slot.assignedCharacterId ? (
+                <form action={unassignSectCaveAction}>
+                  <input type="hidden" name="sectId" value={sect.id} />
+                  <input type="hidden" name="caveId" value={slot.id} />
+                  <button className="btn btn-secondary compact" type="submit">Thu hồi</button>
+                </form>
+              ) : null}
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
+}
+
+function formatSectDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((part) => part.toString().padStart(2, "0")).join(":");
 }
 
 function LibraryTab({ sect, selfRole, contribution, ownedTechniqueIds }: { sect: any; selfRole?: SectRoleName | undefined; contribution: number; ownedTechniqueIds: string[] }) {
@@ -749,42 +808,166 @@ function LibraryTab({ sect, selfRole, contribution, ownedTechniqueIds }: { sect:
   );
 }
 
-function AdminTab({ sect }: { sect: any }) {
+function AdminTab({ sect, selfMember }: { sect: any; selfMember?: any }) {
+  const recruitmentMode = !sect.recruiting ? "CLOSED" : sect.autoAccept ? "FREE" : "REVIEW";
+  const canManageMembers = hasSectPermission(selfMember?.role, "MANAGE_MEMBERS");
+  const canManageNotice = hasSectPermission(selfMember?.role, "MANAGE_NOTICE");
+  const actorOrder = selfMember ? sectRoles[selfMember.role as SectRoleName].order : 99;
+  const recentLogs = sect.logs.slice(0, 10);
+
   return (
     <section className="sect-admin-grid">
-      <div className="panel sect-board">
-        <h2>Đơn xin gia nhập</h2>
-        {sect.applications.length === 0 ? <p className="muted">Không có đơn chờ duyệt.</p> : sect.applications.map((application: any) => (
-          <article key={application.id} className="sect-application-row">
-            <div>
-              <b>{application.character.name}</b>
-              <span>{application.character.realmStage.realm.name} {application.character.realmStage.name}</span>
-              <p>{application.message || "Không để lại lời nhắn."}</p>
-            </div>
-            <form action={approveSectApplicationAction}>
-              <input type="hidden" name="sectId" value={sect.id} />
-              <input type="hidden" name="applicationId" value={application.id} />
-              <button className="btn" type="submit">Chấp nhận</button>
-            </form>
-            <form action={rejectSectApplicationAction}>
-              <input type="hidden" name="sectId" value={sect.id} />
-              <input type="hidden" name="applicationId" value={application.id} />
-              <button className="btn btn-secondary" type="submit">Từ chối</button>
-            </form>
-          </article>
-        ))}
+      <div className="panel sect-board sect-admin-card">
+        <div className="sect-admin-card-head"><UserPlus size={18} /><h2>Tuyển thành viên</h2></div>
+        <form action={updateSectRecruitmentAction} className="sect-admin-form">
+          <input type="hidden" name="sectId" value={sect.id} />
+          <label className="sect-admin-toggle">
+            <input type="checkbox" name="recruiting" defaultChecked={sect.recruiting} />
+            <span>Bật tuyển thành viên</span>
+            <b>{sect.recruiting ? "Đang mở" : "Đang đóng"}</b>
+          </label>
+          <label>
+            <span>Chế độ</span>
+            <select className="field" name="mode" defaultValue={recruitmentMode}>
+              <option value="FREE">Tự do</option>
+              <option value="REVIEW">Cần duyệt</option>
+              <option value="CLOSED">Đóng tuyển</option>
+            </select>
+          </label>
+          <label className="sect-admin-toggle">
+            <input type="checkbox" name="autoAccept" defaultChecked={sect.autoAccept} />
+            <span>Tự động duyệt</span>
+          </label>
+          <label>
+            <span>Yêu cầu cảnh giới tối thiểu</span>
+            <input className="field" name="joinRequirement" defaultValue={sect.joinRequirement} placeholder="Không yêu cầu" />
+          </label>
+          <button className="btn" type="submit" disabled={!canManageNotice}><Save size={16} /> Lưu</button>
+        </form>
       </div>
-      <div className="panel sect-board">
-        <h2>Quản trị sơn môn</h2>
-        <div className="sect-metrics vertical">
-          <span>Tuyển thành viên <b>{sect.recruiting ? "Đang mở" : "Đóng"}</b></span>
-          <span>Tự động duyệt <b>{sect.autoAccept ? "Bật" : "Tắt"}</b></span>
-          <span>Yêu cầu <b>{sect.joinRequirement}</b></span>
+
+      <div className="panel sect-board sect-admin-card">
+        <div className="sect-admin-card-head"><ClipboardList size={18} /><h2>Đơn xin gia nhập</h2></div>
+        <div className="sect-admin-list">
+          {sect.applications.length === 0 ? <p className="muted">Không có đơn chờ duyệt</p> : sect.applications.map((application: any) => (
+            <article key={application.id} className="sect-admin-person-row">
+              <CharacterVisual character={application.character} size={42} />
+              <div>
+                <b>{application.character.name}</b>
+                <span>{application.character.realmStage.realm.name} {application.character.realmStage.name}</span>
+                <small>{formatSectAdminTime(application.createdAt)}</small>
+              </div>
+              <div className="sect-admin-actions">
+                <form action={approveSectApplicationAction}>
+                  <input type="hidden" name="sectId" value={sect.id} />
+                  <input type="hidden" name="applicationId" value={application.id} />
+                  <button className="btn compact" type="submit"><Check size={15} /> Chấp nhận</button>
+                </form>
+                <form action={rejectSectApplicationAction}>
+                  <input type="hidden" name="sectId" value={sect.id} />
+                  <input type="hidden" name="applicationId" value={application.id} />
+                  <button className="btn btn-secondary compact" type="submit"><X size={15} /> Từ chối</button>
+                </form>
+              </div>
+            </article>
+          ))}
         </div>
-        <p className="muted">Đổi thông tin, phân quyền, nâng phẩm và giải tán sẽ nối backend ở bước sau.</p>
+      </div>
+
+      <div className="panel sect-board sect-admin-card sect-admin-wide">
+        <div className="sect-admin-card-head"><UserCog size={18} /><h2>Quản lý thành viên</h2></div>
+        <div className="sect-member-admin-list">
+          {sect.members.map((member: any) => {
+            const role = sectRoles[member.role as SectRoleName];
+            const targetOrder = role.order;
+            const manageable = canManageMembers && member.characterId !== selfMember?.characterId && member.role !== "LEADER" && actorOrder < targetOrder;
+            const online = Date.now() - new Date(member.character.updatedAt).getTime() < 10 * 60 * 1000;
+            return (
+              <article key={member.id} className="sect-member-admin-row">
+                <CharacterVisual character={member.character} size={44} />
+                <div>
+                  <b>{member.character.name}</b>
+                  <span>{role.label}</span>
+                </div>
+                <span className={`sect-presence ${online ? "online" : "offline"}`}>{online ? "Online" : "Offline"}</span>
+                <details className="sect-member-menu">
+                  <summary>Thao tác</summary>
+                  <div>
+                    <form action={changeSectMemberRoleAction}>
+                      <input type="hidden" name="sectId" value={sect.id} />
+                      <input type="hidden" name="memberId" value={member.id} />
+                      <input type="hidden" name="direction" value="PROMOTE" />
+                      <button type="submit" disabled={!manageable || member.role === "VICE_LEADER"}>Thăng chức</button>
+                    </form>
+                    <form action={changeSectMemberRoleAction}>
+                      <input type="hidden" name="sectId" value={sect.id} />
+                      <input type="hidden" name="memberId" value={member.id} />
+                      <input type="hidden" name="direction" value="DEMOTE" />
+                      <button type="submit" disabled={!manageable || member.role === "OUTER"}>Giáng chức</button>
+                    </form>
+                    <form action={expelSectMemberAction}>
+                      <input type="hidden" name="sectId" value={sect.id} />
+                      <input type="hidden" name="memberId" value={member.id} />
+                      <button type="submit" disabled={!manageable}><UserMinus size={14} /> Khai trừ</button>
+                    </form>
+                  </div>
+                </details>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="panel sect-board sect-admin-card">
+        <div className="sect-admin-card-head"><Info size={18} /><h2>Thông tin Tông Môn</h2></div>
+        <form action={updateSectInfoAction} className="sect-admin-form">
+          <input type="hidden" name="sectId" value={sect.id} />
+          <label>
+            <span>Mô tả Tông Môn</span>
+            <textarea className="field" name="description" defaultValue={sect.description} rows={4} />
+          </label>
+          <label>
+            <span>Thông báo Tông Môn</span>
+            <textarea className="field" name="notice" defaultValue={sect.notice} rows={3} />
+          </label>
+          <label className="sect-admin-toggle">
+            <input type="checkbox" name="recruiting" defaultChecked={sect.recruiting} />
+            <span>Trạng thái tuyển thành viên</span>
+            <b>{sect.recruiting ? "Mở" : "Đóng"}</b>
+          </label>
+          <button className="btn" type="submit" disabled={!canManageNotice}><Save size={16} /> Lưu thay đổi</button>
+        </form>
+      </div>
+
+      <div className="panel sect-board sect-admin-card">
+        <div className="sect-admin-card-head"><ScrollText size={18} /><h2>Nhật ký đơn giản</h2></div>
+        <LogList logs={recentLogs} />
+      </div>
+
+      <div className="panel sect-board sect-admin-card sect-admin-danger sect-admin-wide">
+        <div className="sect-admin-card-head"><TriangleAlert size={18} /><h2>Khu vực nguy hiểm</h2></div>
+        <p className="muted">Giải tán sẽ xóa Tông Môn và đưa toàn bộ thành viên về trạng thái không thuộc Tông Môn.</p>
+        <details className="sect-danger-confirm">
+          <summary className="btn btn-secondary">Giải tán Tông Môn</summary>
+          <div className="sect-danger-modal">
+            <div className="sect-danger-box">
+              <h3>Xác nhận giải tán</h3>
+              <p>Nhập đúng tên <b>{sect.name}</b> để xác nhận. Hành động này không thể hoàn tác.</p>
+              <form action={disbandSectAction} className="sect-admin-form">
+                <input type="hidden" name="sectId" value={sect.id} />
+                <input className="field" name="confirmation" placeholder={sect.name} />
+                <button className="btn" type="submit">Xác nhận giải tán</button>
+              </form>
+            </div>
+          </div>
+        </details>
       </div>
     </section>
   );
+}
+
+function formatSectAdminTime(value: Date) {
+  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(value);
 }
 
 function Affair({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {

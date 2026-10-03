@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, chooseSectIcon, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, depositSectCurrency, depositSectItem, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, changeSectMemberRole, chooseSectIcon, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, depositSectCurrency, depositSectItem, disbandSect, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, expelSectMember, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, updateSectInfo, updateSectRecruitment, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError, type SectRecruitmentMode } from "@ttg/game";
 import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
 import { CharacterAppearanceError, characterAppearanceImage, deterministicCharacterAppearanceKey, setCharacterAppearance } from "@ttg/game";
 
@@ -488,6 +488,73 @@ export async function rejectSectApplicationAction(formData: FormData) {
   redirect(`/game/sect/${sectId}?tab=admin`);
 }
 
+function sectRecruitmentModeField(formData: FormData): SectRecruitmentMode {
+  const value = String(formData.get("mode") ?? "REVIEW");
+  if (value === "FREE" || value === "REVIEW" || value === "CLOSED") return value;
+  throw new SectError("INVALID_RECRUITMENT_MODE", "Chế độ tuyển thành viên không hợp lệ.");
+}
+
+export async function updateSectRecruitmentAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    const mode = formData.get("recruiting") === "on" ? sectRecruitmentModeField(formData) : "CLOSED";
+    await updateSectRecruitment(prisma, await characterId(), sectId, {
+      mode,
+      autoAccept: formData.get("autoAccept") === "on",
+      joinRequirement: String(formData.get("joinRequirement") ?? "")
+    });
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}?tab=admin`);
+  }
+  redirect(`/game/sect/${sectId}?tab=admin&ok=recruitment`);
+}
+
+export async function updateSectInfoAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await updateSectInfo(prisma, await characterId(), sectId, {
+      description: String(formData.get("description") ?? ""),
+      notice: String(formData.get("notice") ?? ""),
+      recruiting: formData.get("recruiting") === "on"
+    });
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}?tab=admin`);
+  }
+  redirect(`/game/sect/${sectId}?tab=admin&ok=info`);
+}
+
+export async function changeSectMemberRoleAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  const direction = String(formData.get("direction") ?? "");
+  try {
+    if (direction !== "PROMOTE" && direction !== "DEMOTE") throw new SectError("INVALID_ROLE_CHANGE", "Thao tác chức vụ không hợp lệ.");
+    await changeSectMemberRole(prisma, await characterId(), sectId, String(formData.get("memberId")), direction);
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}?tab=admin`);
+  }
+  redirect(`/game/sect/${sectId}?tab=admin&ok=member-role`);
+}
+
+export async function expelSectMemberAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await expelSectMember(prisma, await characterId(), sectId, String(formData.get("memberId")));
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}?tab=admin`);
+  }
+  redirect(`/game/sect/${sectId}?tab=admin&ok=member-expelled`);
+}
+
+export async function disbandSectAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await disbandSect(prisma, await characterId(), sectId, String(formData.get("confirmation") ?? ""));
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}?tab=admin`);
+  }
+  redirect("/game/sect?ok=disbanded");
+}
+
 function positiveBigIntField(formData: FormData, name: string) {
   const raw = String(formData.get(name) ?? "").trim();
   if (!/^\d+$/.test(raw)) throw new SectError("INVALID_AMOUNT", "Số lượng không hợp lệ.");
@@ -649,11 +716,21 @@ export async function unassignSectCaveAction(formData: FormData) {
 export async function startSectCaveCultivationAction(formData: FormData) {
   const sectId = String(formData.get("sectId") ?? "");
   try {
-    await startSectCaveCultivation(prisma, await characterId(), String(formData.get("caveId")), positiveIntField(formData, "minutes"));
+    await startSectCaveCultivation(prisma, await characterId(), String(formData.get("caveId") ?? "auto"));
   } catch (error) {
     redirectGameError(error, `/game/sect/${sectId}?tab=caves`);
   }
   redirect(`/game/sect/${sectId}?tab=caves&ok=cultivation`);
+}
+
+export async function cancelSectCaveCultivationAction(formData: FormData) {
+  const sectId = String(formData.get("sectId") ?? "");
+  try {
+    await cancelCultivation(prisma, await characterId(), String(formData.get("id")));
+  } catch (error) {
+    redirectGameError(error, `/game/sect/${sectId}?tab=caves`);
+  }
+  redirect(`/game/sect/${sectId}?tab=caves&ok=cultivation-claimed`);
 }
 
 export async function exchangeSectTechniqueAction(formData: FormData) {

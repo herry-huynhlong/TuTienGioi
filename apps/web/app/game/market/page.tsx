@@ -14,6 +14,11 @@ import { MarketFilterBar } from "@/components/MarketFilterBar";
 
 const categories = [
   ["", "Tất cả"],
+  ["subtype:Linh Thảo", "Linh Thảo"],
+  ["subtype:Khoáng Vật", "Khoáng Vật"],
+  ["alchemy", "Luyện Đan"],
+  ["talisman", "Chế Phù"],
+  ["formation", "Trận Pháp"],
   [ItemCategory.EQUIPMENT, "Trang bị"],
   [ItemCategory.CONSUMABLE, "Đan dược"],
   [ItemCategory.MATERIAL, "Nguyên liệu"],
@@ -53,14 +58,13 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
   const selectedItem = character.items.find((item) => item.id === params?.sellItem) ?? character.items.find((item) => item.template.tradeable && !item.bound && item.listings.length === 0);
   await refreshSystemMarketStock(prisma);
   const periodKey = currentSystemMarketPeriod();
-  const [systemStocks, listings, myListings] = await Promise.all([
+  const [rawSystemStocks, rawListings, myListings] = await Promise.all([
     prisma.systemMarketStock.findMany({
       where: {
         periodKey,
         stock: { gt: 0 },
         template: {
           ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
-          ...(category ? { category: category as ItemCategory } : {}),
           ...(grade ? { rarity: grade as any } : {})
         }
       },
@@ -74,7 +78,6 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         item: {
           template: {
             ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
-            ...(category ? { category: category as ItemCategory } : {}),
             ...(grade ? { rarity: grade as any } : {})
           }
         }
@@ -89,6 +92,9 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
       orderBy: { createdAt: "desc" }
     })
   ]);
+  const systemStocks = rawSystemStocks.filter((stock) => marketCategoryMatches(stock.template, category ?? ""));
+  const listings = rawListings.filter((listing) => marketCategoryMatches(listing.item.template, category ?? ""));
+  const categoryOptions = visibleMarketCategories([...rawSystemStocks.map((stock) => stock.template), ...rawListings.map((listing) => listing.item.template)], category ?? "");
 
   return (
     <GamePageBackground type="market">
@@ -114,7 +120,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
         <Link href="/game/market?tab=my" className={tab === "my" ? "active" : ""}>Hàng của tôi</Link>
       </nav>
 
-      {tab === "buy" ? <BuyTab systemStocks={systemStocks} listings={listings} characterId={character.id} linhThach={character.linhThach} disabled={!atMarket} q={q} category={category ?? ""} grade={grade ?? ""} detail={params?.detail ?? ""} /> : null}
+      {tab === "buy" ? <BuyTab systemStocks={systemStocks} listings={listings} characterId={character.id} linhThach={character.linhThach} disabled={!atMarket} q={q} category={category ?? ""} grade={grade ?? ""} detail={params?.detail ?? ""} categories={categoryOptions} /> : null}
       {tab === "sell" ? <SellTab items={character.items} selectedItem={selectedItem} disabled={!atMarket} /> : null}
       {tab === "my" ? <MyListingsTab listings={myListings} /> : null}
     </div>
@@ -122,7 +128,7 @@ export default async function MarketPage({ searchParams }: { searchParams?: Prom
   );
 }
 
-function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, category, grade, detail }: { systemStocks: Array<any>; listings: Array<any>; characterId: string; linhThach: bigint; disabled: boolean; q: string; category: string; grade: string; detail: string }) {
+function BuyTab({ systemStocks, listings, characterId, linhThach, disabled, q, category, grade, detail, categories }: { systemStocks: Array<any>; listings: Array<any>; characterId: string; linhThach: bigint; disabled: boolean; q: string; category: string; grade: string; detail: string; categories: readonly (readonly [string, string])[] }) {
   const selectedSystem = detail.startsWith("system:") ? systemStocks.find((stock) => stock.id === detail.slice("system:".length)) : null;
   const selectedListing = detail.startsWith("listing:") ? listings.find((listing) => listing.id === detail.slice("listing:".length)) : null;
   return (
@@ -185,6 +191,21 @@ function marketCondition(template: any) {
   if (economy.requiredRealmOrder !== null) parts.push(`Cảnh giới bậc ${economy.requiredRealmOrder}+`);
   if (economy.requiredSectRank !== null) parts.push(`Tông Môn ${economy.requiredSectRank} phẩm trở lên`);
   return parts.length ? parts.join(" · ") : "Không";
+}
+
+function marketCategoryMatches(template: any, category: string) {
+  if (!category) return true;
+  const economy = getItemEconomy(template);
+  const subType = economy.subType || "";
+  if (category.startsWith("subtype:")) return subType === category.slice("subtype:".length);
+  if (category === "alchemy") return subType === "Đan Dược" || economy.icon === "pill";
+  if (category === "talisman") return subType === "Phù Lục" || subType === "Phù Chỉ" || subType === "Phù Phấn" || economy.icon === "paper" || economy.icon === "powder";
+  if (category === "formation") return subType.includes("Trận") || economy.icon === "formation" || economy.icon === "flag";
+  return template.category === category;
+}
+
+function visibleMarketCategories(templates: any[], activeCategory: string) {
+  return categories.filter(([value]) => !value || value === activeCategory || templates.some((template) => marketCategoryMatches(template, value)));
 }
 
 function SystemBuyForm({ stock, balance, disabled }: { stock: any; balance: bigint; disabled: boolean }) {

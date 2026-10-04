@@ -19,10 +19,18 @@ describe("item progression economy", () => {
 
   it("maps baseline progression items to dedicated visual assets", () => {
     const keys = progressionItemCatalog.map((item) => item.key);
+    const movedVisualKeys: Record<string, string> = {
+      "thanh-linh-thao": "herb/thanh-linh-thao",
+      "huyen-thiet": "ore/huyen-thiet",
+      "yeu-dan-nhat-giai": "monster-core/yeu-dan-nhat-giai",
+      "yeu-dan-nhi-giai": "monster-core/yeu-dan-nhi-giai",
+      "linh-moc": "wood/linh-moc",
+      "yeu-thu-bi": "beast/yeu-thu-bi"
+    };
     expect(new Set(keys).size).toBe(30);
     for (const item of progressionItemCatalog) {
       const visualKey = itemVisualKey(item);
-      expect(visualKey).toBe(item.key);
+      expect(visualKey).toBe(movedVisualKeys[item.key] ?? item.key);
       expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), `${item.key}:${visualKey}`).toBe(true);
     }
     expect(itemVisualKey(progressionItemCatalog.find((item) => item.key === "duong-the-dan")!)).toBe("duong-the-dan");
@@ -31,6 +39,52 @@ describe("item progression economy", () => {
   it("keeps a project asset for every specific item visual key including Linh Thach", () => {
     expect(itemSpecificVisualKeys).toContain("linh-thach");
     for (const visualKey of itemSpecificVisualKeys) {
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), visualKey).toBe(true);
+    }
+  });
+
+  it("uses distinct fallback art for profession material concepts", () => {
+    const cases = [
+      ["powder", "default-powder"],
+      ["paper", "default-paper"],
+      ["root", "default-root"],
+      ["flag", "default-flag"],
+      ["water", "default-water"],
+      ["gem", "default-crystal"],
+      ["core", "default-monster-core"],
+      ["spirit", "default-spirit"],
+      ["wood", "default-wood"],
+      ["flower", "default-flower"],
+      ["mushroom", "default-mushroom"],
+      ["leaf", "default-leaf"]
+    ] as const;
+    for (const [icon, visualKey] of cases) {
+      expect(itemVisualKey({ category: "MATERIAL", icon })).toBe(visualKey);
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), visualKey).toBe(true);
+    }
+    for (const visualKey of [
+      "material/chu-sa",
+      "talisman/hoang-phu-chi",
+      "herb/huyet-sam",
+      "herb/cuong-than-thao",
+      "ore/hac-thiet",
+      "formation/ha-pham-tran-ky",
+      "formation/trung-pham-tran-ky",
+      "formation/huyen-pham-tran-ky",
+      "formation/thien-pham-tran-ky",
+      "formation/tien-pham-tran-ky",
+      "water/linh-tuyen-thuy",
+      "talisman/linh-phu-chi",
+      "talisman/huyen-phu-chi",
+      "talisman/thien-phu-chi",
+      "talisman/tien-phu-chi",
+      "monster-core/yeu-dan-nhat-giai",
+      "monster-core/yeu-dan-nhi-giai",
+      "wood/linh-moc",
+      "beast/yeu-thu-bi",
+      "herb/thanh-linh-thao",
+      "ore/huyen-thiet"
+    ]) {
       expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), visualKey).toBe(true);
     }
   });

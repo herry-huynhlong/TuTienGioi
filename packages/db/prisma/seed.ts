@@ -4,6 +4,15 @@ import { coreProfessionRecipes } from "./professionSeedData";
 
 const prisma = new PrismaClient();
 
+const itemSpecificVisualKeyByItemKey: Record<string, string> = {
+  "thanh-linh-thao": "herb/thanh-linh-thao",
+  "huyen-thiet": "ore/huyen-thiet",
+  "yeu-dan-nhat-giai": "monster-core/yeu-dan-nhat-giai",
+  "yeu-dan-nhi-giai": "monster-core/yeu-dan-nhi-giai",
+  "linh-moc": "wood/linh-moc",
+  "yeu-thu-bi": "beast/yeu-thu-bi"
+};
+
 const itemSpecificVisualKeys = new Set([
   "thanh-linh-thao", "ngung-khi-thao", "hac-thiet-quang", "xich-dong-quang", "hoi-khi-dan", "duong-the-dan", "truc-co-dan-ha", "yeu-thu-bi",
   "yeu-thu-nha", "linh-moc", "tu-diep-linh-thao", "huyen-thiet", "tinh-dong", "bich-ngoc-tuy", "tu-khi-dan", "duong-hon-dan",
@@ -13,17 +22,31 @@ const itemSpecificVisualKeys = new Set([
 ]);
 
 function itemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
-  if (itemSpecificVisualKeys.has(key)) return key;
+  if (itemSpecificVisualKeys.has(key)) return itemSpecificVisualKeyByItemKey[key] ?? key;
   if (icon === "ore" || icon === "metal") return "default-ore";
-  if (icon === "crystal" || icon === "core") return "default-crystal";
-  if (icon === "formation" || icon === "flag") return "default-formation";
-  if (icon === "paper" || icon === "powder" || icon === "ink") return "default-talisman";
+  if (icon === "core") return "default-monster-core";
+  if (icon === "spirit") return "default-spirit";
+  if (icon === "wood") return "default-wood";
+  if (icon === "crystal" || (icon === "gem" && category === "MATERIAL")) return "default-crystal";
+  if (icon === "formation") return "default-formation";
+  if (icon === "flag") return "default-flag";
+  if (icon === "paper") return "default-paper";
+  if (icon === "powder") return "default-powder";
+  if (icon === "ink") return "default-ink";
+  if (icon === "water") return "default-water";
+  if (icon === "fruit") return "default-fruit";
+  if (icon === "root") return "default-root";
   if (icon === "pill") return "default-pill";
-  if (icon === "herb" || icon === "leaf") return "default-herb";
+  if (icon === "leaf") return "default-leaf";
+  if (icon === "flower") return "default-flower";
+  if (icon === "mushroom") return "default-mushroom";
+  if (icon === "herb") return "default-herb";
+  if (icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell") return "default-beast";
+  if (icon === "silk") return "default-silk";
+  if (icon === "stone" || icon === "sand") return "default-stone";
   if (icon === "sword") return "default-weapon";
   if (icon === "armor" || icon === "boots") return "default-armor";
   if (icon === "manual" || icon === "scroll") return "default-manual";
-  if (icon === "formation" || icon === "flag") return "default-artifact";
   if (icon === "gem" || icon === "ring" || icon === "talisman") return "default-artifact";
   if (category === "EQUIPMENT" && equipSlot === "WEAPON") return "default-weapon";
   if (category === "EQUIPMENT") return "default-armor";
@@ -37,12 +60,19 @@ function professionItemVisualKey(key: string, category: string, icon: string, eq
     : icon === "ring" || icon === "talisman" || icon === "artifact" ? "accessory"
     : icon === "scroll" || icon === "paper" ? "talisman"
     : icon === "formation" || icon === "flag" ? "formation"
-    : icon === "herb" || icon === "leaf" || icon === "root" || icon === "flower" || icon === "mushroom" ? "herb"
+    : icon === "root" || icon === "herb" ? "herb"
+    : icon === "flower" ? "flower"
+    : icon === "mushroom" ? "mushroom"
+    : icon === "leaf" ? "leaf"
     : icon === "fruit" ? "fruit"
+    : icon === "water" ? "water"
+    : icon === "wood" ? "wood"
     : icon === "ore" || icon === "metal" ? "ore"
-    : icon === "crystal" || icon === "gem" || icon === "core" ? "crystal"
+    : icon === "core" ? "monster-core"
+    : icon === "spirit" ? "spirit"
+    : icon === "crystal" || icon === "gem" ? "crystal"
     : icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell" ? "beast"
-    : icon === "powder" || icon === "ink" || icon === "sand" || icon === "water" ? "material"
+    : icon === "powder" || icon === "ink" || icon === "sand" ? "material"
     : category === "EQUIPMENT" && equipSlot === "WEAPON" ? "weapon"
     : category === "EQUIPMENT" ? "armor"
     : "material";

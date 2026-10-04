@@ -156,25 +156,34 @@ const equipmentIcon: Record<string, string> = {
   ARTIFACT: "gem"
 };
 
+const itemSpecificVisualKeyByItemKey: Record<string, string> = {
+  "thanh-linh-thao": "herb/thanh-linh-thao",
+  "huyen-thiet": "ore/huyen-thiet",
+  "yeu-dan-nhat-giai": "monster-core/yeu-dan-nhat-giai",
+  "yeu-dan-nhi-giai": "monster-core/yeu-dan-nhi-giai",
+  "linh-moc": "wood/linh-moc",
+  "yeu-thu-bi": "beast/yeu-thu-bi"
+};
+
 export const itemSpecificVisualKeys = [
-  "thanh-linh-thao",
+  itemSpecificVisualKeyByItemKey["thanh-linh-thao"],
   "ngung-khi-thao",
   "hac-thiet-quang",
   "xich-dong-quang",
   "hoi-khi-dan",
   "duong-the-dan",
   "truc-co-dan-ha",
-  "yeu-thu-bi",
+  itemSpecificVisualKeyByItemKey["yeu-thu-bi"],
   "yeu-thu-nha",
-  "linh-moc",
+  itemSpecificVisualKeyByItemKey["linh-moc"],
   "tu-diep-linh-thao",
-  "huyen-thiet",
+  itemSpecificVisualKeyByItemKey["huyen-thiet"],
   "tinh-dong",
   "bich-ngoc-tuy",
   "tu-khi-dan",
   "duong-hon-dan",
   "truc-co-dan-trung",
-  "yeu-dan-nhat-giai",
+  itemSpecificVisualKeyByItemKey["yeu-dan-nhat-giai"],
   "huyen-thu-cot",
   "tu-linh-thach",
   "thien-linh-thao",
@@ -183,7 +192,7 @@ export const itemSpecificVisualKeys = [
   "ngoc-tuy-tinh-hoa",
   "truc-co-dan-thuong",
   "tay-tuy-dan",
-  "yeu-dan-nhi-giai",
+  itemSpecificVisualKeyByItemKey["yeu-dan-nhi-giai"],
   "thien-tam-ti",
   "dia-mach-linh-tinh",
   "tu-linh-ngoc",
@@ -199,7 +208,7 @@ export const itemSpecificVisualKeys = [
   "linh-thach"
 ] as const;
 
-const itemSpecificVisualKeySet = new Set<string>(itemSpecificVisualKeys);
+const itemSpecificVisualKeySet = new Set<string>(progressionItemCatalog.map((item) => item.key));
 
 export function jsonRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -300,14 +309,29 @@ export function inferSubType(category: ItemCategory | string, equipSlot?: string
 }
 
 export function itemVisualKey(item: { key?: string | null | undefined; category: ItemCategory | string; icon?: string | null | undefined; equipSlot?: string | null | undefined }) {
-  if (item.key && itemSpecificVisualKeySet.has(item.key)) return item.key;
+  if (item.key && itemSpecificVisualKeySet.has(item.key)) return itemSpecificVisualKeyByItemKey[item.key] ?? item.key;
   const icon = item.icon ?? inferIcon(item.category, item.equipSlot);
   if (icon === "ore" || icon === "metal") return "default-ore";
-  if (icon === "crystal" || icon === "core") return "default-crystal";
-  if (icon === "formation" || icon === "flag") return "default-formation";
-  if (icon === "paper" || icon === "powder" || icon === "ink") return "default-talisman";
+  if (icon === "core") return "default-monster-core";
+  if (icon === "spirit") return "default-spirit";
+  if (icon === "wood") return "default-wood";
+  if (icon === "crystal" || (icon === "gem" && String(item.category) === "MATERIAL")) return "default-crystal";
+  if (icon === "formation") return "default-formation";
+  if (icon === "flag") return "default-flag";
+  if (icon === "paper") return "default-paper";
+  if (icon === "powder") return "default-powder";
+  if (icon === "ink") return "default-ink";
+  if (icon === "water") return "default-water";
+  if (icon === "fruit") return "default-fruit";
+  if (icon === "root") return "default-root";
   if (icon === "pill") return "default-pill";
-  if (icon === "herb" || icon === "leaf") return "default-herb";
+  if (icon === "leaf") return "default-leaf";
+  if (icon === "flower") return "default-flower";
+  if (icon === "mushroom") return "default-mushroom";
+  if (icon === "herb") return "default-herb";
+  if (icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell") return "default-beast";
+  if (icon === "silk") return "default-silk";
+  if (icon === "stone" || icon === "sand") return "default-stone";
   if (icon === "sword") return "default-weapon";
   if (icon === "armor" || icon === "boots") return "default-armor";
   if (icon === "manual" || icon === "scroll") return "default-manual";

@@ -19,10 +19,17 @@ function visualFolder(category: string, icon: string, equipSlot?: string) {
   if (icon === "ring" || icon === "talisman" || icon === "artifact") return "accessory";
   if (icon === "scroll" || icon === "paper") return "talisman";
   if (icon === "formation" || icon === "flag") return "formation";
-  if (icon === "herb" || icon === "leaf" || icon === "root" || icon === "flower" || icon === "mushroom") return "herb";
+  if (icon === "root" || icon === "herb") return "herb";
+  if (icon === "flower") return "flower";
+  if (icon === "mushroom") return "mushroom";
+  if (icon === "leaf") return "leaf";
   if (icon === "fruit") return "fruit";
+  if (icon === "water") return "water";
+  if (icon === "wood") return "wood";
   if (icon === "ore" || icon === "metal") return "ore";
-  if (icon === "crystal" || icon === "gem" || icon === "core") return "crystal";
+  if (icon === "core") return "monster-core";
+  if (icon === "spirit") return "spirit";
+  if (icon === "crystal" || icon === "gem") return "crystal";
   if (icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell") return "beast";
   if (category === "EQUIPMENT" && equipSlot === "WEAPON") return "weapon";
   if (category === "EQUIPMENT") return "armor";
@@ -31,14 +38,31 @@ function visualFolder(category: string, icon: string, equipSlot?: string) {
 
 function fallbackKey(folder: string, icon: string) {
   if (folder === "pill") return "default-pill";
-  if (folder === "herb" || folder === "fruit") return "default-herb";
+  if (icon === "root") return "default-root";
+  if (folder === "herb") return "default-herb";
+  if (folder === "flower") return "default-flower";
+  if (folder === "mushroom") return "default-mushroom";
+  if (folder === "leaf") return "default-leaf";
+  if (folder === "fruit") return "default-fruit";
+  if (folder === "water") return "default-water";
+  if (folder === "wood") return "default-wood";
   if (folder === "ore") return "default-ore";
-  if (folder === "crystal") return "default-crystal";
+  if (folder === "monster-core") return "default-monster-core";
+  if (folder === "spirit") return "default-spirit";
+  if (folder === "crystal" || icon === "gem") return "default-crystal";
   if (folder === "weapon") return "default-weapon";
   if (folder === "armor") return "default-armor";
-  if (folder === "talisman" || icon === "paper") return "default-talisman";
+  if (icon === "paper") return "default-paper";
+  if (icon === "powder") return "default-powder";
+  if (icon === "ink") return "default-ink";
+  if (icon === "water") return "default-water";
+  if (icon === "flag") return "default-flag";
+  if (folder === "talisman") return "default-talisman";
   if (folder === "formation") return "default-formation";
   if (folder === "accessory") return "default-artifact";
+  if (folder === "beast") return "default-beast";
+  if (icon === "silk") return "default-silk";
+  if (icon === "stone" || icon === "sand") return "default-stone";
   return "default-material";
 }
 

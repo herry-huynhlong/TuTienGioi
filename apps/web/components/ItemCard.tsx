@@ -1,6 +1,6 @@
 import { formatItemCategory, formatRarity } from "@/lib/format";
 import { getItemEconomy, itemVisualFallbackKey, itemVisualKey, jsonRecord } from "@ttg/game";
-import { Box, Gem, Hammer, Leaf, Pill, ScrollText, Shield, Shirt, Sparkles, Swords } from "lucide-react";
+import { Box, Droplets, Flag, Flower2, Gem, Hammer, Leaf, Pill, ScrollText, Shield, Shirt, Sparkles, Swords } from "lucide-react";
 import Link from "next/link";
 import { ItemVisualImage } from "./ItemVisualImage";
 
@@ -176,14 +176,28 @@ function iconFor(icon: string) {
   return ({
     herb: Leaf,
     leaf: Leaf,
+    root: Leaf,
+    flower: Flower2,
+    mushroom: Flower2,
+    fruit: Flower2,
     ore: Hammer,
+    metal: Hammer,
     wood: Leaf,
     core: Sparkles,
+    spirit: Sparkles,
     crystal: Gem,
     hide: Shirt,
     fang: Swords,
     bone: Box,
     silk: Sparkles,
+    paper: ScrollText,
+    powder: Sparkles,
+    ink: Droplets,
+    water: Droplets,
+    flag: Flag,
+    formation: Sparkles,
+    stone: Box,
+    sand: Box,
     sword: Swords,
     armor: Shirt,
     boots: Shield,

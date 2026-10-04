@@ -27,6 +27,11 @@ enum ActivityStatus {
   FAILED
 }
 
+enum CraftOutcome {
+  SUCCESS
+  FAILURE
+}
+
 enum TrainingType {
   BODY
   ATTACK
@@ -414,6 +419,7 @@ model Character {
   talents         CharacterTalent[]
   techniques      CharacterTechnique[]
   professions     CharacterProfession[]
+  craftMasteries  CraftRecipeMastery[]
   items           ItemInstance[]
   auctionsSelling Auction[] @relation("AuctionSeller")
   auctionsWon     Auction[] @relation("AuctionWinner")
@@ -893,8 +899,26 @@ model Recipe {
   outputQuantity Int @default(1)
   professionExp Int @default(0)
   jobs         CraftJob[]
+  masteries    CraftRecipeMastery[]
   @@index([professionId, requiredRank])
   @@index([unlockType])
+}
+
+model CraftRecipeMastery {
+  id          String @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  recipeId    String
+  recipe      Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  attempts    Int @default(0)
+  successes   Int @default(0)
+  failures    Int @default(0)
+  masteryExp  Int @default(0)
+  masteryLevel Int @default(0)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  @@unique([characterId, recipeId])
+  @@index([recipeId, masteryLevel])
 }
 
 model CraftJob {
@@ -911,6 +935,9 @@ model CraftJob {
   ingredients  Json?
   fee          BigInt @default(0)
   professionExp Int @default(0)
+  successChanceBps Int @default(10000)
+  outcome      CraftOutcome?
+  resolvedAt   DateTime?
   claimedAt   DateTime?
   @@index([characterId, status])
   @@index([endsAt, status])

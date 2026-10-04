@@ -5,7 +5,7 @@ import { getItemUsageDefinition, type ItemEffectSpec } from "./item-effects.js";
 import { pickWeighted, seededRng, seedFromString } from "./rng.js";
 import { economyFeatureUnlockReasons, hasReachedLuyenKhi1, recordOnboardingEvent } from "./onboarding.js";
 import { progressQuestEvent } from "./quests.js";
-import { professionExpGain, professionRankOrder, professionStationServices, promoteProfessionRank } from "./professions.js";
+import { calculateCraftSuccessChance, craftFailureExp, masteryLevelForExp, professionExpGain, professionRankOrder, professionStationServices, promoteProfessionRank, resolveProfessionFacilityGrade } from "./professions.js";
 import { canAccessSectLocation } from "./sect-access.js";
 import { revealAdjacentLocations } from "./world-discovery.js";
 
@@ -561,6 +561,15 @@ export async function startCraft(db: Db, characterId: string, recipeId: string, 
     if (professionRankOrder(characterProfession.rank) < professionRankOrder(recipe.requiredRank)) throw new GameError("PROFESSION_RANK_REQUIRED", "Bậc nghề nghiệp chưa đủ để dùng công thức này.");
     const activeCraft = await tx.craftJob.findFirst({ where: { characterId, status: ActivityStatus.ACTIVE } });
     if (activeCraft) throw new GameError("ACTIVE_CRAFT", "Bạn đang có một việc chế tạo đang chạy.");
+    const mastery = await tx.craftRecipeMastery.findUnique({ where: { characterId_recipeId: { characterId, recipeId: recipe.id } } });
+    const facilityGrade = resolveProfessionFacilityGrade(character.currentLocation, recipe.station);
+    const chance = calculateCraftSuccessChance({
+      professionRank: characterProfession.rank,
+      recipeRank: recipe.requiredRank,
+      masteryExp: mastery?.masteryExp ?? 0,
+      masteryLevel: mastery?.masteryLevel,
+      facilityGrade
+    });
     const ingredients = parseIngredientRows(recipe.ingredients);
     if (ingredients.length === 0) throw new GameError("BAD_RECIPE", "Công thức chưa có nguyên liệu hợp lệ.");
     for (const ingredient of ingredients) await consumeTemplateQuantity(tx, characterId, ingredient.itemId, ingredient.quantity);
@@ -576,7 +585,8 @@ export async function startCraft(db: Db, characterId: string, recipeId: string, 
         outputQuantity: recipe.outputQuantity,
         ingredients: inputJson(ingredients),
         fee: recipe.fee,
-        professionExp: recipe.professionExp
+        professionExp: recipe.professionExp,
+        successChanceBps: chance.finalBps
       }
     });
     await tx.gameLog.create({ data: { characterId, type: "profession", message: `Bắt đầu ${recipe.name}, tạo ${recipe.outputTemplate.name} x${recipe.outputQuantity}.` } });
@@ -584,7 +594,7 @@ export async function startCraft(db: Db, characterId: string, recipeId: string, 
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-export async function claimCraft(db: Db, characterId: string, craftJobId: string, now = new Date()) {
+export async function claimCraft(db: Db, characterId: string, craftJobId: string, now = new Date(), rng: () => number = Math.random) {
   return db.$transaction(async (tx) => {
     const job = await tx.craftJob.findUnique({ where: { id: craftJobId }, include: { recipe: { include: { profession: true, outputTemplate: true } } } });
     if (!job || job.characterId !== characterId) throw new GameError("NOT_FOUND", "Không tìm thấy việc chế tạo.");
@@ -592,43 +602,75 @@ export async function claimCraft(db: Db, characterId: string, craftJobId: string
     if (job.endsAt > now) throw new GameError("NOT_READY", "Việc chế tạo chưa hoàn thành.");
     const updated = await tx.craftJob.updateMany({
       where: { id: craftJobId, characterId, status: ActivityStatus.ACTIVE, endsAt: { lte: now } },
-      data: { status: ActivityStatus.CLAIMED, claimedAt: now }
+      data: { status: ActivityStatus.CLAIMED, claimedAt: now, resolvedAt: now }
     });
     if (updated.count !== 1) throw new GameError("ALREADY_CLAIMED", "Thành phẩm đã được nhận.");
+    const success = rng() < Math.max(0, Math.min(10000, job.successChanceBps ?? 10000)) / 10000;
+    await tx.craftJob.update({ where: { id: craftJobId }, data: { outcome: success ? "SUCCESS" : "FAILURE" } });
     const outputTemplateId = job.outputTemplateId ?? job.recipe.outputTemplateId;
     const outputQuantity = job.outputQuantity || job.recipe.outputQuantity || 1;
-    await addItemToInventory(tx, characterId, outputTemplateId, outputQuantity);
+    if (success) await addItemToInventory(tx, characterId, outputTemplateId, outputQuantity);
     const characterProfession = await tx.characterProfession.upsert({
       where: { characterId_professionId: { characterId, professionId: job.recipe.professionId } },
       update: {},
       create: { characterId, professionId: job.recipe.professionId, rank: "APPRENTICE", level: 1, experience: 0 }
     });
-    const gainedExp = professionExpGain(job.professionExp || job.recipe.professionExp, characterProfession.rank, job.recipe.requiredRank);
+    const baseProfessionExp = job.professionExp || job.recipe.professionExp;
+    const gainedExp = professionExpGain(success ? baseProfessionExp : craftFailureExp(baseProfessionExp), characterProfession.rank, job.recipe.requiredRank);
     const totalExperience = characterProfession.experience + gainedExp;
     const nextRank = promoteProfessionRank(characterProfession.rank, totalExperience);
     await tx.characterProfession.update({ where: { id: characterProfession.id }, data: { experience: totalExperience, rank: nextRank, level: professionRankOrder(nextRank) + 1 } });
-    await progressSectMissionEvent(tx, { characterId, eventType: "CRAFT_COMPLETED", itemKey: job.recipe.outputTemplate.key, recipeKey: job.recipe.key, professionKey: job.recipe.profession.key, amount: outputQuantity });
-    await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: job.recipe.outputTemplate.key, amount: outputQuantity });
+    const masteryGain = success ? 10 : 5;
+    const currentMastery = await tx.craftRecipeMastery.findUnique({ where: { characterId_recipeId: { characterId, recipeId: job.recipeId } } });
+    const nextMasteryExp = (currentMastery?.masteryExp ?? 0) + masteryGain;
+    const masteryUpdate = {
+      attempts: { increment: 1 },
+      masteryExp: nextMasteryExp,
+      masteryLevel: masteryLevelForExp(nextMasteryExp),
+      ...(success ? { successes: { increment: 1 } } : { failures: { increment: 1 } })
+    };
+    await tx.craftRecipeMastery.upsert({
+      where: { characterId_recipeId: { characterId, recipeId: job.recipeId } },
+      update: masteryUpdate,
+      create: {
+        characterId,
+        recipeId: job.recipeId,
+        attempts: 1,
+        successes: success ? 1 : 0,
+        failures: success ? 0 : 1,
+        masteryExp: masteryGain,
+        masteryLevel: masteryLevelForExp(masteryGain)
+      }
+    });
+    if (success) {
+      await progressSectMissionEvent(tx, { characterId, eventType: "CRAFT_COMPLETED", itemKey: job.recipe.outputTemplate.key, recipeKey: job.recipe.key, professionKey: job.recipe.profession.key, amount: outputQuantity });
+      await progressQuestEvent(tx, { characterId, eventType: "ITEM_OBTAINED", itemKey: job.recipe.outputTemplate.key, amount: outputQuantity });
+    }
     await tx.gameLog.create({
       data: {
         characterId,
         type: "profession",
-        message: `Hoàn thành ${job.recipe.name}, nhận ${job.recipe.outputTemplate.name} x${outputQuantity}, +${gainedExp} EXP ${job.recipe.profession.name}.`,
+        message: success
+          ? `Thành đan ${job.recipe.name}, nhận ${job.recipe.outputTemplate.name} x${outputQuantity}, +${gainedExp} EXP ${job.recipe.profession.name}.`
+          : `Luyện ${job.recipe.name} thất bại, dược lực không thành hình, +${gainedExp} EXP ${job.recipe.profession.name}.`,
         metadata: {
-          eventType: "CRAFT_COMPLETED",
+          eventType: success ? "CRAFT_COMPLETED" : "CRAFT_FAILED",
           professionId: job.recipe.professionId,
           professionKey: job.recipe.profession.key,
           recipeId: job.recipeId,
           recipeKey: job.recipe.key,
           outputItemId: outputTemplateId,
           outputItemKey: job.recipe.outputTemplate.key,
-          quantity: outputQuantity,
+          quantity: success ? outputQuantity : 0,
           craftJobId: job.id,
-          completedAt: now.toISOString()
+          completedAt: now.toISOString(),
+          successChanceBps: job.successChanceBps,
+          outcome: success ? "SUCCESS" : "FAILURE",
+          masteryGain
         } as Prisma.InputJsonValue
       }
     });
-    return { job, output: job.recipe.outputTemplate, quantity: outputQuantity, gainedExp, rank: nextRank };
+    return { job, output: job.recipe.outputTemplate, quantity: success ? outputQuantity : 0, gainedExp, rank: nextRank, success, successChanceBps: job.successChanceBps, masteryGain };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

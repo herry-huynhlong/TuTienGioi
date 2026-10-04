@@ -1594,6 +1594,87 @@ select.field option {
   gap: 0.5rem;
 }
 
+.training-duration-compact {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.training-duration-label {
+  color: #d6b25e;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.training-duration-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.training-duration-segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-height: 2rem;
+  border: 1px solid rgba(244, 239, 227, 0.11);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0.45rem 0.6rem;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.training-duration-segmented button:hover,
+.training-duration-segmented button.selected {
+  border-color: rgba(214, 178, 94, 0.45);
+  background: rgba(214, 178, 94, 0.13);
+  color: #f4efe3;
+}
+
+.training-duration-segmented button.selected svg {
+  color: #1fd3b7;
+}
+
+.training-duration-summary {
+  display: grid;
+  gap: 0.38rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.16);
+  padding: 0.6rem;
+}
+
+.training-duration-summary div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  color: rgba(244, 239, 227, 0.62);
+  font-size: 0.78rem;
+}
+
+.training-duration-summary svg {
+  color: #d6b25e;
+}
+
+.training-duration-summary b {
+  color: #f4efe3;
+  font-weight: 900;
+  text-align: right;
+}
+
+.training-duration-summary .warning b,
+.training-duration-compact em {
+  color: #f0b5a8;
+}
+
+.training-duration-compact em {
+  font-size: 0.74rem;
+  font-style: normal;
+}
+
 .training-location-badge {
   display: inline-flex;
   align-items: center;
@@ -1989,11 +2070,23 @@ select.field option {
 }
 
 .profession-tabs a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon title"
+    "icon meta";
+  align-items: center;
+  gap: 0.1rem 0.55rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   padding: 12px;
   text-decoration: none;
+}
+
+.profession-tabs a > svg {
+  grid-area: icon;
+  color: #d6b25e;
 }
 
 .profession-tabs a.active {
@@ -2006,10 +2099,46 @@ select.field option {
   display: block;
 }
 
+.profession-tabs b {
+  grid-area: title;
+}
+
 .profession-tabs span {
+  grid-area: meta;
   color: rgba(244, 239, 227, 0.66);
   font-size: 12px;
   margin-top: 4px;
+}
+
+.profession-rank-compact {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profession-rank-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.profession-rank-flow span {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(244, 239, 227, 0.58);
+  font-size: 0.76rem;
+  font-weight: 900;
+  padding: 0.42rem 0.55rem;
+}
+
+.profession-rank-flow span.unlocked {
+  border-color: rgba(31, 211, 183, 0.32);
+  background: rgba(31, 211, 183, 0.07);
+  color: #d8fff8;
+}
+
+.profession-rank-compact p {
+  color: rgba(244, 239, 227, 0.62);
+  font-size: 0.82rem;
 }
 
 .profession-rank-track {
@@ -2106,6 +2235,137 @@ select.field option {
   display: block;
   height: 100%;
   background: linear-gradient(90deg, var(--gold), var(--jade));
+}
+
+.profession-facility-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid rgba(244, 239, 227, 0.1);
+  background: rgba(0, 0, 0, 0.14);
+  padding: 0.65rem;
+}
+
+.profession-facility-box.ok {
+  border-color: rgba(31, 211, 183, 0.22);
+  background: rgba(31, 211, 183, 0.045);
+}
+
+.profession-facility-box.missing {
+  border-color: rgba(214, 178, 94, 0.18);
+  background: rgba(214, 178, 94, 0.06);
+}
+
+.profession-facility-box > svg:first-child {
+  color: #d6b25e;
+}
+
+.profession-facility-box > svg:last-child {
+  color: rgba(244, 239, 227, 0.58);
+}
+
+.profession-facility-box.ok > svg:last-child {
+  color: #1fd3b7;
+}
+
+.profession-facility-box span,
+.profession-facility-box b,
+.profession-facility-box small {
+  display: block;
+}
+
+.profession-facility-box span {
+  color: rgba(244, 239, 227, 0.55);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.profession-facility-box b {
+  color: #f4efe3;
+  font-size: 0.92rem;
+}
+
+.profession-facility-box small {
+  color: rgba(244, 239, 227, 0.58);
+  font-size: 0.76rem;
+}
+
+.craft-chance-box {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid rgba(31, 211, 183, 0.18);
+  background:
+    linear-gradient(90deg, rgba(31, 211, 183, 0.055), rgba(214, 178, 94, 0.035)),
+    rgba(0, 0, 0, 0.14);
+  padding: 0.7rem;
+}
+
+.craft-chance-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 0.7rem;
+  align-items: center;
+}
+
+.craft-chance-head span,
+.craft-mastery-line span {
+  color: rgba(244, 239, 227, 0.58);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.craft-chance-head b {
+  grid-row: span 2;
+  color: #d6b25e;
+  font-size: 1.5rem;
+  font-weight: 1000;
+}
+
+.craft-chance-head em {
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.8rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.craft-mastery-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.craft-mastery-line b {
+  color: rgba(244, 239, 227, 0.86);
+  font-size: 0.82rem;
+}
+
+.craft-chance-detail {
+  border-top: 1px solid rgba(244, 239, 227, 0.08);
+  padding-top: 0.45rem;
+}
+
+.craft-chance-detail summary {
+  cursor: pointer;
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.craft-chance-detail div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+  color: rgba(244, 239, 227, 0.62);
+  font-size: 0.78rem;
+}
+
+.craft-chance-detail b {
+  color: #f4efe3;
 }
 
 .profession-recipe-card.locked {

@@ -7,10 +7,25 @@ import { formatRarity, formatService } from "@/lib/format";
 import { claimCraftAction, startCraftAction } from "@/lib/forms";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { ItemVisual } from "@/components/ItemCard";
-import { economyFeatureUnlockReasons, hasReachedLuyenKhi1, professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationLabels, professionStationServices } from "@ttg/game";
-import { AlertCircle, CheckCircle2, Clock, Hammer, Lock, MapPin, PackageCheck, Play, Timer } from "lucide-react";
+import { professionFacilityFor, professionFacilityNames, professionFacilityRoleLabels } from "@/lib/profession-facilities";
+import { calculateCraftSuccessChance, economyFeatureUnlockReasons, hasReachedLuyenKhi1, nextMasteryThreshold, professionFacilitySuccessBonusBps, professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationServices, resolveProfessionFacilityGrade } from "@ttg/game";
+import { AlertCircle, CheckCircle2, Clock, FlaskConical, Grid3X3, Hammer, Lock, MapPin, PackageCheck, Play, ScrollText, Sparkles, Star, Timer, type LucideIcon } from "lucide-react";
 
 type IngredientRow = { itemId?: unknown; key?: unknown; quantity?: unknown; qty?: unknown };
+
+const professionIconMap: Record<string, LucideIcon> = {
+  alchemy: FlaskConical,
+  forging: Hammer,
+  talisman: ScrollText,
+  formation: Grid3X3
+};
+
+const stationIconMap: Record<string, LucideIcon> = {
+  ALCHEMY_FURNACE: FlaskConical,
+  FORGE: Hammer,
+  TALISMAN_TABLE: ScrollText,
+  FORMATION_ALTAR: Grid3X3
+};
 
 export default async function ProfessionPage({ searchParams }: { searchParams?: Promise<{ profession?: string; error?: string; ok?: string }> }) {
   const params = await searchParams;
@@ -44,13 +59,16 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
   const nextRank = professionRanks[currentOrder + 1] ?? null;
   const visibleRanks = new Set([currentRank, ...(nextRank ? [nextRank] : [])]);
   const visibleRecipes = activeProfession.recipes.filter((recipe) => visibleRanks.has(recipe.requiredRank));
+  const chanceWording = craftChanceWording(activeProfession.key);
   const ingredientIds = [...new Set(visibleRecipes.flatMap((recipe) => ingredientRows(recipe.ingredients).map((row) => String(row.itemId ?? "")).filter(Boolean)))];
   const neededServices = [...new Set(visibleRecipes.flatMap((recipe) => professionStationServices[recipe.station] ?? []))];
-  const [ingredientTemplates, stationLocations] = await Promise.all([
+  const [ingredientTemplates, stationLocations, masteries] = await Promise.all([
     ingredientIds.length ? prisma.itemTemplate.findMany({ where: { id: { in: ingredientIds } } }) : [],
-    neededServices.length ? prisma.location.findMany({ where: { services: { hasSome: neededServices } }, select: { key: true, name: true, services: true }, orderBy: { name: "asc" }, take: 20 }) : []
+    neededServices.length ? prisma.location.findMany({ where: { services: { hasSome: neededServices } }, select: { key: true, name: true, services: true }, orderBy: { name: "asc" }, take: 20 }) : [],
+    prisma.craftRecipeMastery.findMany({ where: { characterId: c.id, recipeId: { in: visibleRecipes.map((recipe) => recipe.id) } } })
   ]);
   const ingredientById = new Map(ingredientTemplates.map((item) => [item.id, item]));
+  const masteryByRecipeId = new Map(masteries.map((mastery) => [mastery.recipeId, mastery]));
   const ownedByTemplateId = new Map<string, number>();
   for (const item of c.items) ownedByTemplateId.set(item.templateId, (ownedByTemplateId.get(item.templateId) ?? 0) + item.quantity);
   const services = c.currentLocation?.services ?? [];
@@ -58,7 +76,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
 
   return (
     <GamePageBackground type="profession">
-    <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Cây nghề nghiệp dùng recipe, nguyên liệu, phí và thời gian thật. Công thức bậc hiện tại mở, bậc kế tiếp hiển thị khóa để định hướng tiến triển.">
+    <FacilityPage eyebrow="Nghề nghiệp" title="Công Xưởng Tu Tiên" description="Chọn nghề, đứng đúng cơ sở nghề và chế tạo vật phẩm theo công thức đã mở.">
       {params?.error ? <div className="action-alert error">{params.error}</div> : null}
       <FacilityTutorial title="Hướng dẫn Nghề Nghiệp">
         Chọn nghề, kiểm tra bậc nghề và đứng đúng cơ sở. Khi bắt đầu chế tạo, nguyên liệu và Linh Thạch bị trừ ngay; khi hoàn thành hãy nhận thành phẩm vào Ba Lô để lấy EXP nghề.
@@ -68,10 +86,12 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
         {professions.map((profession) => {
           const entry = c.professions.find((row) => row.professionId === profession.id);
           const rank = entry?.rank ?? "APPRENTICE";
+          const Icon = professionIconMap[profession.key] ?? Sparkles;
           return (
             <a key={profession.id} href={`/game/profession?profession=${profession.key}`} className={profession.id === activeProfession.id ? "active" : ""}>
+              <Icon size={18} aria-hidden />
               <b>{profession.name}</b>
-              <span>{professionRankLabels[rank]} · {entry?.experience ?? 0} EXP</span>
+              <span>{professionFacilityRoleLabels[profession.key] ?? "Cần: Cơ sở nghề"} · {professionRankLabels[rank]} · {entry?.experience ?? 0} EXP</span>
             </a>
           );
         })}
@@ -79,19 +99,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
 
       <section className="mt-4 grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
         <FacilityPanel title="Cây bậc nghề" subtitle={activeProfession.name}>
-          <div className="profession-rank-track">
-            {professionRanks.map((rank, index) => {
-              const unlocked = index <= currentOrder;
-              const threshold = professionRankExpThresholds[rank];
-              return (
-                <div key={rank} className={`profession-rank-node ${unlocked ? "unlocked" : "locked"}`}>
-                  {unlocked ? <CheckCircle2 size={18} /> : <Lock size={18} />}
-                  <b>{professionRankLabels[rank]}</b>
-                  <span>{threshold ? `Mốc ${threshold.toLocaleString("vi-VN")} EXP` : "Tối đa"}</span>
-                </div>
-              );
-            })}
-          </div>
+          <ProfessionRankTrack currentOrder={currentOrder} experience={characterProfession?.experience ?? 0} />
           <div className="info-table mt-4">
             <div><span>Địa điểm</span><b>{c.currentLocation?.name ?? "Vô định"}</b></div>
             <div><span>Cơ sở hiện có</span><b>{services.length ? services.map(formatService).join(", ") : "Không"}</b></div>
@@ -143,6 +151,18 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
             const stationServices = professionStationServices[recipe.station] ?? [];
             const stationOk = stationServices.length === 0 || stationServices.some((service) => services.includes(service));
             const stationLocation = stationServices.length ? stationLocations.find((location) => stationServices.some((service) => location.services.includes(service))) : null;
+            const mastery = masteryByRecipeId.get(recipe.id);
+            const facilityGrade = resolveProfessionFacilityGrade(stationOk ? c.currentLocation : stationLocation ?? c.currentLocation, recipe.station);
+            const facility = professionFacilityNames[recipe.station]?.[facilityGrade] ?? professionFacilityFor(recipe.station, recipe.requiredRank);
+            const chance = calculateCraftSuccessChance({
+              professionRank: currentRank,
+              recipeRank: recipe.requiredRank,
+              masteryExp: mastery?.masteryExp ?? 0,
+              masteryLevel: mastery?.masteryLevel,
+              facilityGrade
+            });
+            const nextMastery = nextMasteryThreshold(chance.masteryLevel);
+            const StationIcon = stationIconMap[recipe.station] ?? Hammer;
             return (
               <article key={recipe.id} className={`profession-recipe-card ${locked ? "locked" : ""}`}>
                 <div className="profession-recipe-head">
@@ -155,8 +175,36 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
                 <div className="profession-recipe-meta">
                   <span><Timer size={14} /> {recipe.craftMinutes} phút</span>
                   <span><CurrencyAmount amount={recipe.fee} /></span>
-                  <span>+{recipe.professionExp} EXP</span>
-                  <span><Hammer size={14} /> {professionStationLabels[recipe.station] ?? recipe.station}</span>
+                  <span><Star size={14} /> +{recipe.professionExp} EXP</span>
+                </div>
+                <div className={stationOk ? "profession-facility-box ok" : "profession-facility-box missing"}>
+                  <StationIcon size={18} aria-hidden />
+                  <div>
+                    <span>Cơ sở yêu cầu</span>
+                    <b>{facility.name}</b>
+                    <small>{facility.gradeLabel} · +{Math.round(professionFacilitySuccessBonusBps[facilityGrade] / 100)}% {chanceWording.bonusLabel} · {stationOk ? "Đã có cơ sở phù hợp" : `Hiện tại: ${c.currentLocation?.name ?? "Vô định"}`}</small>
+                  </div>
+                  {stationOk ? <CheckCircle2 size={17} aria-hidden /> : <AlertCircle size={17} aria-hidden />}
+                </div>
+                <div className="craft-chance-box">
+                  <div className="craft-chance-head">
+                    <span>{chanceWording.title}</span>
+                    <b>{chance.percent}%</b>
+                    <em>{chanceLabel(chance.finalBps, chanceWording.perfectLabel)}</em>
+                  </div>
+                  <div className="profession-job-progress" aria-hidden><span style={{ width: `${chance.percent}%` }} /></div>
+                  <div className="craft-mastery-line">
+                    <span>Độ thành thạo</span>
+                    <b>{mastery?.masteryExp ?? 0} / {nextMastery} EXP</b>
+                  </div>
+                  <details className="craft-chance-detail">
+                    <summary>Chi tiết xác suất</summary>
+                    <div><span>Trình độ {activeProfession.name}</span><b>+{Math.round(chance.breakdown.rankBonusBps / 100)}%</b></div>
+                    <div><span>Vượt cấp nghề</span><b>+{Math.round(chance.breakdown.overRankBonusBps / 100)}%</b></div>
+                    <div><span>Thành thạo công thức</span><b>+{Math.round(chance.breakdown.masteryBps / 100)}%</b></div>
+                    <div><span>{facility.name}</span><b>+{Math.round(chance.breakdown.facilityBps / 100)}%</b></div>
+                    <div><span>Độ khó công thức</span><b>-{Math.round(chance.breakdown.difficultyBps / 100)}%</b></div>
+                  </details>
                 </div>
                 <div className="profession-ingredients">
                   {ingredientRows(recipe.ingredients).map((row) => {
@@ -180,7 +228,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
                       <div className="profession-station-warning">
                         <AlertCircle size={16} aria-hidden />
                         <span>
-                          <b>Cần cơ sở: {professionStationLabels[recipe.station] ?? recipe.station}</b>
+                          <b>Cần {facility.name}</b>
                           <small>Hiện tại: {c.currentLocation?.name ?? "Vô định"}{stationLocation ? ` · Gợi ý: ${stationLocation.name}` : ""}</small>
                         </span>
                       </div>
@@ -208,10 +256,46 @@ function ingredientRows(value: unknown): IngredientRow[] {
   return Array.isArray(value) ? value.filter((entry): entry is IngredientRow => Boolean(entry && typeof entry === "object")) : [];
 }
 
+function ProfessionRankTrack({ currentOrder, experience }: { currentOrder: number; experience: number }) {
+  const currentRank = professionRanks[currentOrder] ?? "APPRENTICE";
+  const nextRank = professionRanks[currentOrder + 1] ?? null;
+  const nextThreshold = nextRank ? professionRankExpThresholds[currentRank] : null;
+  const progress = nextThreshold ? Math.min(100, Math.round((experience / nextThreshold) * 100)) : 100;
+  return (
+    <div className="profession-rank-compact">
+      <div className="profession-rank-flow">
+        {professionRanks.map((rank, index) => (
+          <span key={rank} className={index <= currentOrder ? "unlocked" : ""}>{professionRankLabels[rank]}</span>
+        ))}
+      </div>
+      <div className="profession-job-progress" aria-hidden><span style={{ width: `${progress}%` }} /></div>
+      <p>{nextRank ? `${experience.toLocaleString("vi-VN")} / ${nextThreshold?.toLocaleString("vi-VN")} EXP · Mốc tiếp theo: ${professionRankLabels[nextRank]}` : "Đã đạt bậc nghề tối đa."}</p>
+    </div>
+  );
+}
+
 function formatDuration(ms: number) {
   const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (hours > 0) return `${hours} giờ ${minutes} phút`;
   return `${minutes} phút`;
+}
+
+function craftChanceWording(professionKey: string) {
+  if (professionKey === "alchemy") return { title: "Xác suất thành đan", bonusLabel: "Thành Đan", perfectLabel: "Chắc chắn thành đan" };
+  if (professionKey === "forging") return { title: "Xác suất thành khí", bonusLabel: "Thành Khí", perfectLabel: "Chắc chắn thành khí" };
+  if (professionKey === "talisman") return { title: "Xác suất thành phù", bonusLabel: "Thành Phù", perfectLabel: "Chắc chắn thành phù" };
+  if (professionKey === "formation") return { title: "Xác suất thành trận", bonusLabel: "Thành Trận", perfectLabel: "Chắc chắn thành trận" };
+  return { title: "Xác suất chế tạo", bonusLabel: "Thành Công", perfectLabel: "Chắc chắn thành công" };
+}
+
+function chanceLabel(bps: number, perfectLabel: string) {
+  const percent = Math.round(bps / 100);
+  if (percent >= 100) return perfectLabel;
+  if (percent >= 90) return "Rất cao";
+  if (percent >= 70) return "Ổn định";
+  if (percent >= 50) return "Có thể thử";
+  if (percent >= 25) return "Khó";
+  return "Rất khó";
 }

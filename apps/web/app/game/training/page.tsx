@@ -2,11 +2,12 @@ import { prisma } from "@ttg/db";
 import { getUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ActionAlert } from "@/components/ActionAlert";
-import { cancelTrainingAction, claimTrainingAction, startTrainingAction } from "@/lib/forms";
+import { cancelTrainingAction, claimTrainingAction } from "@/lib/forms";
+import { TrainingDurationSelector } from "@/components/TrainingDurationSelector";
 import { currentEnergy, trainingDurationConfigs, trainingDurationOptions, trainingTypeConfigs, trainingTypes, calculateTrainingGain, trainingStatCap, type TrainingDurationKey, type TrainingTypeKey } from "@ttg/game";
 import { FacilityPage, FacilityPanel, FacilityTierStrip, FacilityTutorial } from "@/components/FacilityPage";
 import { GamePageBackground } from "@/components/GamePageBackground";
-import { CheckCircle2, Clock, Droplets, Dumbbell, Eye, Gauge, Heart, HeartPulse, Info, Lock, MapPin, Play, Shield, Swords, Timer, TrendingUp, Wind, XCircle, Zap, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Clock, Droplets, Dumbbell, Eye, Gauge, Heart, HeartPulse, Info, Lock, MapPin, Shield, Swords, Timer, TrendingUp, Wind, XCircle, Zap, type LucideIcon } from "lucide-react";
 
 const trainingIconMap: Record<TrainingTypeKey, LucideIcon> = {
   BODY: HeartPulse,
@@ -194,27 +195,21 @@ function TrainingCard({ trainingType, character, energy, statCap, locked }: { tr
         <div className="training-stat-progress" aria-hidden><span style={{ width: `${progress}%` }} /></div>
         {atCap ? <small className="training-warning">Đã đạt giới hạn. Đột phá cảnh giới để nâng giới hạn rèn luyện.</small> : null}
       </div>
-      <div className="training-duration-grid">
-        {trainingDurationOptions.map((duration) => {
+      <TrainingDurationSelector
+        trainingType={trainingType}
+        statLabel={typeConfig.label}
+        energy={energy}
+        locked={locked}
+        options={trainingDurationOptions.map((duration) => {
           const config = trainingDurationConfigs[duration];
-          const gain = calculateTrainingGain({ stat, statCap, baseGain: config.baseGain, modifierBps: typeConfig.modifierBps });
-          const disabled = locked || energy < config.energyCost || gain <= 0;
-          const disabledReason = locked ? "Đang có phiên rèn khác" : energy < config.energyCost ? "Không đủ Thể Lực" : gain <= 0 ? "Đã đạt giới hạn" : null;
-          return (
-            <form key={duration} action={startTrainingAction} className="training-duration-card">
-              <input type="hidden" name="trainingType" value={trainingType} />
-              <input type="hidden" name="duration" value={duration} />
-              <div className="training-duration-meta">
-                <b><Clock size={14} aria-hidden /> {config.label}</b>
-                <span><Zap size={14} aria-hidden /> -{config.energyCost} Thể Lực</span>
-                <small><TrendingUp size={14} aria-hidden /> +{gain} dự kiến</small>
-              </div>
-              {disabledReason ? <em>{disabledReason}</em> : null}
-              <button className="btn btn-secondary w-full" disabled={disabled}><Play size={15} aria-hidden /> Bắt đầu rèn</button>
-            </form>
-          );
+          return {
+            key: duration,
+            label: config.label,
+            energyCost: config.energyCost,
+            gain: calculateTrainingGain({ stat, statCap, baseGain: config.baseGain, modifierBps: typeConfig.modifierBps })
+          };
         })}
-      </div>
+      />
     </div>
   );
 }

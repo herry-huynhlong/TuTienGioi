@@ -5,6 +5,7 @@ import { breakthroughAction, cancelCultivationAction, cultivateAction } from "@/
 import { getGameTime, getItemUsageDefinition, getOnboardingState, resolveLocationBackground, resolveLocationImagePosition, settleActiveCultivation, settleCharacterResources } from "@ttg/game";
 import Link from "next/link";
 import { Check, Circle, Compass, MapPin, ScrollText } from "lucide-react";
+import { Activity, ArrowRight, Backpack, BriefcaseBusiness, Clock, Coins, Dumbbell, Gem, Landmark, Mountain, Orbit, Sparkles, TrendingDown, UserRound, type LucideIcon } from "lucide-react";
 import { ActionAlert } from "@/components/ActionAlert";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { GamePageBackground } from "@/components/GamePageBackground";
@@ -26,6 +27,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
       location: true,
       currentLocation: { include: { zone: { include: { region: true } } } },
       cultivationJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
+      trainingJobs: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
+      craftJobs: { where: { status: "ACTIVE" }, include: { recipe: { include: { outputTemplate: true, profession: true } } }, orderBy: { endsAt: "asc" } },
       explorations: { where: { status: "ACTIVE" }, orderBy: { endsAt: "desc" } },
       travels: { where: { status: "ACTIVE" }, include: { route: { include: { origin: true, destination: true } } }, orderBy: { endsAt: "desc" } },
       sect: true,
@@ -59,6 +62,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   const activeCount = c.cultivationJobs.length + c.explorations.length + c.travels.length;
   const activeWorldCount = c.explorations.length + c.travels.length;
   const activeCultivation = c.cultivationJobs[0];
+  const activeTraining = c.trainingJobs[0];
   const activeCultivationReward = activeCultivation?.accumulatedReward ?? 0n;
   const projectedCultivation = cappedCultivation;
   const heroImage = resolveLocationBackground(c.currentLocation);
@@ -91,25 +95,28 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
       <ActionAlert message={params?.error} />
 
       <section className="dashboard-grid">
-        <Panel title="Dẫn Đạo" className="lg:col-span-2">
+        <Panel title="Mục Tiêu Hiện Tại" icon={ScrollText} className="lg:col-span-2">
           <div className="quest-tracker">
             {canBreakthrough ? (
               <>
-                <div className="flex items-start justify-between gap-4">
+                <div className="dashboard-focus-card">
+                  <Sparkles size={20} aria-hidden />
                   <div>
-                    <p className="text-sm font-bold text-gold">Đột Phá</p>
-                    <p className="muted mt-1 text-sm">Tu vi đã viên mãn. Hãy chủ động đột phá để mở cảnh giới tiếp theo.</p>
+                    <span>Bình cảnh</span>
+                    <b>Đột Phá</b>
+                    <p>Tu vi đã viên mãn. Hãy chủ động đột phá để mở cảnh giới tiếp theo.</p>
                   </div>
-                  <span className="status-pill">Bình cảnh</span>
                 </div>
                 <Link href="/game?breakthrough=1" className="btn mt-4 w-full sm:w-auto">Mở Đột Phá</Link>
               </>
             ) : c.quests.length > 0 ? (
               <>
-                <div className="flex items-start justify-between gap-4">
+                <div className="dashboard-focus-card">
+                  <ScrollText size={20} aria-hidden />
                   <div>
-                    <p className="text-sm font-bold text-gold">Nhiệm vụ đang theo</p>
-                    <p className="muted mt-1 text-sm">Nhân vật và thế giới sẽ tự cập nhật khi bạn di chuyển, săn yêu hoặc nhặt vật phẩm.</p>
+                    <span>Nhiệm vụ đang theo</span>
+                    <b>{c.quests[0]?.template.title}</b>
+                    <p>{c.quests[0]?.status === "READY_TO_TURN_IN" ? "Có thể nộp nhiệm vụ." : `Tiến độ ${c.quests[0]?.progress ?? 0}/${c.quests[0]?.targetCount ?? 0}`}</p>
                   </div>
                   <Link href="/game/quests" className="status-pill">Mở</Link>
                 </div>
@@ -124,63 +131,71 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
               </>
             ) : (
               <>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-bold text-gold">{onboarding.currentChapter.title}</p>
-                <p className="muted mt-1 text-sm">{onboarding.currentChapter.summary}</p>
-              </div>
-              <span className="status-pill">{onboarding.completedCount}/{onboarding.totalCount}</span>
-            </div>
-            <div className="mt-4 grid gap-2">
-              {onboarding.currentChapter.objectives.map((objective) => (
-                <div key={objective.key} className="objective-row">
-                  {objective.completed ? <Check size={16} aria-hidden /> : <Circle size={16} aria-hidden />}
-                  <span>{objective.label}</span>
+                <div className="dashboard-focus-card">
+                  <Compass size={20} aria-hidden />
+                  <div>
+                    <span>Chỉ dẫn</span>
+                    <b>{onboarding.currentChapter.title}</b>
+                    <p>{onboarding.currentChapter.summary}</p>
+                  </div>
+                  <span className="status-pill">{onboarding.completedCount}/{onboarding.totalCount}</span>
                 </div>
-              ))}
-            </div>
-            <Link href={onboarding.nextObjective.href} className="btn mt-4 w-full sm:w-auto">
-              <Compass size={16} aria-hidden /> {onboarding.nextObjective.cta}
-            </Link>
+                <div className="mt-4 grid gap-2">
+                  {onboarding.currentChapter.objectives.map((objective) => (
+                    <div key={objective.key} className="objective-row">
+                      {objective.completed ? <Check size={16} aria-hidden /> : <Circle size={16} aria-hidden />}
+                      <span>{objective.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <Link href={onboarding.nextObjective.href} className="btn mt-4 w-full sm:w-auto">
+                  <Compass size={16} aria-hidden /> {onboarding.nextObjective.cta}
+                </Link>
               </>
             )}
           </div>
         </Panel>
 
-        <Panel title="Hiện Trạng" className="lg:col-span-2">
-          <div className="info-table">
-            <Info label="Cảnh giới" value={formatRealm(c.realmStage.realm, c.realmStage)} />
-            <Info label="Linh căn" value={formatAptitude(c.spiritualRoot)} />
-            <Info label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
-            <Info label="Hoạt động" value={activeCultivation ? "Đang nhập định" : activeWorldCount > 0 ? `${activeWorldCount} việc đang diễn ra` : "Đang rảnh"} accent={activeCount > 0} />
-            <Info label="Vị trí" value={locationName} />
-            <Info label="Linh thạch" value={<CurrencyAmount amount={c.linhThach} />} accent />
+        <Panel title="Hiện Trạng" icon={Activity} className="lg:col-span-2">
+          <div className="dashboard-status-grid">
+            <StatusCard icon={Mountain} label="Cảnh giới" value={formatRealm(c.realmStage.realm, c.realmStage)} />
+            <StatusCard icon={Gem} label="Linh căn" value={formatAptitude(c.spiritualRoot)} />
+            <StatusCard icon={Landmark} label="Tông môn" value={c.sect?.name ?? "Tán tu"} />
+            <StatusCard icon={Activity} label="Hoạt động" value={activeCultivation ? "Đang nhập định" : activeWorldCount > 0 ? `${activeWorldCount} việc đang diễn ra` : "Đang rảnh"} accent={activeCount > 0} />
+            <StatusCard icon={MapPin} label="Vị trí" value={locationName} />
+            <StatusCard icon={Coins} label="Linh thạch" value={<CurrencyAmount amount={c.linhThach} />} accent />
           </div>
         </Panel>
 
-        <Panel title="Việc nên làm tiếp" className="lg:col-span-2">
-          <div className="activity-list">
-            <Link href={nextAction.href} className="activity-row">
+        <Panel title="Việc nên làm tiếp" icon={Compass} className="lg:col-span-2">
+          <div className="dashboard-action-list">
+            <Link href={nextAction.href} className="dashboard-action-card">
+              <ScrollText size={18} aria-hidden />
               <span><b>{nextAction.title}</b><small>{nextAction.description}</small></span>
-              <ScrollText size={17} aria-hidden />
+              <ArrowRight size={16} aria-hidden />
             </Link>
-            <Link href="/game/world" className="activity-row">
+            <Link href="/game/world" className="dashboard-action-card">
+              <MapPin size={18} aria-hidden />
               <span><b>Xem bản đồ</b><small>{locationName} · {regionName}</small></span>
-              <MapPin size={17} aria-hidden />
+              <ArrowRight size={16} aria-hidden />
             </Link>
-            <Link href="/game/character" className="activity-row">
+            <Link href="/game/character" className="dashboard-action-card">
+              <UserRound size={18} aria-hidden />
               <span><b>Xem nhân vật</b><small>Công pháp, thiên phú, trang bị và túi đồ</small></span>
-              <Compass size={17} aria-hidden />
+              <ArrowRight size={16} aria-hidden />
             </Link>
           </div>
         </Panel>
 
-        <Panel title="Tu luyện" className="lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-            <span className="muted">{atCultivationCap ? "BÌNH CẢNH" : `Tiến độ tới ${next?.name ?? "cực hạn hiện tại"}`}</span>
-            <b className="text-gold">{projectedCultivation.toString()} / {nextRequirement.toString()}</b>
+        <Panel title="Tu luyện" icon={Orbit} className="lg:col-span-2">
+          <div className="cultivation-overview">
+            <div>
+              <span>{formatRealm(c.realmStage.realm, c.realmStage)} {next ? `→ ${next.name}` : ""}</span>
+              <b>{projectedCultivation.toString()} / {nextRequirement.toString()}</b>
+            </div>
+            {locationCultivationBonus < 0 ? <em className="debuff"><TrendingDown size={14} aria-hidden /> Linh khí địa điểm {Math.round(locationCultivationBonus / 100)}%</em> : <em>Linh khí địa điểm {locationCultivationBonus ? `${locationCultivationBonus > 0 ? "+" : ""}${Math.round(locationCultivationBonus / 100)}%` : "bình thường"}</em>}
           </div>
-          <div className="resource-track h-3">
+          <div className="resource-track mt-3 h-3">
             <div className="resource-fill resource-cultivation" style={{ width: `${Math.min(100, activeCultivation ? Number((projectedCultivation * 100n) / nextRequirement) : progress)}%` }} />
           </div>
           <div className="mt-2 flex justify-between gap-3 text-xs text-paper/55">
@@ -224,27 +239,50 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
           ) : null}
         </Panel>
 
-        <Panel title="Hoạt động đang chạy" className="lg:col-span-2">
+        <Panel title="Hoạt động đang chạy" icon={Clock} className="lg:col-span-2">
           <div className="activity-list">
+            {activeCultivation ? (
+              <div className="activity-row activity-row-rich">
+                <Sparkles size={18} aria-hidden />
+                <span><b>Tu luyện</b><small>Đang nhập định · tích lũy +{activeCultivationReward.toString()} Tu vi</small></span>
+                <Link href="/game" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
+              </div>
+            ) : null}
+            {activeTraining ? (
+              <div className="activity-row activity-row-rich">
+                <Dumbbell size={18} aria-hidden />
+                <span><b>Rèn luyện</b><small>Kết thúc {activeTraining.endsAt.toLocaleString("vi-VN")}</small></span>
+                <Link href="/game/training" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
+              </div>
+            ) : null}
+            {c.craftJobs.map((job) => (
+              <div key={job.id} className="activity-row activity-row-rich">
+                <BriefcaseBusiness size={18} aria-hidden />
+                <span><b>Chế tạo</b><small>{job.recipe.name} · {job.endsAt <= now ? "đã hoàn thành" : `xong ${job.endsAt.toLocaleString("vi-VN")}`}</small></span>
+                <Link href="/game/profession" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
+              </div>
+            ))}
             {c.explorations.map((job) => (
-              <div key={job.id} className="activity-row">
+              <div key={job.id} className="activity-row activity-row-rich">
+                <Backpack size={18} aria-hidden />
                 <span><b>Lịch luyện</b><small>Kết thúc {job.endsAt.toLocaleString("vi-VN")}</small></span>
                 <Link href="/game/location" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
               </div>
             ))}
             {c.travels.map((travel) => (
-              <div key={travel.id} className="activity-row">
+              <div key={travel.id} className="activity-row activity-row-rich">
+                <MapPin size={18} aria-hidden />
                 <span><b>Di chuyển</b><small>{travel.route.origin.name} -&gt; {travel.route.destination.name}</small></span>
                 <Link href="/game/world" className="btn btn-secondary min-h-0 px-3 py-1 text-xs">Xem</Link>
               </div>
             ))}
-            {activeWorldCount === 0 ? <p className="muted">Không có hoạt động nào đang diễn ra.</p> : null}
+            {activeWorldCount === 0 && !activeCultivation && !activeTraining && c.craftJobs.length === 0 ? <div className="dashboard-empty-state"><Clock size={20} aria-hidden /><span><b>Không có hoạt động đang diễn ra.</b><small>Tu luyện, rèn luyện hoặc chế tạo sẽ xuất hiện tại đây khi đang chạy.</small></span></div> : null}
           </div>
         </Panel>
 
-        <Panel title="Thiên Đạo Bảng" className="lg:col-span-2">
-          <div className="event-list">
-            {heavenBoard.map((n) => <p key={n.id}><b>{formatGameDate(n.createdAt)}</b><br />{n.title}</p>)}
+        <Panel title="Thiên Đạo Bảng" icon={Sparkles} className="lg:col-span-2">
+          <div className="heaven-feed">
+            {heavenBoard.map((n) => <div key={n.id}><Sparkles size={14} aria-hidden /><p><b>{formatGameDate(n.createdAt)}</b><span>{n.title}</span></p></div>)}
             {heavenBoard.length === 0 ? <p className="muted">Thiên hạ tạm thời yên ổn.</p> : null}
           </div>
         </Panel>
@@ -277,20 +315,21 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   );
 }
 
-function Panel({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
+function Panel({ title, icon: Icon, children, className = "" }: { title: string; icon?: LucideIcon; children: React.ReactNode; className?: string }) {
   return (
     <section className={`dash-panel ${className}`}>
-      <div className="dash-panel-title">{title}</div>
+      <div className="dash-panel-title">{Icon ? <Icon size={15} aria-hidden /> : null}{title}</div>
       <div className="p-4">{children}</div>
     </section>
   );
 }
 
-function Info({ label, value, accent = false }: { label: string; value: React.ReactNode; accent?: boolean }) {
+function StatusCard({ icon: Icon, label, value, accent = false }: { icon: LucideIcon; label: string; value: React.ReactNode; accent?: boolean }) {
   return (
-    <div>
+    <div className={accent ? "dashboard-status-card accent" : "dashboard-status-card"}>
+      <Icon size={17} aria-hidden />
       <span>{label}</span>
-      <b className={accent ? "text-gold" : ""}>{value}</b>
+      <b>{value}</b>
     </div>
   );
 }

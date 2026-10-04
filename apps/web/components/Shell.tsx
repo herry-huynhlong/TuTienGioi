@@ -33,7 +33,7 @@ type NavLink = {
   status: FeatureStatus;
   featureKey?: keyof FeatureUnlocks;
   adminOnly?: boolean;
-  badge?: "messages" | "friends" | "notifications";
+  badge?: "messages" | "friends" | "notifications" | "auction" | "profession" | "quests";
 };
 
 type NavGroup = {
@@ -50,7 +50,7 @@ const navGroups: NavGroup[] = [
       { href: "/game", label: "Tu Luyện", icon: Compass, status: "implemented", featureKey: "cultivation" },
       { href: "/game/training", label: "Rèn Luyện", icon: Dumbbell, status: "partial", featureKey: "character" },
       { href: "/game/location", label: "Lịch Luyện", icon: Mountain, status: "partial", featureKey: "exploration" },
-      { href: "/game/quests", label: "Nhiệm Vụ", icon: ScrollText, status: "partial", featureKey: "world" },
+      { href: "/game/quests", label: "Nhiệm Vụ", icon: ScrollText, status: "partial", featureKey: "world", badge: "quests" },
       { href: "/game/sect", label: "Tông Môn", icon: Landmark, status: "partial", featureKey: "sect" },
       { href: "/game/inventory", label: "Túi Đồ", icon: Backpack, status: "partial", featureKey: "character" }
     ]
@@ -59,8 +59,8 @@ const navGroups: NavGroup[] = [
     title: "Kinh tế",
     links: [
       { href: "/game/market", label: "Vạn Bảo Lâu", icon: ShoppingBag, status: "partial", featureKey: "market" },
-      { href: "/game/auction", label: "Đấu Giá", icon: Gavel, status: "partial", featureKey: "auction" },
-      { href: "/game/profession", label: "Nghề Nghiệp", icon: BriefcaseBusiness, status: "partial", featureKey: "profession" }
+      { href: "/game/auction", label: "Đấu Giá", icon: Gavel, status: "partial", featureKey: "auction", badge: "auction" },
+      { href: "/game/profession", label: "Nghề Nghiệp", icon: BriefcaseBusiness, status: "partial", featureKey: "profession", badge: "profession" }
     ]
   },
   {

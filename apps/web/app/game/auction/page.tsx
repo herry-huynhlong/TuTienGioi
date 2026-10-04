@@ -99,7 +99,10 @@ function AuctionList({ tab, auctions, selectedAuction, characterId, balance, now
         <div className="market-sell-list mt-4">
           {auctions.map((auction) => (
             <Link key={auction.id} href={`/game/auction${tab === "upcoming" ? "" : `?tab=${tab}`}${tab === "upcoming" ? "?" : "&"}detail=${auction.id}`} className={selectedAuction?.id === auction.id ? "selected" : ""}>
-              <b>{auction.item.template.name}</b>
+              <span className="auction-list-title">
+                <b>{auction.item.template.name}</b>
+                <AuctionStatusBadge status={auctionParticipationStatus(auction, characterId)} />
+              </span>
               <small>{phaseLabel(auction.phase)} · {auctionTimeLabel(auction, now)} · {auction.participants.length} đăng ký</small>
             </Link>
           ))}
@@ -122,6 +125,7 @@ function AuctionDetail({ auction, characterId, balance, now }: { auction: any; c
   const isMyTurn = auction.currentTurnParticipant?.characterId === characterId;
   const canJoin = auction.phase === AuctionPhase.OPEN_REGISTRATION && !me && !isSeller;
   const canAct = auction.phase === AuctionPhase.LIVE && me?.status === AuctionParticipantStatus.ACTIVE && isMyTurn && !isSeller;
+  const myStatus = auctionParticipationStatus(auction, characterId);
   return (
     <ItemDetailPanel
       template={auction.item.template}
@@ -135,7 +139,8 @@ function AuctionDetail({ auction, characterId, balance, now }: { auction: any; c
         { label: "Thời gian", value: auctionTimeLabel(auction, now) },
         { label: "Lượt hiện tại", value: auction.currentTurnParticipant?.character.name ?? "Chưa bắt đầu" },
         { label: "Người dẫn đầu", value: auction.highestBidder?.name ?? "Chưa có" },
-        { label: "Đã đăng ký", value: auction.participants.length.toLocaleString("vi-VN") }
+        { label: "Đã đăng ký", value: auction.participants.length.toLocaleString("vi-VN") },
+        { label: "Trạng thái của bạn", value: <AuctionStatusBadge status={myStatus} /> }
       ]}
       action={
         <div className="auction-action-box">
@@ -258,6 +263,36 @@ function statusText(auction: any, me: any, isSeller: boolean, isMyTurn: boolean)
   if (auction.phase === AuctionPhase.OPEN_REGISTRATION) return "Bạn đã tham gia. Chờ hết thời gian đăng ký để bắt đầu trả giá.";
   if (isMyTurn) return "Đến lượt bạn quyết định.";
   return auction.currentTurnParticipant?.character?.name ? `Đang chờ ${auction.currentTurnParticipant.character.name} quyết định...` : "Đang chờ lượt kế tiếp.";
+}
+
+function auctionParticipationStatus(auction: any, characterId: string) {
+  if (auction.sellerId === characterId) return "seller";
+  const me = auction.participants.find((participant: any) => participant.characterId === characterId);
+  if (!me) return "none";
+  if (me.status === AuctionParticipantStatus.WINNER) return "won";
+  if (me.status === AuctionParticipantStatus.LOST) return "lost";
+  if (me.status === AuctionParticipantStatus.PASSED) return "passed";
+  if (auction.status !== AuctionStatus.ACTIVE) return auction.highestBidderId === characterId ? "won" : "ended";
+  if (auction.highestBidderId === characterId) return "leading";
+  if (me.lastBidPrice > 0n && auction.highestBidderId && auction.highestBidderId !== characterId) return "outbid";
+  if (auction.phase === AuctionPhase.OPEN_REGISTRATION) return "joined";
+  return "active";
+}
+
+function AuctionStatusBadge({ status }: { status: string }) {
+  const label = ({
+    seller: "Người bán",
+    joined: "Đã tham gia",
+    active: "Đã tham gia",
+    leading: "Đang dẫn giá",
+    outbid: "Bị vượt giá",
+    won: "Đã thắng",
+    lost: "Đã thua",
+    passed: "Đã rút",
+    ended: "Đã kết thúc"
+  } as Record<string, string>)[status];
+  if (!label) return null;
+  return <em className={`auction-status-badge ${status}`}>{label}</em>;
 }
 
 function okMessage(ok?: string) {

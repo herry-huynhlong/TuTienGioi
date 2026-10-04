@@ -25,7 +25,7 @@ export default async function GameLayout({ children }: { children: React.ReactNo
   });
   const [featureUnlocks, realtimeCounts] = character
     ? await Promise.all([getFeatureUnlockState(prisma, character.id), getRealtimeCounts(character.id)])
-    : [null, { unreadMessages: 0, pendingFriendRequests: 0, unreadNotifications: 0 }];
+    : [null, { unreadMessages: 0, pendingFriendRequests: 0, unreadNotifications: 0, activeAuctions: 0, readyCraftJobs: 0, readyQuests: 0 }];
   return (
     <RealtimeProvider initialCounts={realtimeCounts}>
       <Shell user={{ username: user.username, role: user.role }} character={character} featureUnlocks={featureUnlocks}>{children}</Shell>

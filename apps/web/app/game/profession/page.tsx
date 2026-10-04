@@ -8,7 +8,7 @@ import { claimCraftAction, startCraftAction } from "@/lib/forms";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { ItemVisual } from "@/components/ItemCard";
 import { economyFeatureUnlockReasons, hasReachedLuyenKhi1, professionRankExpThresholds, professionRankLabels, professionRankOrder, professionRanks, professionStationLabels, professionStationServices } from "@ttg/game";
-import { CheckCircle2, Lock, Play, Timer } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Hammer, Lock, MapPin, PackageCheck, Play, Timer } from "lucide-react";
 
 type IngredientRow = { itemId?: unknown; key?: unknown; quantity?: unknown; qty?: unknown };
 
@@ -45,7 +45,11 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
   const visibleRanks = new Set([currentRank, ...(nextRank ? [nextRank] : [])]);
   const visibleRecipes = activeProfession.recipes.filter((recipe) => visibleRanks.has(recipe.requiredRank));
   const ingredientIds = [...new Set(visibleRecipes.flatMap((recipe) => ingredientRows(recipe.ingredients).map((row) => String(row.itemId ?? "")).filter(Boolean)))];
-  const ingredientTemplates = ingredientIds.length ? await prisma.itemTemplate.findMany({ where: { id: { in: ingredientIds } } }) : [];
+  const neededServices = [...new Set(visibleRecipes.flatMap((recipe) => professionStationServices[recipe.station] ?? []))];
+  const [ingredientTemplates, stationLocations] = await Promise.all([
+    ingredientIds.length ? prisma.itemTemplate.findMany({ where: { id: { in: ingredientIds } } }) : [],
+    neededServices.length ? prisma.location.findMany({ where: { services: { hasSome: neededServices } }, select: { key: true, name: true, services: true }, orderBy: { name: "asc" }, take: 20 }) : []
+  ]);
   const ingredientById = new Map(ingredientTemplates.map((item) => [item.id, item]));
   const ownedByTemplateId = new Map<string, number>();
   for (const item of c.items) ownedByTemplateId.set(item.templateId, (ownedByTemplateId.get(item.templateId) ?? 0) + item.quantity);
@@ -100,15 +104,24 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
             <div className="activity-list">
               {c.craftJobs.map((job) => {
                 const ready = job.endsAt.getTime() <= Date.now();
+                const totalMs = Math.max(1, job.endsAt.getTime() - job.startedAt.getTime());
+                const elapsedMs = Math.max(0, Date.now() - job.startedAt.getTime());
+                const progress = ready ? 100 : Math.min(100, Math.round((elapsedMs / totalMs) * 100));
                 return (
-                  <div key={job.id} className="activity-row">
-                    <span>
+                  <div key={job.id} className="profession-job-card">
+                    <ItemVisual template={job.recipe.outputTemplate} size="card" />
+                    <div className="profession-job-main">
+                      <span className={ready ? "profession-job-state ready" : "profession-job-state"}>{ready ? "Hoàn thành" : "Đang chế tạo"}</span>
                       <b>{job.recipe.name}</b>
-                      <small>{job.recipe.profession.name} · tạo {job.recipe.outputTemplate.name} · {ready ? "đã hoàn thành" : `xong ${job.endsAt.toLocaleString("vi-VN")}`}</small>
-                    </span>
+                      <small>{job.recipe.profession.name} · tạo {job.recipe.outputTemplate.name}</small>
+                      <div className="profession-job-progress" aria-hidden><span style={{ width: `${progress}%` }} /></div>
+                      <small>{ready ? "Có thể nhận thành phẩm." : `Còn ${formatDuration(job.endsAt.getTime() - Date.now())}`}</small>
+                    </div>
                     <form action={claimCraftAction}>
                       <input type="hidden" name="id" value={job.id} />
-                      <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled={!ready}>{ready ? "Nhận" : "Đang luyện"}</button>
+                      <button className="btn btn-secondary min-h-0 px-3 py-1 text-xs" disabled={!ready}>
+                        {ready ? <PackageCheck size={14} aria-hidden /> : <Clock size={14} aria-hidden />} {ready ? "Nhận" : "Đang luyện"}
+                      </button>
                     </form>
                   </div>
                 );
@@ -129,6 +142,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
             const locked = professionRankOrder(currentRank) < professionRankOrder(recipe.requiredRank);
             const stationServices = professionStationServices[recipe.station] ?? [];
             const stationOk = stationServices.length === 0 || stationServices.some((service) => services.includes(service));
+            const stationLocation = stationServices.length ? stationLocations.find((location) => stationServices.some((service) => location.services.includes(service))) : null;
             return (
               <article key={recipe.id} className={`profession-recipe-card ${locked ? "locked" : ""}`}>
                 <div className="profession-recipe-head">
@@ -142,7 +156,7 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
                   <span><Timer size={14} /> {recipe.craftMinutes} phút</span>
                   <span><CurrencyAmount amount={recipe.fee} /></span>
                   <span>+{recipe.professionExp} EXP</span>
-                  <span>{professionStationLabels[recipe.station] ?? recipe.station}</span>
+                  <span><Hammer size={14} /> {professionStationLabels[recipe.station] ?? recipe.station}</span>
                 </div>
                 <div className="profession-ingredients">
                   {ingredientRows(recipe.ingredients).map((row) => {
@@ -161,12 +175,24 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
                 {locked ? (
                   <button className="btn btn-secondary w-full" disabled><Lock size={16} /> {professionRankLabels[recipe.requiredRank]}</button>
                 ) : (
-                  <form action={startCraftAction}>
-                    <input type="hidden" name="recipeId" value={recipe.id} />
-                    <button className="btn btn-primary w-full" disabled={!stationOk || hasActiveCraft}>
-                      <Play size={16} /> {!stationOk ? "Sai cơ sở" : hasActiveCraft ? "Đang chế tạo" : "Chế tạo"}
-                    </button>
-                  </form>
+                  <div className="profession-craft-actions">
+                    {!stationOk ? (
+                      <div className="profession-station-warning">
+                        <AlertCircle size={16} aria-hidden />
+                        <span>
+                          <b>Cần cơ sở: {professionStationLabels[recipe.station] ?? recipe.station}</b>
+                          <small>Hiện tại: {c.currentLocation?.name ?? "Vô định"}{stationLocation ? ` · Gợi ý: ${stationLocation.name}` : ""}</small>
+                        </span>
+                      </div>
+                    ) : null}
+                    <form action={startCraftAction}>
+                      <input type="hidden" name="recipeId" value={recipe.id} />
+                      <button className="btn btn-primary w-full" disabled={!stationOk || hasActiveCraft}>
+                        <Play size={16} /> {!stationOk ? "Cần đúng cơ sở" : hasActiveCraft ? "Đang chế tạo" : "Chế tạo"}
+                      </button>
+                    </form>
+                    {!stationOk && stationLocation ? <a className="profession-station-link" href={`/game/world?location=${stationLocation.key}`}><MapPin size={14} aria-hidden /> Xem {stationLocation.name}</a> : null}
+                  </div>
                 )}
               </article>
             );
@@ -180,4 +206,12 @@ export default async function ProfessionPage({ searchParams }: { searchParams?: 
 
 function ingredientRows(value: unknown): IngredientRow[] {
   return Array.isArray(value) ? value.filter((entry): entry is IngredientRow => Boolean(entry && typeof entry === "object")) : [];
+}
+
+function formatDuration(ms: number) {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours} giờ ${minutes} phút`;
+  return `${minutes} phút`;
 }

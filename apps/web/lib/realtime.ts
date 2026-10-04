@@ -4,6 +4,9 @@ export type RealtimeCounts = {
   unreadMessages: number;
   pendingFriendRequests: number;
   unreadNotifications: number;
+  activeAuctions: number;
+  readyCraftJobs: number;
+  readyQuests: number;
 };
 
 export type RealtimeConversation = {
@@ -35,12 +38,16 @@ export type RealtimeNotification = {
 };
 
 export async function getRealtimeCounts(characterId: string): Promise<RealtimeCounts> {
-  const [unreadMessages, pendingFriendRequests, unreadNotifications] = await Promise.all([
+  const now = new Date();
+  const [unreadMessages, pendingFriendRequests, unreadNotifications, activeAuctions, readyCraftJobs, readyQuests] = await Promise.all([
     prisma.message.count({ where: { receiverId: characterId, readAt: null } }),
     prisma.friendRequest.count({ where: { addresseeId: characterId, status: "PENDING" } }),
-    prisma.notification.count({ where: { characterId, readAt: null } })
+    prisma.notification.count({ where: { characterId, readAt: null } }),
+    prisma.auctionParticipant.count({ where: { characterId, status: "ACTIVE", auction: { status: "ACTIVE" } } }),
+    prisma.craftJob.count({ where: { characterId, status: "ACTIVE", endsAt: { lte: now } } }),
+    prisma.characterQuest.count({ where: { characterId, status: "READY_TO_TURN_IN" } })
   ]);
-  return { unreadMessages, pendingFriendRequests, unreadNotifications };
+  return { unreadMessages, pendingFriendRequests, unreadNotifications, activeAuctions, readyCraftJobs, readyQuests };
 }
 
 export async function getRealtimeSnapshot(characterId: string, peerId?: string) {

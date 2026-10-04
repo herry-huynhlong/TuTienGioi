@@ -9,7 +9,7 @@ type RealtimeState = {
   connected: boolean;
 };
 
-const emptyCounts: RealtimeCounts = { unreadMessages: 0, pendingFriendRequests: 0, unreadNotifications: 0 };
+const emptyCounts: RealtimeCounts = { unreadMessages: 0, pendingFriendRequests: 0, unreadNotifications: 0, activeAuctions: 0, readyCraftJobs: 0, readyQuests: 0 };
 const RealtimeContext = createContext<RealtimeState>({ counts: emptyCounts, latestNotification: null, connected: false });
 
 export function RealtimeProvider({ initialCounts, children }: { initialCounts: RealtimeCounts; children: React.ReactNode }) {
@@ -48,9 +48,15 @@ export function useRealtime() {
   return useContext(RealtimeContext);
 }
 
-export function RealtimeBadge({ type }: { type: "messages" | "friends" | "notifications" }) {
+export function RealtimeBadge({ type }: { type: "messages" | "friends" | "notifications" | "auction" | "profession" | "quests" }) {
   const { counts } = useRealtime();
-  const value = type === "messages" ? counts.unreadMessages : type === "friends" ? counts.pendingFriendRequests : counts.unreadNotifications;
+  const value =
+    type === "messages" ? counts.unreadMessages
+    : type === "friends" ? counts.pendingFriendRequests
+    : type === "auction" ? counts.activeAuctions
+    : type === "profession" ? counts.readyCraftJobs
+    : type === "quests" ? counts.readyQuests
+    : counts.unreadNotifications;
   if (value <= 0) return null;
   return <span className="nav-unread-badge">{value > 99 ? "99+" : value}</span>;
 }

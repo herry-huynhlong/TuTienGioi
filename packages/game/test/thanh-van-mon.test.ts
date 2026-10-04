@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SectRoleName } from "@ttg/db";
 import { canAccessThanhVanLocationByState, innerRequirementForRootQuality, roleToThanhVanState, thanhVanLocationAccess } from "../src/sect-access.js";
-import { thanhVanRoleLabel } from "../src/thanh-van-mon.js";
+import { revealThanhVanSpiritualRoot, thanhVanRoleLabel } from "../src/thanh-van-mon.js";
 
 describe("Thanh Van Mon runtime rules", () => {
   it("maps sect roles to gameplay membership states", () => {
@@ -34,5 +34,50 @@ describe("Thanh Van Mon runtime rules", () => {
     expect(thanhVanRoleLabel("OUTER_DISCIPLE")).toBe("Ngoại Môn Đệ Tử");
     expect(thanhVanRoleLabel("INNER_DISCIPLE")).toBe("Nội Môn Đệ Tử");
     expect(thanhVanRoleLabel("TRUE_DISCIPLE")).toBe("Chân Truyền Đệ Tử");
+  });
+
+  it("reveals spiritual root idempotently without repeating NPC relationship rewards", async () => {
+    let existingReveal: null | { id: string } = null;
+    let npcRelationshipIncrements = 0;
+    let spiritualRootUpserts = 0;
+    const tx = {
+      character: {
+        findUniqueOrThrow: async () => ({
+          id: "char_1",
+          spiritualRoot: { name: "Thủy Linh Căn", quality: "Trung", elements: ["Thủy"], multiplierBps: 11000 }
+        })
+      },
+      characterQuestFlag: {
+        findUnique: async () => existingReveal,
+        upsert: async ({ where }: { where: { characterId_key: { key: string } } }) => {
+          if (where.characterId_key.key === "thanh_van_spiritual_root_revealed") {
+            spiritualRootUpserts += 1;
+            existingReveal = { id: "flag_1" };
+          }
+          return existingReveal ?? { id: where.characterId_key.key };
+        }
+      },
+      npc: {
+        findUnique: async () => ({ id: "npc_1" })
+      },
+      playerNpcState: {
+        upsert: async ({ update }: { update: { relationshipScore: { increment: number } } }) => {
+          npcRelationshipIncrements += update.relationshipScore.increment;
+          return { id: "npc_state_1" };
+        }
+      },
+      characterQuest: {
+        updateMany: async () => ({ count: 1 })
+      }
+    };
+    const db = { $transaction: async <T>(callback: (inner: typeof tx) => Promise<T>) => callback(tx) };
+
+    const first = await revealThanhVanSpiritualRoot(db as never, "char_1");
+    const second = await revealThanhVanSpiritualRoot(db as never, "char_1");
+
+    expect(first.alreadyRevealed).toBe(false);
+    expect(second.alreadyRevealed).toBe(true);
+    expect(spiritualRootUpserts).toBe(1);
+    expect(npcRelationshipIncrements).toBe(5);
   });
 });

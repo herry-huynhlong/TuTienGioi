@@ -10,7 +10,7 @@ import { ActivityCountdown } from "@/components/ActivityCountdown";
 import { CurrencyAmount } from "@/components/CurrencyAmount";
 import { GamePageBackground } from "@/components/GamePageBackground";
 import { ItemSummaryCard } from "@/components/ItemCard";
-import { Compass, Home, Landmark, Mail, MessageCircle, Route, ScrollText, Shield, ShoppingBag, Swords, Trees, UserRound } from "lucide-react";
+import { Building2, Compass, Footprints, Globe2, Home, Landmark, Leaf, Mail, MapPin, MessageCircle, Mountain, Navigation, Route, ScrollText, Search, Shield, ShieldAlert, ShoppingBag, Swords, Trees, UserRound, Users } from "lucide-react";
 
 const activityLabels: Record<string, string> = {
   market: "Vạn Bảo Lâu",
@@ -63,62 +63,51 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
   const services = location?.services ?? [];
   const activeExploration = c.explorations.find((activity) => activity.status === "ACTIVE");
   const pendingEncounter = c.explorations.find((activity) => activity.status === "COMPLETED");
-  const latestResolved = c.explorations.find((activity) => activity.status === "CLAIMED");
   const hasBlockingActivity = Boolean(activeExploration || pendingEncounter || c.cultivationJobs.length || c.travels.length);
   const blockLabel = getBlockLabel(activeExploration, Boolean(pendingEncounter), c.cultivationJobs.length > 0, c.travels.length > 0);
   const energy = currentEnergy(c);
   const activities = getLocationActivities(services);
   const facilities = getLocationFacilities(services, location?.kind);
   const routes = location?.routesFrom ?? [];
-  const [logs, itemTemplates, monsters, npcsAtLocation, worldSeals, interactions] = await Promise.all([
-    prisma.gameLog.findMany({
-    where: { characterId: c.id, type: { in: ["exploration", "encounter"] } },
-    take: 6,
-    orderBy: { createdAt: "desc" }
-    }),
-    prisma.itemTemplate.findMany(),
-    prisma.monster.findMany({ select: { key: true, name: true, hp: true, realmOrder: true } }),
+  const [npcsAtLocation, worldSeals, interactions] = await Promise.all([
     location ? getNpcsAtLocation(prisma, c.id, location.id) : [],
     location ? prisma.worldSeal.findMany({ where: { locationId: location.id, status: "SEALED" }, orderBy: { createdAt: "asc" } }) : [],
     location ? getWorldInteractionsForLocation(prisma, c.id, location.id) : []
   ]);
-  const itemTemplatesByKey = new Map(itemTemplates.map((item) => [item.key, item]));
-  const monsterByKey = new Map(monsters.map((monster) => [monster.key, monster]));
   const usableItems = c.items.map((item) => ({ item, usage: getItemUsageDefinition(item.template) }));
-  const combatItems = usableItems.filter(({ usage }) => usage.combatUsable && usage.effects.some((effect) => effect.type === "DEAL_DAMAGE" || effect.type === "APPLY_SHIELD" || effect.type === "APPLY_DEBUFF" || effect.type === "BUFF_STAT" || effect.type === "ESCAPE"));
   const breakSealItems = usableItems.filter(({ usage }) => usage.effects.some((effect) => effect.type === "BREAK_SEAL"));
 
   return (
     <GamePageBackground type="adventure">
     <div className="p-5 lg:p-8">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
+      <header className="location-page-header mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-xs font-bold uppercase text-jade">Địa điểm</p>
-          <h1 className="mt-1 text-3xl font-black">{location?.name ?? c.location?.name ?? "Vô định"}</h1>
-          <p className="muted mt-2">{location?.zone.region?.name ?? "Chưa rõ địa vực"} · {location?.zone.name ?? "Chưa rõ khu vực"}</p>
+          <p className="location-eyebrow"><MapPin size={15} /> Địa điểm</p>
+          <h1 className="location-title"><Mountain size={22} /> {location?.name ?? c.location?.name ?? "Vô định"}</h1>
+          <p className="muted mt-2 location-region"><Navigation size={15} /> {location?.zone.region?.name ?? "Chưa rõ địa vực"} · {location?.zone.name ?? "Chưa rõ khu vực"}</p>
         </div>
-        <Link href="/game/world" className="btn btn-secondary">Xem Thế Giới</Link>
+        <Link href="/game/world" className="btn btn-secondary"><Globe2 size={16} /> Xem Thế Giới</Link>
       </header>
       <ActionAlert message={params?.error} />
 
       <section className="location-hero">
         <div>
-          <p className="text-xs font-bold uppercase text-jade">Địa điểm hiện tại</p>
-          <h2>{location?.name ?? "Chưa rõ"}</h2>
-          <p className="muted mt-2">{location?.description ?? "Chưa có mô tả địa điểm."}</p>
+          <p className="location-eyebrow"><MapPin size={15} /> Địa điểm hiện tại</p>
+          <h2><Trees size={22} /> {location?.name ?? "Chưa rõ"}</h2>
+          <p className="muted mt-2 location-description"><ScrollText size={15} /> {location?.description ?? "Chưa có mô tả địa điểm."}</p>
         </div>
         <div className="location-meta">
-          <span><b>Loại</b>{location ? formatLocationKind(location.kind) : "Không rõ"}</span>
-          <span><b>An ninh</b>{location ? formatSecurity(location.securityLevel) : "Không rõ"}</span>
-          <span><b>Hoạt động</b>{activities.length ? activities.map((activity) => activityCopy[activity].title).join(", ") : "Không có hoạt động"}</span>
-          <span><b>Cơ sở</b>{facilities.length ? facilities.map((facility) => facility.label).join(", ") : "Chưa mở"}</span>
+          <LocationMetaItem icon={Trees} label="Loại" value={location ? formatLocationKind(location.kind) : "Không rõ"} />
+          <LocationMetaItem icon={securityIcon(location?.securityLevel)} label="An ninh" value={location ? formatSecurity(location.securityLevel) : "Không rõ"} />
+          <LocationMetaItem icon={Footprints} label="Hoạt động" value={activities.length ? activities.map((activity) => activityCopy[activity].title).join(", ") : "Không có hoạt động"} />
+          <LocationMetaItem icon={Building2} label="Cơ sở" value={facilities.length ? facilities.map((facility) => facility.label).join(", ") : "Chưa mở"} />
         </div>
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+      <section className="mt-5 grid gap-5">
         <div className="grid gap-5">
           {facilities.length > 0 ? (
-            <Panel title="Cơ sở tại đây">
+            <Panel title="Cơ sở tại đây" icon={<Landmark size={18} aria-hidden />}>
               <div className="action-grid">
                 {facilities.map((facility) => <FacilityCard key={facility.key} facility={facility} />)}
               </div>
@@ -126,7 +115,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           ) : null}
 
           {npcsAtLocation.length ? (
-            <Panel title="Nhân vật">
+            <Panel title="Nhân vật" icon={<Users size={18} aria-hidden />}>
               <div className="npc-grid">
                 {npcsAtLocation.map((npc) => <NpcCard key={npc.id} npc={npc} quests={c.quests} />)}
               </div>
@@ -134,7 +123,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           ) : null}
 
           {worldSeals.length > 0 ? (
-            <Panel title="Phong ấn / Cấm chế">
+            <Panel title="Phong ấn / Cấm chế" icon={<Shield size={18} aria-hidden />}>
               <div className="action-grid">
                 {worldSeals.map((seal) => <WorldSealCard key={seal.id} seal={seal} items={breakSealItems} />)}
               </div>
@@ -142,7 +131,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           ) : null}
 
           {interactions.length > 0 ? (
-            <Panel title="Có thể tương tác">
+            <Panel title="Có thể tương tác" icon={<Search size={18} aria-hidden />}>
               <div className="action-grid">
                 {interactions.map((node) => <WorldInteractionCard key={node.key} node={node} />)}
               </div>
@@ -150,7 +139,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           ) : null}
 
           {routes.length > 0 ? (
-            <Panel title="Tuyến đường">
+            <Panel title="Tuyến đường" icon={<Route size={18} aria-hidden />}>
               <div className="route-grid">
                 {routes.map((route) => (
                   <form key={route.id} action={startTravelAction} className="route-card">
@@ -173,7 +162,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           ) : null}
 
           {activities.length > 0 ? (
-            <Panel title="Hoạt động tại đây">
+            <Panel title="Hoạt động tại đây" icon={<Compass size={18} aria-hidden />}>
             <div className="action-grid">
               {activities.map((mode) => (
                 <ExploreForm key={mode} mode={mode} disabled={hasBlockingActivity || energy < locationActivityConfigs[mode].energyCost} reason={hasBlockingActivity ? blockLabel : energy < locationActivityConfigs[mode].energyCost ? "Thiếu thể lực" : activityCopy[mode].cta} />
@@ -183,7 +172,7 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
           ) : null}
 
           {facilities.length === 0 && routes.length === 0 && activities.length === 0 ? (
-            <Panel title="Không có hành động trực tiếp">
+            <Panel title="Không có hành động trực tiếp" icon={<Leaf size={18} aria-hidden />}>
               <div className="empty-state">
                 <b>Địa điểm này không có hành động trực tiếp.</b>
                 <p>Hãy mở Thế Giới để di chuyển tới nơi có cơ sở hoặc hoạt động phù hợp.</p>
@@ -192,14 +181,24 @@ export default async function LocationPage({ searchParams }: { searchParams?: Pr
             </Panel>
           ) : null}
         </div>
-
-        <Panel title="Tình huống hiện tại">
-          <SituationPanel active={activeExploration} pending={pendingEncounter} latest={latestResolved} logs={logs} combatItems={combatItems} itemTemplatesByKey={itemTemplatesByKey} monsterByKey={monsterByKey} />
-        </Panel>
       </section>
     </div>
     </GamePageBackground>
   );
+}
+
+function LocationMetaItem({ icon: Icon, label, value }: { icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>; label: string; value: string }) {
+  return (
+    <span>
+      <Icon size={17} aria-hidden />
+      <b>{label}</b>
+      <em>{value}</em>
+    </span>
+  );
+}
+
+function securityIcon(securityLevel?: string | null) {
+  return securityLevel === "dangerous" || securityLevel === "contested" ? ShieldAlert : Shield;
 }
 
 function NpcCard({
@@ -557,10 +556,10 @@ function formatTravelDuration(travelMinutes: number) {
   return `${travelDurationSeconds(travelMinutes)} giây`;
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="panel rounded-lg p-5">
-      <h2 className="text-xl font-bold text-gold">{title}</h2>
+      <h2 className="location-panel-title text-xl font-bold text-gold">{icon}{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );

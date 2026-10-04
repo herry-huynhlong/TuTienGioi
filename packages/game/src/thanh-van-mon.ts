@@ -133,7 +133,8 @@ async function mutateContribution(tx: Tx, sectId: string, characterId: string, a
 export async function revealThanhVanSpiritualRoot(db: Db, characterId: string) {
   return db.$transaction(async (tx) => {
     const character = await tx.character.findUniqueOrThrow({ where: { id: characterId }, include: { spiritualRoot: true } });
-    const npc = await tx.npc.findUnique({ where: { key: "tan-hoai-ngoc" } });
+    const existingReveal = await tx.characterQuestFlag.findUnique({ where: { characterId_key: { characterId, key: spiritualRootFlag } } });
+    const npc = existingReveal ? null : await tx.npc.findUnique({ where: { key: "tan-hoai-ngoc" } });
     if (npc) {
       await tx.playerNpcState.upsert({
         where: { characterId_npcId: { characterId, npcId: npc.id } },
@@ -141,8 +142,10 @@ export async function revealThanhVanSpiritualRoot(db: Db, characterId: string) {
         create: { characterId, npcId: npc.id, firstMetAt: new Date(), lastMetAt: new Date(), timesMet: 1, relationshipScore: 5, relationshipState: "Quen biết", flags: { spiritualRootTested: true } }
       });
     }
-    const payload = { root: character.spiritualRoot.name, quality: character.spiritualRoot.quality, multiplierBps: character.spiritualRoot.multiplierBps, testedAt: new Date().toISOString() };
-    await upsertFlag(tx, characterId, spiritualRootFlag, payload);
+    if (!existingReveal) {
+      const payload = { root: character.spiritualRoot.name, quality: character.spiritualRoot.quality, multiplierBps: character.spiritualRoot.multiplierBps, testedAt: new Date().toISOString() };
+      await upsertFlag(tx, characterId, spiritualRootFlag, payload);
+    }
     const isHighTalent = character.spiritualRoot.quality.includes("Cực") || character.spiritualRoot.quality.includes("Biến") || character.spiritualRoot.quality.includes("Thượng");
     if (isHighTalent) await upsertFlag(tx, characterId, highTalentFlag, { source: spiritualRootFlag });
     if (isHighTalent || character.spiritualRoot.elements.some((element) => element === "Kim" || element === "Hỏa")) await upsertFlag(tx, characterId, elderInterestFlag, { source: spiritualRootFlag });
@@ -150,7 +153,7 @@ export async function revealThanhVanSpiritualRoot(db: Db, characterId: string) {
       where: { characterId, status: QuestStatus.ACTIVE, template: { key: "nhap-thanh-van-3" } },
       data: { progress: 1, status: QuestStatus.READY_TO_TURN_IN, readyAt: new Date() }
     });
-    return { root: character.spiritualRoot, message: rootReaction(character.spiritualRoot) };
+    return { root: character.spiritualRoot, message: rootReaction(character.spiritualRoot), alreadyRevealed: Boolean(existingReveal) };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

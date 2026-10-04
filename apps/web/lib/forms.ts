@@ -360,13 +360,13 @@ export async function revealThanhVanSpiritualRootAction(formData: FormData) {
 
 export async function completeThanhVanAdmissionAction(formData: FormData) {
   const sectId = String(formData.get("sectId") ?? "");
-  const back = sectId ? `/game/sect/${sectId}` : "/game/sect";
+  const lobbyBack = sectId ? `/game/sect?sect=${encodeURIComponent(sectId)}` : "/game/sect";
   try {
     await completeThanhVanAdmission(prisma, await characterId());
   } catch (error) {
-    redirectGameError(error, back);
+    redirectGameError(error, lobbyBack);
   }
-  redirect(`${back}?ok=admission`);
+  redirect(sectId ? `/game/sect/${encodeURIComponent(sectId)}?ok=admission` : "/game/sect?ok=admission");
 }
 
 export async function claimThanhVanAllowanceAction(formData: FormData) {

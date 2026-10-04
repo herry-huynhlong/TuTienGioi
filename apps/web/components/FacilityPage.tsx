@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export function FacilityPage({ eyebrow, title, description, action, children }: { eyebrow: string; title: string; description: string; action?: ReactNode; children: ReactNode }) {
+export function FacilityPage({ eyebrow, title, description, action, children }: { eyebrow: ReactNode; title: string; description: string; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="facility-page p-5 lg:p-8">
       <header className="facility-header">

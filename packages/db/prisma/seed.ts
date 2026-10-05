@@ -1,57 +1,9 @@
 import argon2 from "argon2";
 import { PrismaClient, Rarity, ItemCategory, EquipmentSlot, ProfessionRank, RecipeUnlockType, SectAlignment, SectCaveQuality, SectFacilityType, SectMentorshipStatus, SectMentorshipType, SectRoleName } from "@prisma/client";
+import { itemVisualKey } from "../../game/src/items.ts";
 import { coreProfessionRecipes } from "./professionSeedData";
 
 const prisma = new PrismaClient();
-
-const itemSpecificVisualKeyByItemKey: Record<string, string> = {
-  "thanh-linh-thao": "herb/thanh-linh-thao",
-  "huyen-thiet": "ore/huyen-thiet",
-  "yeu-dan-nhat-giai": "monster-core/yeu-dan-nhat-giai",
-  "yeu-dan-nhi-giai": "monster-core/yeu-dan-nhi-giai",
-  "linh-moc": "wood/linh-moc",
-  "yeu-thu-bi": "beast/yeu-thu-bi"
-};
-
-const itemSpecificVisualKeys = new Set([
-  "thanh-linh-thao", "ngung-khi-thao", "hac-thiet-quang", "xich-dong-quang", "hoi-khi-dan", "duong-the-dan", "truc-co-dan-ha", "yeu-thu-bi",
-  "yeu-thu-nha", "linh-moc", "tu-diep-linh-thao", "huyen-thiet", "tinh-dong", "bich-ngoc-tuy", "tu-khi-dan", "duong-hon-dan",
-  "truc-co-dan-trung", "yeu-dan-nhat-giai", "huyen-thu-cot", "tu-linh-thach", "thien-linh-thao", "huyen-tinh", "xich-viem-tinh-kim", "ngoc-tuy-tinh-hoa",
-  "truc-co-dan-thuong", "tay-tuy-dan", "yeu-dan-nhi-giai", "thien-tam-ti", "dia-mach-linh-tinh", "tu-linh-ngoc", "huyen-thiet-kiem", "thanh-van-dao-bao",
-  "thiet-moc-ho-phu", "nhan-tu-linh", "giay-than-hanh", "hoi-xuan-dan", "tu-linh-dan", "pha-canh-dan", "giai-doc-dan", "linh-thach", "dich-dung-phu"
-]);
-
-function itemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
-  if (itemSpecificVisualKeys.has(key)) return itemSpecificVisualKeyByItemKey[key] ?? key;
-  if (icon === "ore" || icon === "metal") return "default-ore";
-  if (icon === "core") return "default-monster-core";
-  if (icon === "spirit") return "default-spirit";
-  if (icon === "wood") return "default-wood";
-  if (icon === "crystal" || (icon === "gem" && category === "MATERIAL")) return "default-crystal";
-  if (icon === "formation") return "default-formation";
-  if (icon === "flag") return "default-flag";
-  if (icon === "paper") return "default-paper";
-  if (icon === "powder") return "default-powder";
-  if (icon === "ink") return "default-ink";
-  if (icon === "water") return "default-water";
-  if (icon === "fruit") return "default-fruit";
-  if (icon === "root") return "default-root";
-  if (icon === "pill") return "default-pill";
-  if (icon === "leaf") return "default-leaf";
-  if (icon === "flower") return "default-flower";
-  if (icon === "mushroom") return "default-mushroom";
-  if (icon === "herb") return "default-herb";
-  if (icon === "hide" || icon === "fang" || icon === "bone" || icon === "blood" || icon === "scale" || icon === "shell") return "default-beast";
-  if (icon === "silk") return "default-silk";
-  if (icon === "stone" || icon === "sand") return "default-stone";
-  if (icon === "sword") return "default-weapon";
-  if (icon === "armor" || icon === "boots") return "default-armor";
-  if (icon === "manual" || icon === "scroll") return "default-manual";
-  if (icon === "gem" || icon === "ring" || icon === "talisman") return "default-artifact";
-  if (category === "EQUIPMENT" && equipSlot === "WEAPON") return "default-weapon";
-  if (category === "EQUIPMENT") return "default-armor";
-  return "default-material";
-}
 
 function professionItemVisualKey(key: string, category: string, icon: string, equipSlot?: string | null) {
   const folder = icon === "pill" ? "pill"
@@ -1163,7 +1115,7 @@ async function main() {
     const bindRules = {
       subType,
       icon,
-      visualKey: itemVisualKey(key, category, icon),
+      visualKey: itemVisualKey({ key, category, icon }),
       usage,
       systemBasePrice,
       npcBuyPrice: Math.floor(systemBasePrice * 0.7),
@@ -1312,7 +1264,7 @@ async function main() {
     const bindRules = {
       subType: slot,
       icon,
-      visualKey: itemVisualKey(key, "EQUIPMENT", icon, slot),
+      visualKey: itemVisualKey({ key, category: "EQUIPMENT", icon, equipSlot: slot }),
       systemBasePrice,
       npcBuyPrice: Math.floor(systemBasePrice * 0.7),
       sellableToNpc: true,
@@ -1335,7 +1287,7 @@ async function main() {
     ["pha-canh-dan", "Phá Cảnh Đan", { breakthroughBps: 900 }],
     ["giai-doc-dan", "Giải Độc Đan", { cleanse: true }]
   ] as const) {
-    const bindRules = { subType: "Đan Dược", icon: "pill", visualKey: itemVisualKey(key, "CONSUMABLE", "pill"), systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 };
+    const bindRules = { subType: "Đan Dược", icon: "pill", visualKey: itemVisualKey({ key, category: "CONSUMABLE", icon: "pill" }), systemBasePrice: 90, npcBuyPrice: 63, sellableToNpc: true, usage: `${name} có thể sử dụng trực tiếp.`, marketEnabled: true, systemMarketEnabled: false, sectExchangeEnabled: true, sectContributionPrice: 45, donationContributionValue: 18 };
     await prisma.itemTemplate.upsert({ where: { key }, update: { bindRules }, create: { key, name, category: ItemCategory.CONSUMABLE, rarity: Rarity.TRUNG, description: `${name} là đan dược hữu dụng.`, stackable: true, maxStack: 99, baseModifiers: mods, bindRules } });
   }
 
@@ -1414,7 +1366,7 @@ async function main() {
     const bindRules = {
       subType: seedItem.subType,
       icon: seedItem.icon,
-      visualKey: override ? itemVisualKey(seedItem.key, seedItem.category, seedItem.icon, seedItem.equipSlot) : professionItemVisualKey(seedItem.key, seedItem.category, seedItem.icon, seedItem.equipSlot),
+      visualKey: override ? itemVisualKey({ key: seedItem.key, category: seedItem.category, icon: seedItem.icon, equipSlot: seedItem.equipSlot }) : professionItemVisualKey(seedItem.key, seedItem.category, seedItem.icon, seedItem.equipSlot),
       usage: seedItem.usage,
       systemBasePrice: seedItem.price,
       npcBuyPrice: Math.floor(seedItem.price * 0.7),

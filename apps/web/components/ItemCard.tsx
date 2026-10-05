@@ -147,7 +147,9 @@ function visualSrc(template: ItemTemplateLike) {
   const economy = getItemEconomy(template);
   const fallbackKey = itemVisualFallbackKey({ category: template.category, icon: economy.icon, equipSlot: template.equipSlot });
   if (typeof meta.imageUrl === "string" && meta.imageUrl && !isLegacyGeneratedSvg(meta.imageUrl)) return { src: meta.imageUrl, fallbackSrc: `/items/${fallbackKey}.webp` };
-  const visualKey = typeof meta.visualKey === "string" && meta.visualKey ? meta.visualKey : economy.visualKey || itemVisualKey({ key: template.key, category: template.category, icon: economy.icon, equipSlot: template.equipSlot });
+  const specificVisualKey = itemVisualKey({ key: template.key, category: template.category, icon: economy.icon, equipSlot: template.equipSlot });
+  const metaVisualKey = typeof meta.visualKey === "string" && meta.visualKey ? meta.visualKey : "";
+  const visualKey = metaVisualKey && !metaVisualKey.startsWith("default-") ? metaVisualKey : specificVisualKey || economy.visualKey || metaVisualKey;
   return { src: `/items/${visualKey}.webp`, fallbackSrc: `/items/${fallbackKey}.webp` };
 }
 

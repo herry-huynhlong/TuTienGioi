@@ -14,16 +14,16 @@ import { MarketFilterBar } from "@/components/MarketFilterBar";
 
 const categories = [
   ["", "Tất cả"],
-  ["subtype:Linh Thảo", "Linh Thảo"],
-  ["subtype:Khoáng Vật", "Khoáng Vật"],
-  ["alchemy", "Luyện Đan"],
-  ["talisman", "Chế Phù"],
+  ["herb", "Linh Thảo"],
+  ["ore", "Khoáng Vật"],
+  ["pill", "Đan Dược"],
+  ["finished-talisman", "Phù Lục"],
   ["formation", "Trận Pháp"],
-  [ItemCategory.EQUIPMENT, "Trang bị"],
-  [ItemCategory.CONSUMABLE, "Đan dược"],
-  [ItemCategory.MATERIAL, "Nguyên liệu"],
-  [ItemCategory.TECHNIQUE, "Bí tịch"],
-  [ItemCategory.QUEST, "Khác"]
+  ["equipment", "Trang Bị"],
+  ["material", "Nguyên Liệu"],
+  ["beast", "Yêu Thú Liệu"],
+  [ItemCategory.TECHNIQUE, "Bí Tịch"],
+  [ItemCategory.QUEST, "Vật Phẩm Đặc Biệt"]
 ] as const;
 
 const gradeFilters = [
@@ -195,13 +195,23 @@ function marketCondition(template: any) {
 
 function marketCategoryMatches(template: any, category: string) {
   if (!category) return true;
+  return marketItemType(template) === category;
+}
+
+function marketItemType(template: any) {
   const economy = getItemEconomy(template);
   const subType = economy.subType || "";
-  if (category.startsWith("subtype:")) return subType === category.slice("subtype:".length);
-  if (category === "alchemy") return subType === "Đan Dược" || economy.icon === "pill";
-  if (category === "talisman") return subType === "Phù Lục" || subType === "Phù Chỉ" || subType === "Phù Phấn" || economy.icon === "paper" || economy.icon === "powder";
-  if (category === "formation") return subType.includes("Trận") || economy.icon === "formation" || economy.icon === "flag";
-  return template.category === category;
+  const icon = economy.icon || "";
+  if (template.category === ItemCategory.EQUIPMENT) return "equipment";
+  if (subType === "Đan Dược" || icon === "pill") return "pill";
+  if (subType === "Phù Lục" || icon === "scroll") return "finished-talisman";
+  if (subType.includes("Trận") || icon === "formation" || icon === "flag") return "formation";
+  if (subType === "Linh Thảo" || ["herb", "root", "flower", "mushroom", "leaf", "fruit"].includes(icon)) return "herb";
+  if (subType === "Khoáng Vật" || ["ore", "metal", "crystal", "gem"].includes(icon)) return "ore";
+  if (subType.includes("Yêu Thú") || ["hide", "fang", "bone", "blood", "scale", "shell", "core"].includes(icon)) return "beast";
+  if (template.category === ItemCategory.TECHNIQUE) return ItemCategory.TECHNIQUE;
+  if (template.category === ItemCategory.QUEST) return ItemCategory.QUEST;
+  return "material";
 }
 
 function visibleMarketCategories(templates: any[], activeCategory: string) {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getItemEconomy, itemSpecificVisualKeys, itemStackKey, itemVisualKey, progressionItemCatalog, stockForSystemMarketItem } from "../src/items.js";
+import { getItemEconomy, itemSpecificVisualKeyByItemKey, itemSpecificVisualKeys, itemStackKey, itemVisualKey, progressionItemCatalog, stockForSystemMarketItem } from "../src/items.js";
 
 describe("item progression economy", () => {
   it("defines the 30 baseline progression items by grade", () => {
@@ -19,21 +20,13 @@ describe("item progression economy", () => {
 
   it("maps baseline progression items to dedicated visual assets", () => {
     const keys = progressionItemCatalog.map((item) => item.key);
-    const movedVisualKeys: Record<string, string> = {
-      "thanh-linh-thao": "herb/thanh-linh-thao",
-      "huyen-thiet": "ore/huyen-thiet",
-      "yeu-dan-nhat-giai": "monster-core/yeu-dan-nhat-giai",
-      "yeu-dan-nhi-giai": "monster-core/yeu-dan-nhi-giai",
-      "linh-moc": "wood/linh-moc",
-      "yeu-thu-bi": "beast/yeu-thu-bi"
-    };
     expect(new Set(keys).size).toBe(30);
     for (const item of progressionItemCatalog) {
       const visualKey = itemVisualKey(item);
-      expect(visualKey).toBe(movedVisualKeys[item.key] ?? item.key);
+      expect(visualKey).toBe(itemSpecificVisualKeyByItemKey[item.key] ?? item.key);
       expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), `${item.key}:${visualKey}`).toBe(true);
     }
-    expect(itemVisualKey(progressionItemCatalog.find((item) => item.key === "duong-the-dan")!)).toBe("duong-the-dan");
+    expect(itemVisualKey(progressionItemCatalog.find((item) => item.key === "duong-the-dan")!)).toBe("pill/duong-the-dan");
   });
 
   it("keeps a project asset for every specific item visual key including Linh Thach", () => {
@@ -64,7 +57,25 @@ describe("item progression economy", () => {
     }
     for (const visualKey of [
       "material/chu-sa",
+      "material/hoa-linh-phan",
+      "material/phong-linh-phan",
+      "material/hoa-tinh-phan",
+      "material/kim-linh-phan",
+      "material/thanh-tam-moc-phan",
+      "material/loi-tinh-phan",
+      "material/khong-minh-phan",
+      "material/chu-sa-tinh",
+      "material/chu-sa-cuc-pham",
+      "material/pha-cam-thach-phan",
       "talisman/hoang-phu-chi",
+      "talisman/linh-phu-chi",
+      "talisman/huyen-phu-chi",
+      "talisman/thien-phu-chi",
+      "crystal/dao-van-tinh-hoa",
+      "crystal/khong-minh-thach",
+      "crystal/hoa-tinh-thach",
+      "crystal/khong-gian-tinh-thach",
+      "crystal/linh-tinh",
       "herb/huyet-sam",
       "herb/cuong-than-thao",
       "ore/hac-thiet",
@@ -74,9 +85,6 @@ describe("item progression economy", () => {
       "formation/thien-pham-tran-ky",
       "formation/tien-pham-tran-ky",
       "water/linh-tuyen-thuy",
-      "talisman/linh-phu-chi",
-      "talisman/huyen-phu-chi",
-      "talisman/thien-phu-chi",
       "talisman/tien-phu-chi",
       "monster-core/yeu-dan-nhat-giai",
       "monster-core/yeu-dan-nhi-giai",
@@ -87,6 +95,119 @@ describe("item progression economy", () => {
     ]) {
       expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), visualKey).toBe(true);
     }
+  });
+
+  it("resolves existing profession ingredient art before falling back", () => {
+    const cases = [
+      ["hac-thiet", "ore", "ore/hac-thiet"],
+      ["hoang-phu-chi", "paper", "talisman/hoang-phu-chi"],
+      ["linh-phu-chi", "paper", "talisman/linh-phu-chi"],
+      ["huyen-phu-chi", "paper", "talisman/huyen-phu-chi"],
+      ["thien-phu-chi", "paper", "talisman/thien-phu-chi"],
+      ["dao-van-tinh-hoa", "crystal", "crystal/dao-van-tinh-hoa"],
+      ["khong-minh-thach", "crystal", "crystal/khong-minh-thach"],
+      ["hoa-tinh-thach", "crystal", "crystal/hoa-tinh-thach"],
+      ["khong-gian-tinh-thach", "crystal", "crystal/khong-gian-tinh-thach"],
+      ["linh-tinh", "crystal", "crystal/linh-tinh"]
+    ] as const;
+
+    for (const [key, icon, visualKey] of cases) {
+      expect(itemVisualKey({ key, category: "MATERIAL", icon })).toBe(visualKey);
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), visualKey).toBe(true);
+    }
+  });
+
+  it("maps every explicit visual override to a real non-fallback asset", () => {
+    for (const [key, visualKey] of Object.entries(itemSpecificVisualKeyByItemKey)) {
+      expect(visualKey, key).not.toMatch(/^default-/);
+      expect(itemVisualKey({ key, category: "MATERIAL", icon: "crystal" }), key).toBe(visualKey);
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), `${key}:${visualKey}`).toBe(true);
+    }
+  });
+
+  it("keeps market-facing items with existing art off fallback visuals", () => {
+    const cases = [
+      "linh-tuyen-thuy",
+      "huyet-sam",
+      "cuong-than-thao",
+      "linh-tuyen-tinh-hoa",
+      "tay-tuy-linh-dich",
+      "thanh-phong-kiem",
+      "hac-thiet-giap",
+      "tu-linh-boi",
+      "xich-viem-kiem",
+      "thanh-linh-giap",
+      "truy-phong-ngoa",
+      "phong-linh-thach",
+      "tu-dien-kiem",
+      "huyen-giap",
+      "tu-linh-gioi",
+      "tho-linh-tinh",
+      "sinh-menh-tinh-hoa",
+      "ha-pham-tran-ky",
+      "trung-pham-tran-ky",
+      "nguyen-linh-thach",
+      "huyen-pham-tran-ky",
+      "kim-linh-tinh",
+      "moc-linh-tinh",
+      "thuy-linh-tinh",
+      "hoa-linh-tinh",
+      "thien-pham-tran-ky",
+      "thien-linh-tinh",
+      "dia-mach-tinh-hoa",
+      "tien-phu-chi"
+    ];
+
+    for (const key of cases) {
+      const visualKey = itemVisualKey({ key, category: "MATERIAL", icon: "crystal" });
+      expect(visualKey, key).not.toMatch(/^default-/);
+      expect(existsSync(resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`)), `${key}:${visualKey}`).toBe(true);
+    }
+  });
+
+  it("keeps common powder materials on distinct market art", () => {
+    const powderVisualKeys = [
+      "material/chu-sa",
+      "material/hoa-linh-phan",
+      "material/phong-linh-phan",
+      "material/hoa-tinh-phan",
+      "material/kim-linh-phan",
+      "material/thanh-tam-moc-phan",
+      "material/loi-tinh-phan",
+      "material/khong-minh-phan",
+      "material/chu-sa-tinh",
+      "material/chu-sa-cuc-pham",
+      "material/pha-cam-thach-phan"
+    ];
+    const hashes = powderVisualKeys.map((visualKey) => {
+      const file = resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`);
+      expect(existsSync(file), visualKey).toBe(true);
+      return createHash("sha256").update(readFileSync(file)).digest("hex");
+    });
+    expect(new Set(hashes).size).toBe(powderVisualKeys.length);
+    expect(itemVisualKey({ key: "hoa-linh-phan", category: "MATERIAL", icon: "powder" })).toBe("material/hoa-linh-phan");
+    expect(itemVisualKey({ key: "phong-linh-phan", category: "MATERIAL", icon: "powder" })).toBe("material/phong-linh-phan");
+    expect(itemVisualKey({ key: "hoa-tinh-phan", category: "MATERIAL", icon: "powder" })).toBe("material/hoa-tinh-phan");
+  });
+
+  it("keeps high-traffic fallback visual families distinct", () => {
+    const fallbackVisualKeys = [
+      "default-flower",
+      "default-mushroom",
+      "default-leaf",
+      "default-crystal",
+      "default-artifact",
+      "default-ore",
+      "default-stone",
+      "default-paper",
+      "default-ink"
+    ];
+    const hashes = fallbackVisualKeys.map((visualKey) => {
+      const file = resolve(process.cwd(), "../../apps/web/public/items", `${visualKey}.webp`);
+      expect(existsSync(file), visualKey).toBe(true);
+      return createHash("sha256").update(readFileSync(file)).digest("hex");
+    });
+    expect(new Set(hashes).size).toBe(fallbackVisualKeys.length);
   });
 
   it("keeps baseline rare materials out of direct sale but stocks shop-grade rarities", () => {

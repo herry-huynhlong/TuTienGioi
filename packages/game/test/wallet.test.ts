@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Currency, WalletTxType } from "@ttg/db";
-import { creditWallet, debitWallet } from "../src/services.js";
+import { creditWallet, debitWallet, exchangeTienNgocToLinhThach } from "../src/services.js";
 
 type WalletRow = {
   characterId: string;
@@ -23,6 +23,9 @@ function fakeWalletDb(initialLinhThach: bigint, initialTienNgoc = 0n) {
         if (typeof data.tienNgoc === "bigint") character.tienNgoc = data.tienNgoc;
         return character;
       }
+    },
+    gameLog: {
+      create: async () => ({ id: "log_1" })
     },
     walletTransaction: {
       findUnique: async ({ where }: { where: { characterId_currency_idempotencyKey: { characterId: string; currency: Currency; idempotencyKey: string } } }) => {
@@ -81,5 +84,29 @@ describe("wallet services", () => {
     expect(repeated.balanceAfter).toBe(70n);
     expect(fake.character.linhThach).toBe(70n);
     expect(fake.rows.size).toBe(1);
+  });
+
+  it("exchanges Tien Ngoc to Linh Thach atomically with idempotency", async () => {
+    const fake = fakeWalletDb(100n, 25n);
+
+    const result = await exchangeTienNgocToLinhThach(fake.db as never, "char_1", 10, "exchange-1");
+    expect(result.linhThach).toBe(100n);
+    expect(fake.character.tienNgoc).toBe(15n);
+    expect(fake.character.linhThach).toBe(200n);
+
+    const repeated = await exchangeTienNgocToLinhThach(fake.db as never, "char_1", 10, "exchange-1");
+    expect(repeated.duplicate).toBe(true);
+    expect(fake.character.tienNgoc).toBe(15n);
+    expect(fake.character.linhThach).toBe(200n);
+  });
+
+  it("rejects Tien Ngoc exchange when the premium balance is insufficient", async () => {
+    const fake = fakeWalletDb(100n, 5n);
+
+    await expect(exchangeTienNgocToLinhThach(fake.db as never, "char_1", 10, "exchange-2")).rejects.toMatchObject({
+      code: "INSUFFICIENT_FUNDS"
+    });
+    expect(fake.character.tienNgoc).toBe(5n);
+    expect(fake.character.linhThach).toBe(100n);
   });
 });

@@ -1918,7 +1918,18 @@ async function main() {
     await prisma.gameConfig.upsert({ where: { key }, update: { value }, create: { key, value } });
   }
 
-  await prisma.topupPackage.upsert({ where: { key: "jade-small" }, update: {}, create: { key: "jade-small", name: "Túi Tiên Ngọc", amountVnd: 50000, tienNgoc: 500 } });
+  const topupPackages = [
+    { key: "jade-small", name: "Gói Nhập Môn", amountVnd: 50000, tienNgoc: 500 },
+    { key: "jade-advance", name: "Gói Tiến Giai", amountVnd: 100000, tienNgoc: 1100 },
+    { key: "jade-breakthrough", name: "Gói Phá Cảnh", amountVnd: 200000, tienNgoc: 2400 }
+  ];
+  for (const pack of topupPackages) {
+    await prisma.topupPackage.upsert({
+      where: { key: pack.key },
+      update: { name: pack.name, amountVnd: pack.amountVnd, tienNgoc: pack.tienNgoc, active: true },
+      create: { ...pack, active: true }
+    });
+  }
 
   const firstStage = await prisma.realmStage.findFirstOrThrow({ orderBy: [{ realm: { order: "asc" } }, { order: "asc" }] });
   const firstRoot = await prisma.spiritualRoot.findFirstOrThrow();

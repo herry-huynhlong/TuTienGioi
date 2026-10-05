@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, SectAlignment, SectFacilityType } from "@ttg/db";
 import { createSession, destroySession, getUser, hashPassword, verifyPassword } from "./auth";
-import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, changeSectMemberRole, chooseSectIcon, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, depositSectCurrency, depositSectItem, disbandSect, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, expandSectFacility, expelSectMember, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, updateSectInfo, updateSectRecruitment, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError, type SectRecruitmentMode } from "@ttg/game";
+import { acceptFriendRequest, acceptQuest, acceptSectMission, applyToSect, approveSectApplication, assignSectCave, attackExplorationEncounter, attemptBreakthrough, blockPlayer, breakWorldSealWithItem, cancelAuction, cancelCultivation, cancelExploration, cancelFriendRequest, cancelMarketListing, cancelSectApplication, cancelTraining, changeSectMemberRole, chooseSectIcon, claimCraft, claimCultivation, claimExploration, claimSectMining, claimThanhVanAllowance, claimTraining, claimTravel, completeQuest, completeSectMission, completeThanhVanAdmission, completeThanhVanInnerExam, consumeItem, createAuction, createMarketListing, createSect, createTopupOrder, depositSectCurrency, depositSectItem, disbandSect, ensureOnboardingProgress, equipItem, escapeExplorationEncounterWithItem, exchangeSectAppearanceTalisman, exchangeSectTechnique, exchangeTienNgocToLinhThach, expandSectFacility, expelSectMember, GameError, harvestSectCrop, interactWorldObject, InventoryError, joinAuction, leaveExplorationEncounter, passAuction, plantSectCrop, progressQuestEvent, purchaseMarketListing, purchaseSystemMarketItem, QuestError, raiseAuction, rejectFriendRequest, rejectSectApplication, removeFriend, requestThanhVanInnerExam, revealThanhVanSpiritualRoot, SectError, sellItemToNpc, sendDirectMessage, sendFriendCurrency, sendFriendItem, sendFriendRequest, SocialError, startCraft, startCultivation, startExploration, startSectCaveCultivation, startSectMining, startTraining, startTravel, talkToNpc, teleportWithItem, ThanhVanError, unblockPlayer, unassignSectCave, unequipItem, updatePlayerSettings, updateSectInfo, updateSectRecruitment, upgradeSectRank, useExplorationCombatItem, withdrawSectCurrency, withdrawSectItem, WorldInteractionError, type SectRecruitmentMode } from "@ttg/game";
 import { acceptMentorInvitation, completeMentorQuest, completeTrueDisciplePromotion, MentorshipError, rejectMentorInvitation, requestTrueDiscipleExam, reviewTrueDiscipleExam } from "@ttg/game";
 import { CharacterAppearanceError, characterAppearanceImage, deterministicCharacterAppearanceKey, setCharacterAppearance } from "@ttg/game";
 
@@ -79,6 +79,26 @@ function redirectGameError(error: unknown, path: string): never {
 
 function boolField(formData: FormData, name: string) {
   return formData.get(name) === "on";
+}
+
+export async function createTopupOrderAction(formData: FormData) {
+  try {
+    const order = await createTopupOrder(prisma, await characterId(), String(formData.get("packageKey") ?? ""));
+    redirect(`/game/heavenly-treasury?ok=${encodeURIComponent(`Đã tạo đơn nạp ${order.orderCode}. Tiên Ngọc sẽ tự cộng sau khi thanh toán được xác nhận.`)}`);
+  } catch (error) {
+    redirectGameError(error, "/game/heavenly-treasury");
+  }
+}
+
+export async function exchangeTienNgocAction(formData: FormData) {
+  try {
+    const amount = Number(formData.get("amount"));
+    const actionKey = String(formData.get("actionKey") ?? "");
+    const result = await exchangeTienNgocToLinhThach(prisma, await characterId(), amount, actionKey);
+    redirect(`/game/heavenly-treasury?ok=${encodeURIComponent(`Đã đổi ${result.tienNgoc.toString()} Tiên Ngọc thành ${result.linhThach.toString()} Linh Thạch.`)}`);
+  } catch (error) {
+    redirectGameError(error, "/game/heavenly-treasury");
+  }
 }
 
 export async function cultivateAction(formData: FormData) {

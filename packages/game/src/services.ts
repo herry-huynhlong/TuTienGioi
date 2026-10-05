@@ -317,10 +317,11 @@ async function mutateWallet(tx: Tx, characterId: string, currency: Currency, amo
   const existing = idempotencyKey ? await tx.walletTransaction.findUnique({ where: { characterId_currency_idempotencyKey: { characterId, currency, idempotencyKey } } }) : null;
   if (existing) return existing;
   const field = currency === Currency.LINH_THACH ? "linhThach" : "tienNgoc";
+  const currencyLabel = currency === Currency.LINH_THACH ? "Linh Thạch" : "Tiên Ngọc";
   const before = await tx.character.findUniqueOrThrow({ where: { id: characterId }, select: { linhThach: true, tienNgoc: true } });
   const balanceBefore = before[field];
   const balanceAfter = balanceBefore + amount;
-  if (balanceAfter < 0n) throw new GameError("INSUFFICIENT_FUNDS", "Không đủ Linh Thạch.");
+  if (balanceAfter < 0n) throw new GameError("INSUFFICIENT_FUNDS", `Không đủ ${currencyLabel}.`);
   await tx.character.update({ where: { id: characterId }, data: { [field]: balanceAfter } });
   return tx.walletTransaction.create({ data: { characterId, currency, type, amount, balanceBefore, balanceAfter, referenceType: referenceType ?? null, referenceId: referenceId ?? null, idempotencyKey: idempotencyKey ?? null } });
 }
@@ -422,6 +423,24 @@ export async function creditWallet(db: Db | Tx, characterId: string, currency: C
 export async function debitWallet(db: Db | Tx, characterId: string, currency: Currency, amount: bigint, type: WalletTxType, referenceType?: string, referenceId?: string, idempotencyKey?: string) {
   if (amount <= 0n) throw new GameError("INVALID_AMOUNT", "Số tiền không hợp lệ.");
   return isClient(db) ? db.$transaction((tx) => mutateWallet(tx, characterId, currency, -amount, type, referenceType, referenceId, idempotencyKey)) : mutateWallet(db, characterId, currency, -amount, type, referenceType, referenceId, idempotencyKey);
+}
+
+export const TIEN_NGOC_TO_LINH_THACH_RATE = 10n;
+
+export async function exchangeTienNgocToLinhThach(db: Db, characterId: string, tienNgocAmount: number, actionKey: string) {
+  if (!Number.isInteger(tienNgocAmount) || tienNgocAmount <= 0) throw new GameError("INVALID_AMOUNT", "Số Tiên Ngọc cần đổi không hợp lệ.");
+  if (!actionKey || actionKey.length > 96) throw new GameError("INVALID_ACTION", "Phiên đổi không hợp lệ, vui lòng thử lại.");
+  const tienNgoc = BigInt(tienNgocAmount);
+  const linhThach = tienNgoc * TIEN_NGOC_TO_LINH_THACH_RATE;
+  return db.$transaction(async (tx) => {
+    const debitKey = `exchange:tien-ngoc:${characterId}:${actionKey}:debit`;
+    const existing = await tx.walletTransaction.findUnique({ where: { characterId_currency_idempotencyKey: { characterId, currency: Currency.TIEN_NGOC, idempotencyKey: debitKey } } });
+    if (existing) return { tienNgoc, linhThach, duplicate: true };
+    await debitWallet(tx, characterId, Currency.TIEN_NGOC, tienNgoc, WalletTxType.DEBIT, "CurrencyExchange", actionKey, debitKey);
+    await creditWallet(tx, characterId, Currency.LINH_THACH, linhThach, WalletTxType.CREDIT, "CurrencyExchange", actionKey, `exchange:tien-ngoc:${characterId}:${actionKey}:credit`);
+    await tx.gameLog.create({ data: { characterId, type: "currency", message: `Đổi ${tienNgoc.toString()} Tiên Ngọc thành ${linhThach.toString()} Linh Thạch.` } });
+    return { tienNgoc, linhThach, duplicate: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function previewTraining(db: Db | Tx, characterId: string, trainingType: TrainingTypeKey, duration: TrainingDurationKey) {

@@ -11,6 +11,7 @@ import {
   Compass,
   Dumbbell,
   Gavel,
+  Gem,
   Hammer,
   Landmark,
   MessageSquare,
@@ -33,7 +34,7 @@ type NavLink = {
   status: FeatureStatus;
   featureKey?: keyof FeatureUnlocks;
   adminOnly?: boolean;
-  badge?: "messages" | "friends" | "notifications" | "auction" | "profession" | "quests";
+  badge?: "messages" | "friends" | "notifications" | "auction" | "profession" | "quests" | "new";
 };
 
 type NavGroup = {
@@ -60,7 +61,8 @@ const navGroups: NavGroup[] = [
     links: [
       { href: "/game/market", label: "Vạn Bảo Lâu", icon: ShoppingBag, status: "partial", featureKey: "market" },
       { href: "/game/auction", label: "Đấu Giá", icon: Gavel, status: "partial", featureKey: "auction", badge: "auction" },
-      { href: "/game/profession", label: "Nghề Nghiệp", icon: BriefcaseBusiness, status: "partial", featureKey: "profession", badge: "profession" }
+      { href: "/game/profession", label: "Nghề Nghiệp", icon: BriefcaseBusiness, status: "partial", featureKey: "profession", badge: "profession" },
+      { href: "/game/heavenly-treasury", label: "Thiên Đạo Bảo Các", icon: Gem, status: "partial", badge: "new" }
     ]
   },
   {
@@ -184,7 +186,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
                     <Link key={label} href={href} className="nav-row">
                       <Icon size={15} />
                       <span>{label}</span>
-                      {link.badge ? <RealtimeBadge type={link.badge} /> : null}
+                      {link.badge === "new" ? <span className="nav-static-badge">Mới</span> : link.badge ? <RealtimeBadge type={link.badge} /> : null}
                       <ChevronRight size={13} className="ml-auto text-paper/35" />
                     </Link>
                   ) : (
@@ -215,7 +217,7 @@ export function Shell({ children, user, character, featureUnlocks }: { children:
         {mobileNav.map(({ href, label, icon: Icon, badge }) => (
           <Link key={href} href={href} className="relative flex flex-col items-center gap-1 rounded-md p-2 text-[11px] text-paper/75">
             <Icon size={18} /> {label}
-            {badge ? <RealtimeBadge type={badge} /> : null}
+            {badge === "new" ? <span className="nav-static-badge">Mới</span> : badge ? <RealtimeBadge type={badge} /> : null}
           </Link>
         ))}
       </nav>

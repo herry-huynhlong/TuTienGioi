@@ -1,6 +1,24 @@
 import { Currency, PaymentStatus, WalletTxType, type PrismaClient } from "@ttg/db";
 import { creditWallet, GameError } from "./services.js";
 
+export async function createTopupOrder(db: PrismaClient, characterId: string, packageKey: string, provider = "manual") {
+  const topupPackage = await db.topupPackage.findFirst({ where: { key: packageKey, active: true } });
+  if (!topupPackage) throw new GameError("PACKAGE_NOT_FOUND", "Không tìm thấy gói Tiên Ngọc.");
+  const randomPart = globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10);
+  const orderCode = `TDBC-${Date.now()}-${randomPart.toUpperCase()}`;
+  return db.topupOrder.create({
+    data: {
+      orderCode,
+      characterId,
+      packageId: topupPackage.id,
+      provider,
+      amountVnd: topupPackage.amountVnd,
+      rewardTienNgoc: topupPackage.tienNgoc,
+      status: PaymentStatus.PENDING
+    }
+  });
+}
+
 export async function handlePaymentWebhook(db: PrismaClient, input: { orderCode: string; providerTransactionId: string; amountVnd: number; raw: unknown }) {
   return db.$transaction(async (tx) => {
     const order = await tx.topupOrder.findUnique({ where: { orderCode: input.orderCode } });

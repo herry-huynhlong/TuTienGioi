@@ -5854,6 +5854,288 @@ select.field option {
   margin-left: 0.25rem;
 }
 
+.nav-static-badge {
+  display: inline-grid;
+  height: 1.05rem;
+  place-items: center;
+  margin-left: auto;
+  padding: 0 0.32rem;
+  border: 1px solid rgba(214, 178, 94, 0.42);
+  background: rgba(214, 178, 94, 0.16);
+  color: #f3d983;
+  font-size: 0.62rem;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.heavenly-treasury-page {
+  min-width: 0;
+}
+
+.heavenly-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 24rem);
+  gap: 1.2rem;
+  align-items: stretch;
+  border: 1px solid rgba(214, 178, 94, 0.24);
+  background:
+    linear-gradient(115deg, rgba(8, 17, 15, 0.94), rgba(10, 33, 30, 0.72) 48%, rgba(72, 52, 18, 0.42)),
+    radial-gradient(circle at 72% 24%, rgba(214, 178, 94, 0.18), transparent 32%);
+  box-shadow: inset 0 1px 0 rgba(244, 239, 227, 0.08), 0 22px 40px rgba(0, 0, 0, 0.22);
+  padding: clamp(1.2rem, 3vw, 2rem);
+}
+
+.heavenly-kicker,
+.heavenly-section-title p,
+.heavenly-panel-head p {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #44e7d7;
+  font-size: 0.72rem;
+  font-weight: 1000;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.heavenly-hero h1 {
+  margin-top: 0.35rem;
+  color: #fff8df;
+  font-size: clamp(2rem, 5vw, 4.25rem);
+  font-weight: 1000;
+  line-height: 0.98;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+
+.heavenly-hero p:not(.heavenly-kicker) {
+  margin-top: 0.8rem;
+  color: rgba(244, 239, 227, 0.78);
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+}
+
+.heavenly-balance-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.heavenly-balance-grid > div,
+.heavenly-rate-card,
+.heavenly-exchange-confirm > div {
+  border: 1px solid rgba(244, 239, 227, 0.12);
+  background: rgba(7, 12, 10, 0.52);
+  padding: 0.85rem;
+}
+
+.heavenly-balance-grid span,
+.heavenly-rate-card span,
+.heavenly-exchange-confirm span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: rgba(244, 239, 227, 0.64);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.heavenly-balance-grid b,
+.heavenly-exchange-confirm b {
+  display: block;
+  margin-top: 0.28rem;
+  color: #f1d06f;
+  font-size: 1.3rem;
+  font-weight: 1000;
+}
+
+.heavenly-section,
+.heavenly-panel {
+  margin-top: 1.15rem;
+  border: 1px solid rgba(244, 239, 227, 0.11);
+  background: linear-gradient(180deg, rgba(31, 38, 33, 0.82), rgba(14, 20, 17, 0.82));
+  box-shadow: inset 0 1px 0 rgba(244, 239, 227, 0.05);
+  padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+.heavenly-section-title,
+.heavenly-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #d6b25e;
+}
+
+.heavenly-section-title h2,
+.heavenly-panel-head h2 {
+  color: #f4efe3;
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  font-weight: 1000;
+}
+
+.heavenly-package-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.heavenly-package-card {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  overflow: hidden;
+  border: 1px solid rgba(214, 178, 94, 0.2);
+  background:
+    radial-gradient(circle at 80% 0%, rgba(214, 178, 94, 0.12), transparent 38%),
+    rgba(8, 14, 12, 0.68);
+  padding: 1rem;
+}
+
+.heavenly-package-card.featured {
+  border-color: rgba(214, 178, 94, 0.48);
+  box-shadow: 0 0 0 1px rgba(214, 178, 94, 0.08), 0 16px 30px rgba(0, 0, 0, 0.2);
+}
+
+.heavenly-card-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  border: 1px solid rgba(214, 178, 94, 0.45);
+  background: rgba(214, 178, 94, 0.18);
+  color: #f4d979;
+  font-size: 0.66rem;
+  font-weight: 1000;
+  padding: 0.18rem 0.45rem;
+}
+
+.heavenly-package-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid rgba(68, 231, 215, 0.24);
+  background: rgba(68, 231, 215, 0.08);
+  color: #99fff3;
+}
+
+.heavenly-package-card p {
+  color: rgba(244, 239, 227, 0.76);
+  font-weight: 900;
+}
+
+.heavenly-package-card h3 {
+  color: #f8e5a2;
+  font-size: 1.55rem;
+  font-weight: 1000;
+}
+
+.heavenly-package-card strong {
+  color: #44e7d7;
+  font-size: 1.1rem;
+  font-weight: 1000;
+}
+
+.heavenly-bonus,
+.heavenly-package-card small,
+.heavenly-hint {
+  color: rgba(244, 239, 227, 0.62);
+  font-size: 0.82rem;
+}
+
+.heavenly-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: 1rem;
+}
+
+.heavenly-rate-card,
+.heavenly-choice-grid,
+.heavenly-exchange-confirm,
+.heavenly-rule-list {
+  margin-top: 0.9rem;
+}
+
+.heavenly-rate-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.heavenly-rate-card b {
+  color: #d6b25e;
+}
+
+.heavenly-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.heavenly-choice-grid button {
+  min-height: 2.4rem;
+  border: 1px solid rgba(244, 239, 227, 0.13);
+  background: rgba(244, 239, 227, 0.05);
+  color: rgba(244, 239, 227, 0.78);
+  font-weight: 900;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.heavenly-choice-grid button:hover,
+.heavenly-choice-grid button.active {
+  border-color: rgba(68, 231, 215, 0.42);
+  background: rgba(68, 231, 215, 0.12);
+  color: #e7fffb;
+}
+
+.heavenly-choice-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.heavenly-exchange-confirm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.heavenly-rule-list {
+  display: grid;
+  gap: 0.62rem;
+  color: rgba(244, 239, 227, 0.72);
+  font-size: 0.9rem;
+}
+
+.heavenly-rule-list li {
+  border-left: 2px solid rgba(214, 178, 94, 0.38);
+  padding-left: 0.7rem;
+}
+
+@media (max-width: 1100px) {
+  .heavenly-hero,
+  .heavenly-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .heavenly-package-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .heavenly-package-grid,
+  .heavenly-exchange-confirm,
+  .heavenly-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .heavenly-rate-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .chat-thread-head {
   display: flex;
   align-items: flex-start;
